@@ -1,4 +1,5 @@
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020.js';
+import defaultLayout from '../layouts/xbox-default.json';
 import type { Command, Orientation } from './contracts';
 import { ButtonBits } from './contracts';
 import schema from './layout.schema.json';
@@ -62,6 +63,13 @@ const validateSchema: ValidateFunction = new Ajv2020({
 const idPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const safeAsset = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/;
 
+export const DEFAULT_LAYOUT: LayoutDocument = defaultLayout as LayoutDocument;
+
+export interface LayoutParseResult {
+  layout: LayoutDocument;
+  diagnostic?: string;
+}
+
 export function validateLayout(value: unknown): value is LayoutDocument {
   if (!validateSchema(value)) return false;
   const document = value as LayoutDocument;
@@ -113,6 +121,15 @@ export function validateLayout(value: unknown): value is LayoutDocument {
     }
   }
   return true;
+}
+
+export function parseLayoutDocument(value: unknown): LayoutParseResult {
+  if (validateLayout(value)) return { layout: value };
+  return {
+    layout: DEFAULT_LAYOUT,
+    diagnostic:
+      'The host sent an invalid layout. The default layout is being used.',
+  };
 }
 
 function validRect(rect: Rect): boolean {

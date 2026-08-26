@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import xboxDefault from '../layouts/xbox-default.json';
-import { validateLayout } from './layout';
+import { DEFAULT_LAYOUT, parseLayoutDocument, validateLayout } from './layout';
 
 describe('validateLayout', () => {
   it('accepts the built-in document', () => {
     expect(validateLayout(xboxDefault)).toBe(true);
+  });
+
+  it('falls back to the built-in document when a received document is invalid', () => {
+    const result = parseLayoutDocument({ schemaVersion: 2 });
+    expect(result.layout).toBe(DEFAULT_LAYOUT);
+    expect(result.diagnostic).toBeDefined();
   });
 
   it('rejects duplicate IDs and incomplete D-pad bindings', () => {

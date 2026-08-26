@@ -1,6 +1,5 @@
 export const PROTOCOL_VERSION = 1;
 export const FRAME_SIZE = 20;
-export const TARGET_INPUT_RATE = 60;
 
 import type { LayoutDocument } from './layout';
 

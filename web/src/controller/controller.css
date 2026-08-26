@@ -1,0 +1,351 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #090b10;
+  color: #f3f6fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #090b10;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+.controller-shell {
+  --slot-accent: #6ee7b7;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100dvh;
+  padding: max(0.5rem, env(safe-area-inset-top))
+    max(0.75rem, env(safe-area-inset-right))
+    max(0.5rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left));
+  background: #090b10;
+}
+
+.controller-header {
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.25rem 0.25rem 0.5rem;
+}
+
+.controller-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.controller-accent {
+  width: 0.7rem;
+  height: 2.2rem;
+  border: 2px solid var(--slot-accent);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--slot-accent) 25%, #090b10);
+}
+
+.controller-slot {
+  color: var(--slot-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.controller-name {
+  max-width: 35vw;
+  overflow: hidden;
+  color: #f3f6fb;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controller-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.controller-layout-picker {
+  max-width: 10rem;
+  min-height: 2.5rem;
+  border: 1px solid #536174;
+  border-radius: 0.55rem;
+  padding: 0 0.65rem;
+  background: #151b25;
+  color: #f3f6fb;
+}
+
+.controller-connection {
+  min-width: 4.5rem;
+  color: #aeb9c9;
+  font-size: 0.75rem;
+  text-align: right;
+}
+
+.controller-status {
+  position: absolute;
+  z-index: 4;
+  top: 3.8rem;
+  left: 50%;
+  max-width: min(90vw, 32rem);
+  transform: translateX(-50%);
+  border: 1px solid #536174;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #151b25;
+  color: #d8e0eb;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.controller-host {
+  position: relative;
+  min-height: 0;
+}
+
+.controller-layout {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.controller-surface {
+  position: absolute;
+  inset: 0;
+}
+
+.controller-section {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--width);
+  height: var(--height);
+}
+
+.controller-control,
+.dpad-direction {
+  position: absolute;
+  left: var(--x, 0%);
+  top: var(--y, 0%);
+  width: max(44px, var(--width, 100%));
+  height: max(44px, var(--height, 100%));
+  border: 2px solid #8a98ab;
+  border-radius: 0.7rem;
+  padding: 0.35rem;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: #18212e;
+  color: #f3f6fb;
+  cursor: pointer;
+  font-size: clamp(0.66rem, 1.5vw, 0.9rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  transition:
+    background-color 100ms ease,
+    border-color 100ms ease,
+    transform 100ms ease;
+}
+
+.controller-control:hover,
+.dpad-direction:hover {
+  border-color: #c6d0dd;
+}
+
+.controller-control:focus-visible,
+.controller-layout-picker:focus-visible {
+  outline: 3px solid var(--slot-accent);
+  outline-offset: 3px;
+}
+
+.controller-control.is-pressed {
+  border-color: var(--slot-accent);
+  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
+  transform: scale(0.96);
+}
+
+.control-button {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.control-joystick {
+  display: grid;
+  place-items: end center;
+  border-radius: 50%;
+  padding-bottom: 0.4rem;
+}
+
+.control-joystick::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 66%;
+  height: 66%;
+  border: 2px solid #64748b;
+  border-radius: 50%;
+  background: #101722;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.control-joystick::after {
+  position: absolute;
+  top: calc(50% - 16px + var(--axis-y, 0%));
+  left: calc(50% - 16px + var(--axis-x, 0%));
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--slot-accent);
+  border-radius: 50%;
+  background: #273447;
+  content: "";
+}
+
+.control-trigger {
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.55rem;
+}
+
+.control-trigger::after {
+  position: absolute;
+  inset: auto 0 0;
+  width: var(--trigger-value, 0%);
+  height: 0.3rem;
+  background: var(--slot-accent);
+  content: "";
+}
+
+.controller-dpad {
+  border: 0;
+  background: transparent;
+}
+
+.dpad-direction {
+  pointer-events: none;
+  width: 33.33%;
+  height: 33.33%;
+  border-radius: 0.35rem;
+  padding: 0;
+  font-size: clamp(1rem, 3vw, 1.5rem);
+}
+
+.dpad-up {
+  left: 33.33%;
+  top: 0;
+}
+
+.dpad-right {
+  left: 66.66%;
+  top: 33.33%;
+}
+
+.dpad-down {
+  left: 33.33%;
+  top: 66.66%;
+}
+
+.dpad-left {
+  left: 0;
+  top: 33.33%;
+}
+
+.controller-dpad[data-direction="up"] .dpad-up,
+.controller-dpad[data-direction="right"] .dpad-right,
+.controller-dpad[data-direction="down"] .dpad-down,
+.controller-dpad[data-direction="left"] .dpad-left {
+  border-color: var(--slot-accent);
+  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
+  transform: scale(0.96);
+}
+
+.controller-label,
+.controller-image {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--width);
+  height: var(--height);
+}
+
+.controller-label {
+  display: grid;
+  place-items: center;
+  color: #aeb9c9;
+  font-size: clamp(0.65rem, 1.4vw, 0.85rem);
+}
+
+.controller-image {
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.orientation-message {
+  display: none;
+  position: absolute;
+  inset: 20% 8% auto;
+  border: 1px solid #536174;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: #151b25;
+  color: #d8e0eb;
+  text-align: center;
+}
+
+.controller-layout[data-orientation="portrait"].portrait-fallback
+  .controller-surface {
+  display: none;
+}
+
+.controller-layout[data-orientation="portrait"].portrait-fallback
+  .orientation-message {
+  display: block;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .controller-header {
+    min-height: 2.7rem;
+  }
+
+  .controller-name {
+    max-width: 32vw;
+  }
+
+  .controller-layout-picker {
+    max-width: 8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .controller-control,
+  .dpad-direction {
+    transition: none;
+  }
+}
