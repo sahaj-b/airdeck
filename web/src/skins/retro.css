@@ -108,13 +108,6 @@ html[data-skin="retro"] .dpad-direction {
     filter 70ms steps(2, end);
 }
 
-html[data-skin="retro"] .controller-dpad::before {
-  border: 3px solid var(--line);
-  border-radius: 4px;
-  background: #5d6285;
-  box-shadow: 4px 4px 0 var(--line);
-}
-
 html[data-skin="retro"] .controller-dpad[data-direction="up"] .dpad-up,
 html[data-skin="retro"] .controller-dpad[data-direction="right"] .dpad-right,
 html[data-skin="retro"] .controller-dpad[data-direction="down"] .dpad-down,

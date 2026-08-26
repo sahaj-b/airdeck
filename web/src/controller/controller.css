@@ -113,6 +113,7 @@ select {
 .controller-control {
   display: grid;
   place-items: center;
+  font-size: clamp(0.85rem, 3.2vw, 1.45rem);
 }
 
 .controller-control:focus-visible {
@@ -132,7 +133,10 @@ html[data-skin] .controller-control[data-shape="pill"] {
 
 .control-joystick {
   display: block;
+  border-radius: 50%;
   color: transparent;
+  background: radial-gradient(circle at 42% 34%, #2b394d, #121a25 72%);
+  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 45%);
 }
 
 .control-joystick::after {
@@ -141,9 +145,17 @@ html[data-skin] .controller-control[data-shape="pill"] {
   left: calc(50% + var(--axis-x, 0%) / 2);
   width: 42%;
   height: 42%;
+  border: 2px solid var(--slot-accent);
   border-radius: 50%;
+  background: #273447;
   content: "";
   transform: translate(-50%, -50%);
+}
+
+/* Joystick labels like "Left stick" must never be visible, even when a
+   skin's html[data-skin] .controller-control rule sets a text color. */
+html[data-skin] .controller-control.control-joystick {
+  color: transparent !important;
 }
 
 .control-trigger {
@@ -157,8 +169,35 @@ html[data-skin] .controller-control[data-shape="pill"] {
   background: transparent;
 }
 
+/* Outer square around whole dpad comes from html[data-skin] .controller-control
+   giving dpad container a border, kill it for every skin, keep only arm
+   borders from dpad-direction. */
+html[data-skin] .controller-dpad {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.controller-dpad.is-pressed {
+  background: transparent;
+  transform: none;
+}
+
+html[data-skin] .controller-dpad.is-pressed {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .dpad-direction {
   display: grid;
+  width: 40%;
+  height: 35%;
+  border: 2px solid #8a98ab;
+  border-radius: 12%;
+  padding: 0;
+  background: #18212e;
+  color: #aeb9c9;
   place-items: center;
   pointer-events: none;
 }
@@ -208,13 +247,46 @@ html[data-skin] .controller-control[data-shape="pill"] {
   border-radius: 12% 24% 24% 12%;
 }
 
-.controller-dpad::before {
-  position: absolute;
-  left: 30%;
-  top: 30%;
-  width: 40%;
-  height: 40%;
-  content: "";
+/* Inner edges face the center gap, no border so four arms read as one dpad */
+.dpad-direction.dpad-up {
+  border-bottom: 0;
+}
+
+.dpad-direction.dpad-down {
+  border-top: 0;
+}
+
+.dpad-direction.dpad-left {
+  border-right: 0;
+}
+
+.dpad-direction.dpad-right {
+  border-left: 0;
+}
+
+html[data-skin] .dpad-direction.dpad-up {
+  border-bottom: 0 !important;
+}
+
+html[data-skin] .dpad-direction.dpad-down {
+  border-top: 0 !important;
+}
+
+html[data-skin] .dpad-direction.dpad-left {
+  border-right: 0 !important;
+}
+
+html[data-skin] .dpad-direction.dpad-right {
+  border-left: 0 !important;
+}
+
+.controller-dpad[data-direction="up"] .dpad-up,
+.controller-dpad[data-direction="right"] .dpad-right,
+.controller-dpad[data-direction="down"] .dpad-down,
+.controller-dpad[data-direction="left"] .dpad-left {
+  border-color: var(--slot-accent);
+  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
+  color: var(--slot-accent);
 }
 
 .controller-label,

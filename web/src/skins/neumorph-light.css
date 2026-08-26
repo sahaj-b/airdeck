@@ -85,15 +85,6 @@ html[data-skin="neumorph-light"] .dpad-direction {
   transition: box-shadow 100ms ease;
 }
 
-html[data-skin="neumorph-light"] .controller-dpad::before {
-  border: 0;
-  border-radius: 22%;
-  background: var(--surface);
-  box-shadow:
-    4px 4px 8px var(--shade),
-    -4px -4px 8px var(--light);
-}
-
 html[data-skin="neumorph-light"] .controller-dpad[data-direction="up"] .dpad-up,
 html[data-skin="neumorph-light"]
   .controller-dpad[data-direction="right"]

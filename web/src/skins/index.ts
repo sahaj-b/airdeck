@@ -5,7 +5,7 @@ import moonlight from './moonlight.css?raw';
 import neumorph from './neumorph.css?raw';
 import neumorphLight from './neumorph-light.css?raw';
 import oled from './oled.css?raw';
-import onyx from './onyx.css?raw';
+import airdeck from './airdeck.css?raw';
 import retro from './retro.css?raw';
 
 export interface Skin {
@@ -15,7 +15,7 @@ export interface Skin {
 }
 
 export const SKINS: Skin[] = [
-  { id: 'onyx', name: 'Onyx', css: onyx },
+  { id: 'airdeck', name: 'Airdeck', css: airdeck },
   { id: 'clay', name: 'Clay', css: clay },
   { id: 'console', name: 'Console', css: console },
   { id: 'minimal', name: 'Minimal', css: minimal },
@@ -26,4 +26,4 @@ export const SKINS: Skin[] = [
   { id: 'retro', name: 'Retro', css: retro },
 ];
 
-export const DEFAULT_SKIN_ID = 'onyx';
+export const DEFAULT_SKIN_ID = 'airdeck';

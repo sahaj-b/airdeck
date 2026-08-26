@@ -6,9 +6,9 @@ html[data-skin="oled"] {
   --accent: #4fc3f7;
   --void: #000000;
   --surface: #0a0a0a;
-  --edge: #444444;
+  --edge: #999999;
   --text: #e0e0e0;
-  --muted: #555555;
+  --muted: #777777;
 }
 
 html[data-skin="oled"] body,
@@ -94,19 +94,13 @@ html[data-skin="oled"] .dpad-direction svg {
   height: 44%;
 }
 
-html[data-skin="oled"] .controller-dpad::before {
-  left: calc(50% - 2px);
-  top: calc(50% - 2px);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--edge);
-}
-
 html[data-skin="oled"] .controller-dpad[data-direction="up"] .dpad-up,
 html[data-skin="oled"] .controller-dpad[data-direction="right"] .dpad-right,
 html[data-skin="oled"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="oled"] .controller-dpad[data-direction="left"] .dpad-left {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
   color: var(--accent);
 }
 

@@ -33,7 +33,8 @@ html[data-skin="minimal"] .controller-control {
 }
 
 html[data-skin="minimal"] .controller-control.is-pressed {
-  background: var(--ink);
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--bg);
 }
 
@@ -45,17 +46,21 @@ html[data-skin="minimal"] .control-trigger.is-pressed {
 
 html[data-skin="minimal"] .control-joystick {
   border: 1.5px solid var(--ink);
-  transition: border-color 90ms ease;
+  background: transparent;
+  transition:
+    border-color 90ms ease,
+    background-color 90ms ease;
 }
 
 html[data-skin="minimal"] .control-joystick.is-active {
   border-color: var(--accent);
+  background: #2e2e2e;
 }
 
 html[data-skin="minimal"] .control-joystick::after {
   width: 34%;
   height: 34%;
-  background: var(--ink);
+  background: var(--accent);
   transition: background-color 90ms ease;
 }
 
@@ -74,15 +79,6 @@ html[data-skin="minimal"] .dpad-direction svg {
   height: 60%;
 }
 
-html[data-skin="minimal"] .controller-dpad::before {
-  left: calc(50% - 3px);
-  top: calc(50% - 3px);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
-}
-
 html[data-skin="minimal"] .controller-dpad[data-direction] .dpad-direction {
   color: #55503f;
 }
@@ -91,6 +87,9 @@ html[data-skin="minimal"] .controller-dpad[data-direction="up"] .dpad-up,
 html[data-skin="minimal"] .controller-dpad[data-direction="right"] .dpad-right,
 html[data-skin="minimal"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="minimal"] .controller-dpad[data-direction="left"] .dpad-left {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
   color: var(--ink);
 }
 

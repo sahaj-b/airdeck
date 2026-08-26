@@ -491,7 +491,11 @@ function applyWelcome(
   layoutSelect: HTMLSelectElement,
 ): void {
   slot.textContent = `Player ${welcome.slot + 1}`;
+  const isDefaultName = DEFAULT_NAME_PATTERN.test(welcome.displayName);
   name.textContent = welcome.displayName;
+  name.hidden = isDefaultName;
+  // Also hide the slot separator gap when name is hidden, keep only PLAYER X
+  name.style.display = isDefaultName ? 'none' : '';
   shell.style.setProperty('--slot-accent', welcome.accent);
   layoutSelect.replaceChildren();
   for (const layout of welcome.availableLayouts) {

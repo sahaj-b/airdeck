@@ -132,15 +132,6 @@ html[data-skin="moonlight"] .dpad-direction svg {
   height: 42%;
 }
 
-html[data-skin="moonlight"] .controller-dpad::before {
-  left: calc(50% - 3px);
-  top: calc(50% - 3px);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--edge);
-}
-
 html[data-skin="moonlight"] .controller-dpad[data-direction="up"] .dpad-up,
 html[data-skin="moonlight"]
   .controller-dpad[data-direction="right"]
@@ -148,6 +139,8 @@ html[data-skin="moonlight"]
 html[data-skin="moonlight"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="moonlight"] .controller-dpad[data-direction="left"] .dpad-left {
   color: var(--accent-bright);
+  background: transparent;
+  border-radius: 0.75rem;
 }
 
 html[data-skin="moonlight"] .controller-status {

@@ -194,6 +194,15 @@ function renderControl(
     filler.className = 'controller-control';
     filler.dataset.controlId = control.id;
     visual = filler;
+  } else if (control.type === 'joystick') {
+    const stick = document.createElement('button');
+    stick.type = 'button';
+    stick.className = `controller-control control-${control.type}`;
+    stick.dataset.controlId = control.id;
+    stick.dataset.shape = control.shape ?? 'rect';
+    stick.dataset.command = control.binding ?? '';
+    stick.setAttribute('aria-label', control.label);
+    visual = stick;
   } else {
     const button = document.createElement('button');
     button.type = 'button';
