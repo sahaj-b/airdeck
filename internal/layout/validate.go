@@ -62,6 +62,19 @@ func ValidateDocument(document Document) error {
 	if document.DefaultOrientation != "landscape" && document.DefaultOrientation != "portrait" {
 		return fmt.Errorf("unsupported default orientation %q", document.DefaultOrientation)
 	}
+	if document.ReferenceDimension != "height" {
+		return fmt.Errorf("unsupported reference dimension %q", document.ReferenceDimension)
+	}
+	if len(document.Sections) == 0 || len(document.Sections) > 16 {
+		return errors.New("layout must contain between 1 and 16 sections")
+	}
+	if len(document.Assets) > 64 {
+		return errors.New("layout cannot contain more than 64 assets")
+	}
+	if !finite(document.Gap) || !finite(document.GapMax) || document.Gap < 0 || document.GapMax < document.Gap || document.Gap > 1 || document.GapMax > 1 {
+		return errors.New("layout gaps are invalid")
+	}
+
 	ids := make(map[string]string)
 	checkID := func(id, kind string) error {
 		if id == "" {
@@ -93,14 +106,17 @@ func ValidateDocument(document Document) error {
 		if err := checkID(section.ID, "section"); err != nil {
 			return err
 		}
-		if err := validateRect(section.Rect); err != nil {
+		if err := validateSection(section); err != nil {
 			return fmt.Errorf("section %q: %w", section.ID, err)
+		}
+		if len(section.Controls) > 128 {
+			return fmt.Errorf("section %q cannot contain more than 128 controls", section.ID)
 		}
 		for _, control := range section.Controls {
 			if err := checkID(control.ID, "control"); err != nil {
 				return err
 			}
-			if err := validateControl(control, assetIDs); err != nil {
+			if err := validateControl(control, section, assetIDs); err != nil {
 				return fmt.Errorf("control %q: %w", control.ID, err)
 			}
 		}
@@ -108,7 +124,45 @@ func ValidateDocument(document Document) error {
 	return nil
 }
 
-func validateControl(control Control, assetIDs map[string]struct{}) error {
+func validateSection(section Section) error {
+	for name, value := range map[string]float64{
+		"aspect ratio":  section.AspectRatio,
+		"minimum width": section.MinWidth,
+		"maximum width": section.MaxWidth,
+		"flex grow":     section.FlexGrow,
+		"flex shrink":   section.FlexShrink,
+	} {
+		if !finite(value) || value < 0 {
+			return fmt.Errorf("%s is invalid", name)
+		}
+	}
+	if section.AspectRatio <= 0 || section.MinWidth <= 0 || section.MaxWidth <= 0 {
+		return errors.New("section widths must be positive")
+	}
+	if section.AspectRatio > 4 || section.MinWidth > 4 || section.MaxWidth > 4 || section.FlexGrow > 100 || section.FlexShrink > 100 {
+		return errors.New("section sizing values exceed their bounds")
+	}
+	if section.MaxWidth < section.MinWidth {
+		return errors.New("maximum width is smaller than minimum width")
+	}
+	for name, value := range map[string]float64{
+		"left": section.Padding.Left, "right": section.Padding.Right,
+		"top": section.Padding.Top, "bottom": section.Padding.Bottom,
+	} {
+		if !finite(value) || value < 0 || value > 0.5 {
+			return fmt.Errorf("section padding %s is invalid", name)
+		}
+	}
+	if section.Padding.Left+section.Padding.Right >= section.MinWidth {
+		return errors.New("horizontal padding leaves no minimum section content")
+	}
+	if section.Padding.Top+section.Padding.Bottom >= 1 {
+		return errors.New("vertical padding leaves no section content")
+	}
+	return nil
+}
+
+func validateControl(control Control, section Section, assetIDs map[string]struct{}) error {
 	switch control.Type {
 	case "button", "dpad", "joystick", "trigger", "label", "image":
 	default:
@@ -119,22 +173,12 @@ func validateControl(control Control, assetIDs map[string]struct{}) error {
 	default:
 		return fmt.Errorf("unsupported control shape %q", control.Shape)
 	}
-	if err := validateControlRect(control.Rect); err != nil {
+	if err := validateGeometry(control.Geometry, section, "geometry"); err != nil {
 		return err
 	}
 	if control.Type == "joystick" || control.Type == "dpad" {
-		if !isSquare(control.Rect) {
+		if !isSquare(control.Geometry.Size) {
 			return errors.New("joystick and d-pad controls must be square")
-		}
-		if control.Orientations != nil {
-			for name, rect := range map[string]*Rect{
-				"portrait":  control.Orientations.Portrait,
-				"landscape": control.Orientations.Landscape,
-			} {
-				if rect != nil && !isSquare(*rect) {
-					return fmt.Errorf("%s override must be square", name)
-				}
-			}
 		}
 	}
 	if control.Type == "image" {
@@ -179,39 +223,57 @@ func validateControl(control Control, assetIDs map[string]struct{}) error {
 	}
 	if control.Orientations != nil {
 		if control.Orientations.Portrait != nil {
-			if err := validateControlRect(*control.Orientations.Portrait); err != nil {
-				return fmt.Errorf("portrait override: %w", err)
+			if err := validateGeometry(*control.Orientations.Portrait, section, "portrait override"); err != nil {
+				return err
+			}
+			if (control.Type == "joystick" || control.Type == "dpad") && !isSquare(control.Orientations.Portrait.Size) {
+				return errors.New("portrait override must be square")
 			}
 		}
 		if control.Orientations.Landscape != nil {
-			if err := validateControlRect(*control.Orientations.Landscape); err != nil {
-				return fmt.Errorf("landscape override: %w", err)
+			if err := validateGeometry(*control.Orientations.Landscape, section, "landscape override"); err != nil {
+				return err
+			}
+			if (control.Type == "joystick" || control.Type == "dpad") && !isSquare(control.Orientations.Landscape.Size) {
+				return errors.New("landscape override must be square")
 			}
 		}
 	}
 	return nil
 }
 
-func validateRect(rect Rect) error {
-	if rect.X < 0 || rect.Y < 0 || rect.Width <= 0 || rect.Height <= 0 || rect.X+rect.Width > 1 || rect.Y+rect.Height > 1 {
-		return fmt.Errorf("geometry is outside normalized bounds")
+func validateGeometry(geometry Geometry, section Section, name string) error {
+	if !finite(geometry.Position.X) || !finite(geometry.Position.Y) || geometry.Position.X < -2 || geometry.Position.X > 2 || geometry.Position.Y < -2 || geometry.Position.Y > 2 {
+		return fmt.Errorf("%s position is invalid", name)
 	}
-	return nil
-}
-
-// Control width is a fraction of section height while x spans the section
-// width, so horizontal containment cannot be validated numerically.
-func validateControlRect(rect Rect) error {
-	if rect.X < 0 || rect.X > 1 || rect.Y < 0 || rect.Width <= 0 || rect.Height <= 0 || rect.Y+rect.Height > 1 {
-		return fmt.Errorf("geometry is outside normalized bounds")
+	if !finite(geometry.Anchor.X) || !finite(geometry.Anchor.Y) || geometry.Anchor.X < 0 || geometry.Anchor.X > 1 || geometry.Anchor.Y < 0 || geometry.Anchor.Y > 1 {
+		return fmt.Errorf("%s anchor is invalid", name)
 	}
-	return nil
-}
+	if !finite(geometry.Size.Width) || !finite(geometry.Size.Height) || geometry.Size.Width <= 0 || geometry.Size.Height <= 0 || geometry.Size.Width > 2 || geometry.Size.Height > 2 {
+		return fmt.Errorf("%s size is invalid", name)
+	}
 
-func isSquare(rect Rect) bool {
+	contentWidth := section.AspectRatio - section.Padding.Left - section.Padding.Right
+	contentHeight := 1 - section.Padding.Top - section.Padding.Bottom
+	centerX := section.Padding.Left + contentWidth/2
+	centerY := section.Padding.Top + contentHeight/2
+	left := centerX + geometry.Position.X - geometry.Anchor.X*geometry.Size.Width
+	right := left + geometry.Size.Width
+	top := centerY + geometry.Position.Y - geometry.Anchor.Y*geometry.Size.Height
+	bottom := top + geometry.Size.Height
 	const epsilon = 1e-9
-	return math.Abs(rect.Width-rect.Height) < epsilon
+	if left < -epsilon || right > section.AspectRatio+epsilon || top < -epsilon || bottom > 1+epsilon {
+		return fmt.Errorf("%s extends outside the authored section bounds", name)
+	}
+	return nil
 }
+
+func isSquare(size Size) bool {
+	const epsilon = 1e-9
+	return math.Abs(size.Width-size.Height) < epsilon
+}
+
+func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
 
 func validateAssetPath(path string) error {
 	if path == "" || filepath.IsAbs(path) || filepath.Clean(path) != path || strings.HasPrefix(path, "../") || path == ".." || strings.Contains(path, `\`) {

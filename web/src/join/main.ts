@@ -213,8 +213,8 @@ function showController(options: {
   shell.className = 'controller-shell';
   shell.style.setProperty('--slot-accent', '#6ee7b7');
 
-  const header = document.createElement('header');
-  header.className = 'controller-header';
+  const chrome = document.createElement('div');
+  chrome.className = 'controller-runtime-chrome';
   const identity = document.createElement('div');
   identity.className = 'controller-identity';
   const slot = document.createElement('span');
@@ -241,8 +241,7 @@ function showController(options: {
   const center = document.createElement('div');
   center.className = 'controller-center';
   center.append(status, gearButton);
-  // Connection status and the settings gear sit above the player identity.
-  header.append(center, identity);
+  chrome.append(identity, center);
 
   const host = document.createElement('div');
   host.className = 'controller-host';
@@ -277,13 +276,8 @@ function showController(options: {
       : 'All local feedback capabilities are available.',
   });
   const fullscreen = buildFullscreenButton();
-  shell.append(
-    header,
-    host,
-    settings.backdrop,
-    settings.root,
-    fullscreen.button,
-  );
+  chrome.append(fullscreen.button);
+  shell.append(host, settings.backdrop, settings.root);
   root.replaceChildren(shell);
 
   let transientStatus: string | null = null;
@@ -352,7 +346,11 @@ function showController(options: {
     },
     onLayout: (layout, diagnostic) => {
       activeRenderer?.destroy();
-      activeRenderer = renderLayout(host, layout, { state, feedback });
+      activeRenderer = renderLayout(host, layout, {
+        state,
+        feedback,
+        chrome,
+      });
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
       layoutSelect.value = layout.id;

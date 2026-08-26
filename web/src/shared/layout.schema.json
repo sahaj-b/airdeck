@@ -9,6 +9,9 @@
     "name",
     "schemaVersion",
     "defaultOrientation",
+    "referenceDimension",
+    "gap",
+    "gapMax",
     "sections",
     "assets"
   ],
@@ -28,6 +31,22 @@
     "defaultOrientation": {
       "enum": ["landscape", "portrait"]
     },
+    "referenceDimension": {
+      "const": "height",
+      "description": "V1 measures section widths, padding, control positions, and control sizes from the composition height."
+    },
+    "gap": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "The minimum gap between ordered sections, as a fraction of the composition height."
+    },
+    "gapMax": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "The maximum gap between ordered sections. Spare wide-screen space reaches gaps after flexible sections reach maxWidth."
+    },
     "sections": {
       "type": "array",
       "minItems": 1,
@@ -45,30 +64,76 @@
     }
   },
   "$defs": {
-    "rect": {
+    "point": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y", "width", "height"],
+      "required": ["x", "y"],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2,
+          "description": "Horizontal offset from the section content center, in reference-dimension units. Positive is right."
+        },
+        "y": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2,
+          "description": "Vertical offset from the section content center, in reference-dimension units. Positive is down."
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
       "properties": {
         "x": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "The horizontal pivot inside the control. 0 is the left edge and 1 is the right edge."
         },
         "y": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
-        },
+          "maximum": 1,
+          "description": "The vertical pivot inside the control. 0 is the top edge and 1 is the bottom edge."
+        }
+      }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
         "width": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "maximum": 1
+          "maximum": 2,
+          "description": "Width as a fraction of the section reference dimension."
         },
         "height": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "maximum": 1
+          "maximum": 2,
+          "description": "Height as a fraction of the section reference dimension."
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "anchor", "size"],
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/point"
+        },
+        "anchor": {
+          "$ref": "#/$defs/anchor"
+        },
+        "size": {
+          "$ref": "#/$defs/size"
         }
       }
     },
@@ -77,10 +142,37 @@
       "additionalProperties": false,
       "properties": {
         "portrait": {
-          "$ref": "#/$defs/rect"
+          "$ref": "#/$defs/geometry"
         },
         "landscape": {
-          "$ref": "#/$defs/rect"
+          "$ref": "#/$defs/geometry"
+        }
+      }
+    },
+    "padding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right", "top", "bottom"],
+      "properties": {
+        "left": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "right": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "top": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "bottom": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
         }
       }
     },
@@ -108,7 +200,7 @@
     "control": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "rect", "label", "visible"],
+      "required": ["id", "type", "geometry", "label", "visible"],
       "properties": {
         "id": {
           "type": "string",
@@ -117,9 +209,8 @@
         "type": {
           "enum": ["button", "dpad", "joystick", "trigger", "label", "image"]
         },
-        "rect": {
-          "$ref": "#/$defs/rect",
-          "description": "x and y are normalized to the section rect. width and height are fractions of the section height, so a control keeps its authored aspect ratio on every screen; joysticks and D-pads must be square."
+        "geometry": {
+          "$ref": "#/$defs/geometry"
         },
         "shape": {
           "description": "Visual shape applied by the renderer. Defaults to rect.",
@@ -166,14 +257,56 @@
     "section": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "rect", "controls"],
+      "required": [
+        "id",
+        "aspectRatio",
+        "minWidth",
+        "maxWidth",
+        "flexGrow",
+        "flexShrink",
+        "protected",
+        "padding",
+        "controls"
+      ],
       "properties": {
         "id": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
         },
-        "rect": {
-          "$ref": "#/$defs/rect"
+        "aspectRatio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "description": "Base section width divided by the composition reference dimension."
+        },
+        "minWidth": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "description": "Minimum section width divided by the composition reference dimension."
+        },
+        "maxWidth": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "description": "Maximum section width divided by the composition reference dimension."
+        },
+        "flexGrow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "flexShrink": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "protected": {
+          "type": "boolean",
+          "description": "Protected sections keep their authored width while unprotected flexible sections shrink."
+        },
+        "padding": {
+          "$ref": "#/$defs/padding"
         },
         "controls": {
           "type": "array",

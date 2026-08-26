@@ -33,103 +33,18 @@ select {
   --slot-accent: #6ee7b7;
   position: fixed;
   inset: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   min-height: 100dvh;
-  padding: max(0.4rem, env(safe-area-inset-top))
-    max(0.6rem, env(safe-area-inset-right))
-    max(0.4rem, env(safe-area-inset-bottom))
-    max(0.6rem, env(safe-area-inset-left));
   background: #090b10;
 }
 
-.controller-header {
-  z-index: 3;
-  display: grid;
-  grid-template-rows: auto auto;
-  justify-items: center;
-  align-items: center;
-  gap: 0.3rem;
-  min-height: 2.9rem;
-  padding: 0.15rem 0.15rem 0.35rem;
-}
-
-.controller-identity {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 0.45rem;
-  line-height: 1.1;
-}
-
-.controller-slot {
-  color: var(--slot-accent);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.controller-name {
-  max-width: 40vw;
-  overflow: hidden;
-  color: #f3f6fb;
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.controller-center {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.controller-status {
-  max-width: 40vw;
-  overflow: hidden;
-  border: 1px solid #293548;
-  border-radius: 999px;
-  padding: 0.32rem 0.8rem;
-  background: #151b25;
-  color: #d8e0eb;
-  font-size: 0.76rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.icon-button {
-  display: grid;
-  width: 2.4rem;
-  height: 2.4rem;
-  place-items: center;
-  border: 1px solid #293548;
-  border-radius: 50%;
-  padding: 0;
-  background: #151b25;
-  color: #c6d0dd;
-  cursor: pointer;
-}
-
-.icon-button svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.icon-button:hover {
-  border-color: #536174;
-  color: #f3f6fb;
-}
-
-.icon-button:focus-visible {
-  outline: 3px solid var(--slot-accent);
-  outline-offset: 3px;
-}
-
 .controller-host {
-  position: relative;
+  position: absolute;
+  inset: 0;
   min-height: 0;
+  padding: max(0.35rem, env(safe-area-inset-top))
+    max(0.45rem, env(safe-area-inset-right))
+    max(0.35rem, env(safe-area-inset-bottom))
+    max(0.45rem, env(safe-area-inset-left));
 }
 
 .controller-layout {
@@ -140,25 +55,43 @@ select {
   overflow: hidden;
 }
 
-.controller-surface {
+.controller-frame {
   position: absolute;
   inset: 0;
+  overflow: hidden;
+  border: 1px solid #293548;
+  border-radius: clamp(0.8rem, 3vw, 1.8rem);
+  background: #0e141d;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 2%),
+    0 1rem 3rem rgb(0 0 0 / 20%);
+}
+
+.controller-composition {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .controller-section {
   position: absolute;
-  left: var(--x);
-  top: var(--y);
-  width: var(--width);
-  height: var(--height);
-  container-type: size;
+  top: 0;
+  pointer-events: none;
+}
+
+.controller-hit-target {
+  position: absolute;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .controller-control,
 .dpad-direction {
   position: absolute;
-  left: var(--x, 0%);
-  top: var(--y, 0%);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -170,47 +103,23 @@ select {
     transform 100ms ease;
 }
 
+.controller-hit-target > .controller-control {
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
 .controller-control {
-  width: max(44px, calc(var(--w, 1) * 100cqh));
-  height: max(44px, calc(var(--h, 1) * 100cqh));
+  display: grid;
+  place-items: center;
   border: 2px solid #8a98ab;
   border-radius: 0.55rem;
   padding: 0.3rem;
   background: #18212e;
   color: #f3f6fb;
-  font-size: clamp(0.62rem, 3.4cqh, 1rem);
+  font-size: clamp(0.55rem, 2.3vw, 1rem);
   font-weight: 800;
   letter-spacing: 0.04em;
-}
-
-.dpad-direction {
-  pointer-events: none;
-  display: grid;
-  width: 40%;
-  height: 35%;
-  border: 2px solid #8a98ab;
-  border-radius: 12%;
-  padding: 0;
-  background: #18212e;
-  color: #aeb9c9;
-  place-items: center;
-}
-
-.dpad-direction svg {
-  width: 48%;
-  height: 48%;
-}
-
-.dpad-right svg {
-  transform: rotate(90deg);
-}
-
-.dpad-down svg {
-  transform: rotate(180deg);
-}
-
-.dpad-left svg {
-  transform: rotate(270deg);
 }
 
 .controller-control:hover,
@@ -226,6 +135,9 @@ select {
 .controller-control.is-pressed {
   border-color: var(--slot-accent);
   background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
+}
+
+.controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
   transform: scale(0.96);
 }
 
@@ -242,6 +154,8 @@ select {
   display: block;
   border-radius: 50%;
   color: transparent;
+  background: radial-gradient(circle at 42% 34%, #2b394d, #121a25 72%);
+  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 45%);
 }
 
 .control-joystick::after {
@@ -285,6 +199,36 @@ select {
   content: "";
 }
 
+.dpad-direction {
+  display: grid;
+  width: 40%;
+  height: 35%;
+  border: 2px solid #8a98ab;
+  border-radius: 12%;
+  padding: 0;
+  background: #18212e;
+  color: #aeb9c9;
+  place-items: center;
+  pointer-events: none;
+}
+
+.dpad-direction svg {
+  width: 48%;
+  height: 48%;
+}
+
+.dpad-right svg {
+  transform: rotate(90deg);
+}
+
+.dpad-down svg {
+  transform: rotate(180deg);
+}
+
+.dpad-left svg {
+  transform: rotate(270deg);
+}
+
 .dpad-up {
   left: 30%;
   top: 0;
@@ -325,10 +269,6 @@ select {
 .controller-label,
 .controller-image {
   position: absolute;
-  left: var(--x);
-  top: var(--y);
-  width: max(44px, calc(var(--w, 1) * 100cqh));
-  height: max(44px, calc(var(--h, 1) * 100cqh));
 }
 
 .controller-label {
@@ -343,10 +283,103 @@ select {
   pointer-events: none;
 }
 
-.fullscreen-button {
-  position: fixed;
+.controller-runtime-chrome {
+  position: absolute;
   z-index: 5;
-  bottom: max(0.6rem, env(safe-area-inset-bottom));
+  inset: 0;
+  pointer-events: none;
+}
+
+.controller-identity {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.45rem;
+  max-width: min(90%, 22rem);
+  line-height: 1.1;
+  transform: translateX(-50%);
+}
+
+.controller-slot {
+  color: var(--slot-accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.controller-name {
+  max-width: 35vw;
+  overflow: hidden;
+  color: #f3f6fb;
+  font-size: clamp(0.7rem, 2vw, 0.9rem);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controller-center {
+  position: absolute;
+  top: 2.25rem;
+  left: 0;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  max-width: 100%;
+}
+
+.controller-status {
+  max-width: min(28vw, calc(100% - 2.7rem));
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid #293548;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  background: #151b25;
+  color: #d8e0eb;
+  font-size: clamp(0.62rem, 1.7vw, 0.76rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-button {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border: 1px solid #293548;
+  border-radius: 50%;
+  padding: 0;
+  background: #151b25;
+  color: #c6d0dd;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.icon-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.icon-button:hover {
+  border-color: #536174;
+  color: #f3f6fb;
+}
+
+.icon-button:focus-visible {
+  outline: 3px solid var(--slot-accent);
+  outline-offset: 3px;
+}
+
+.fullscreen-button {
+  position: absolute;
+  bottom: 0.55rem;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -355,7 +388,7 @@ select {
   position: fixed;
   z-index: 8;
   inset: 0;
-  background: rgb(0 0 0 / 0.55);
+  background: rgb(0 0 0 / 55%);
 }
 
 .settings-sheet {
@@ -431,6 +464,7 @@ select {
   display: none;
   position: absolute;
   inset: 20% 8% auto;
+  z-index: 6;
   border: 1px solid #536174;
   border-radius: 0.75rem;
   padding: 1rem;
@@ -439,13 +473,11 @@ select {
   text-align: center;
 }
 
-.controller-layout[data-orientation="portrait"].portrait-fallback
-  .controller-surface {
+.controller-layout.portrait-fallback .controller-frame {
   display: none;
 }
 
-.controller-layout[data-orientation="portrait"].portrait-fallback
-  .orientation-message {
+.controller-layout.portrait-fallback .orientation-message {
   display: block;
 }
 

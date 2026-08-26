@@ -4,22 +4,41 @@ import type { Command, Orientation } from './contracts';
 import { ButtonBits } from './contracts';
 import schema from './layout.schema.json';
 
-export interface Rect {
+export interface Point {
   x: number;
   y: number;
+}
+
+export interface Size {
   width: number;
   height: number;
 }
-export interface OrientationOverrides {
-  portrait?: Rect;
-  landscape?: Rect;
+
+export interface Geometry {
+  position: Point;
+  anchor: Point;
+  size: Size;
 }
+
+export interface OrientationOverrides {
+  portrait?: Geometry;
+  landscape?: Geometry;
+}
+
+export interface Padding {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 export interface DPadBindings {
   up: 'dpadUp';
   down: 'dpadDown';
   left: 'dpadLeft';
   right: 'dpadRight';
 }
+
 export type ControlType =
   | 'button'
   | 'dpad'
@@ -31,7 +50,7 @@ export type ControlShape = 'circle' | 'pill' | 'rect';
 export interface Control {
   id: string;
   type: ControlType;
-  rect: Rect;
+  geometry: Geometry;
   label: string;
   visible: boolean;
   shape?: ControlShape;
@@ -42,7 +61,13 @@ export interface Control {
 }
 export interface Section {
   id: string;
-  rect: Rect;
+  aspectRatio: number;
+  minWidth: number;
+  maxWidth: number;
+  flexGrow: number;
+  flexShrink: number;
+  protected: boolean;
+  padding: Padding;
   controls: Control[];
 }
 export interface LayoutAsset {
@@ -54,6 +79,9 @@ export interface LayoutDocument {
   name: string;
   schemaVersion: 1;
   defaultOrientation: Orientation;
+  referenceDimension: 'height';
+  gap: number;
+  gapMax: number;
   sections: Section[];
   assets: LayoutAsset[];
 }
@@ -76,6 +104,15 @@ export function validateLayout(value: unknown): value is LayoutDocument {
   if (!validateSchema(value)) return false;
   const document = value as LayoutDocument;
   if (!idPattern.test(document.id)) return false;
+  if (
+    document.referenceDimension !== 'height' ||
+    !Number.isFinite(document.gap) ||
+    !Number.isFinite(document.gapMax) ||
+    document.gap < 0 ||
+    document.gapMax < document.gap
+  )
+    return false;
+
   const ids = new Set<string>();
   const add = (id: string) => {
     if (ids.has(id)) return false;
@@ -95,46 +132,10 @@ export function validateLayout(value: unknown): value is LayoutDocument {
     assetIds.add(asset.id);
   }
   for (const section of document.sections) {
-    if (!add(section.id) || !validRect(section.rect)) return false;
+    if (!add(section.id) || !validSection(section)) return false;
     for (const control of section.controls) {
-      if (!add(control.id) || !validControlRect(control.rect)) return false;
-      if (
-        control.type === 'image' &&
-        (!control.asset || !assetIds.has(control.asset))
-      )
+      if (!add(control.id) || !validControl(control, section, assetIds))
         return false;
-      if (control.binding && !knownCommand(control.binding)) return false;
-      if (control.type === 'label' && control.binding) return false;
-      if (
-        control.type === 'dpad' &&
-        (control.bindings?.up !== 'dpadUp' ||
-          control.bindings?.down !== 'dpadDown' ||
-          control.bindings?.left !== 'dpadLeft' ||
-          control.bindings?.right !== 'dpadRight')
-      )
-        return false;
-      if (
-        control.orientations &&
-        Object.values(control.orientations).some(
-          (rect) => rect && !validControlRect(rect),
-        )
-      )
-        return false;
-      if (
-        control.shape &&
-        control.shape !== 'circle' &&
-        control.shape !== 'pill' &&
-        control.shape !== 'rect'
-      )
-        return false;
-      if (control.type === 'joystick' || control.type === 'dpad') {
-        const rects = [
-          control.rect,
-          control.orientations?.portrait,
-          control.orientations?.landscape,
-        ];
-        if (rects.some((rect) => rect && !isSquare(rect))) return false;
-      }
     }
   }
   return true;
@@ -149,33 +150,111 @@ export function parseLayoutDocument(value: unknown): LayoutParseResult {
   };
 }
 
-function validRect(rect: Rect): boolean {
+function validSection(section: Section): boolean {
   return (
-    rect.x >= 0 &&
-    rect.y >= 0 &&
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.x + rect.width <= 1 &&
-    rect.y + rect.height <= 1
+    finitePositive(section.aspectRatio) &&
+    finitePositive(section.minWidth) &&
+    finitePositive(section.maxWidth) &&
+    section.maxWidth >= section.minWidth &&
+    finiteNonNegative(section.flexGrow) &&
+    finiteNonNegative(section.flexShrink) &&
+    validPadding(section.padding) &&
+    section.padding.left + section.padding.right < section.minWidth &&
+    section.padding.top + section.padding.bottom < 1
   );
 }
 
-// Control width is a fraction of section height while x spans the section
-// width, so horizontal containment cannot be validated numerically.
-function validControlRect(rect: Rect): boolean {
-  return (
-    rect.x >= 0 &&
-    rect.x <= 1 &&
-    rect.y >= 0 &&
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.y + rect.height <= 1
+function validPadding(padding: Padding): boolean {
+  return [padding.left, padding.right, padding.top, padding.bottom].every(
+    (value) => finiteNonNegative(value) && value <= 0.5,
   );
 }
 
-function isSquare(rect: Rect): boolean {
-  return Math.abs(rect.width - rect.height) < 1e-9;
+function validControl(
+  control: Control,
+  section: Section,
+  assetIds: Set<string>,
+): boolean {
+  if (!validGeometry(control.geometry, section)) return false;
+  if (
+    control.type === 'image' &&
+    (!control.asset || !assetIds.has(control.asset))
+  )
+    return false;
+  if (control.binding && !knownCommand(control.binding)) return false;
+  if (control.type === 'label' && control.binding) return false;
+  if (
+    control.type === 'dpad' &&
+    (control.bindings?.up !== 'dpadUp' ||
+      control.bindings?.down !== 'dpadDown' ||
+      control.bindings?.left !== 'dpadLeft' ||
+      control.bindings?.right !== 'dpadRight')
+  )
+    return false;
+  if (
+    control.orientations &&
+    Object.values(control.orientations).some(
+      (geometry) => geometry && !validGeometry(geometry, section),
+    )
+  )
+    return false;
+  if (
+    control.shape &&
+    control.shape !== 'circle' &&
+    control.shape !== 'pill' &&
+    control.shape !== 'rect'
+  )
+    return false;
+  if (control.type === 'joystick' || control.type === 'dpad') {
+    const geometries = [
+      control.geometry,
+      control.orientations?.portrait,
+      control.orientations?.landscape,
+    ];
+    if (geometries.some((geometry) => geometry && !isSquare(geometry.size)))
+      return false;
+  }
+  return true;
 }
+
+function validGeometry(geometry: Geometry, section: Section): boolean {
+  if (
+    ![geometry.position.x, geometry.position.y].every(
+      (value) => Number.isFinite(value) && value >= -2 && value <= 2,
+    ) ||
+    ![geometry.anchor.x, geometry.anchor.y].every(
+      (value) => Number.isFinite(value) && value >= 0 && value <= 1,
+    ) ||
+    ![geometry.size.width, geometry.size.height].every(
+      (value) => Number.isFinite(value) && value > 0 && value <= 2,
+    )
+  )
+    return false;
+
+  const contentWidth =
+    section.aspectRatio - section.padding.left - section.padding.right;
+  const contentHeight = 1 - section.padding.top - section.padding.bottom;
+  const centerX = section.padding.left + contentWidth / 2;
+  const centerY = section.padding.top + contentHeight / 2;
+  const left =
+    centerX + geometry.position.x - geometry.anchor.x * geometry.size.width;
+  const right = left + geometry.size.width;
+  const top =
+    centerY + geometry.position.y - geometry.anchor.y * geometry.size.height;
+  const bottom = top + geometry.size.height;
+  const epsilon = 1e-9;
+  return (
+    left >= -epsilon &&
+    right <= section.aspectRatio + epsilon &&
+    top >= -epsilon &&
+    bottom <= 1 + epsilon
+  );
+}
+
+function isSquare(size: Size): boolean {
+  return Math.abs(size.width - size.height) < 1e-9;
+}
+
 const KNOWN_COMMANDS = new Set<string>([
   ...Object.keys(ButtonBits),
   'leftTrigger',
@@ -185,9 +264,17 @@ function knownCommand(command: string): command is Command {
   return KNOWN_COMMANDS.has(command);
 }
 
-export function orientationRect(
+function finitePositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
+function finiteNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+export function orientationGeometry(
   control: Control,
   orientation: Orientation,
-): Rect {
-  return control.orientations?.[orientation] ?? control.rect;
+): Geometry {
+  return control.orientations?.[orientation] ?? control.geometry;
 }

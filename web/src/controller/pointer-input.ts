@@ -32,7 +32,8 @@ export interface PointerFeedback {
 }
 
 interface PointerOwnership {
-  element: HTMLElement;
+  target: HTMLElement;
+  visual: HTMLElement;
   control: Control;
   source: string;
   command?: Command;
@@ -112,9 +113,13 @@ export class PointerInput {
     private readonly joystickOptions: JoystickOptions = {},
   ) {}
 
-  bind(element: HTMLElement, control: Control): () => void {
+  bind(
+    target: HTMLElement,
+    control: Control,
+    visual: HTMLElement = target,
+  ): () => void {
     const onPointerDown = (event: PointerEvent) =>
-      this.pointerDown(event, element, control);
+      this.pointerDown(event, target, visual, control);
     const onPointerMove = (event: PointerEvent) => this.pointerMove(event);
     const onPointerUp = (event: PointerEvent) =>
       this.finishPointer(event.pointerId);
@@ -124,21 +129,21 @@ export class PointerInput {
       this.finishPointer(event.pointerId);
     const onContextMenu = (event: Event) => event.preventDefault();
 
-    element.addEventListener('pointerdown', onPointerDown);
-    element.addEventListener('pointermove', onPointerMove);
-    element.addEventListener('pointerup', onPointerUp);
-    element.addEventListener('pointercancel', onPointerCancel);
-    element.addEventListener('lostpointercapture', onLostPointerCapture);
-    element.addEventListener('contextmenu', onContextMenu);
+    target.addEventListener('pointerdown', onPointerDown);
+    target.addEventListener('pointermove', onPointerMove);
+    target.addEventListener('pointerup', onPointerUp);
+    target.addEventListener('pointercancel', onPointerCancel);
+    target.addEventListener('lostpointercapture', onLostPointerCapture);
+    target.addEventListener('contextmenu', onContextMenu);
 
     const cleanup = () => {
-      this.cancelElement(element);
-      element.removeEventListener('pointerdown', onPointerDown);
-      element.removeEventListener('pointermove', onPointerMove);
-      element.removeEventListener('pointerup', onPointerUp);
-      element.removeEventListener('pointercancel', onPointerCancel);
-      element.removeEventListener('lostpointercapture', onLostPointerCapture);
-      element.removeEventListener('contextmenu', onContextMenu);
+      this.cancelElement(target);
+      target.removeEventListener('pointerdown', onPointerDown);
+      target.removeEventListener('pointermove', onPointerMove);
+      target.removeEventListener('pointerup', onPointerUp);
+      target.removeEventListener('pointercancel', onPointerCancel);
+      target.removeEventListener('lostpointercapture', onLostPointerCapture);
+      target.removeEventListener('contextmenu', onContextMenu);
     };
     this.cleanups.push(cleanup);
     return cleanup;
@@ -156,7 +161,8 @@ export class PointerInput {
 
   private pointerDown(
     event: PointerEvent,
-    element: HTMLElement,
+    target: HTMLElement,
+    visual: HTMLElement,
     control: Control,
   ): void {
     event.preventDefault();
@@ -164,11 +170,11 @@ export class PointerInput {
     if (!control.binding && control.type !== 'dpad') return;
 
     const source = `pointer:${event.pointerId}:${control.id}`;
-    const ownership: PointerOwnership = { element, control, source };
+    const ownership: PointerOwnership = { target, visual, control, source };
     this.pointers.set(event.pointerId, ownership);
-    this.markElement(element, event.pointerId, true);
+    this.markElement(visual, event.pointerId, true);
     try {
-      element.setPointerCapture(event.pointerId);
+      target.setPointerCapture(event.pointerId);
     } catch {
       // Pointer capture is unavailable in a few embedded browser contexts.
     }
@@ -187,13 +193,13 @@ export class PointerInput {
     event: PointerEvent,
     ownership: PointerOwnership,
   ): void {
-    const { element, control, source } = ownership;
+    const { visual, control, source } = ownership;
     if (control.type === 'button') {
       if (control.binding) this.state.setButton(source, control.binding, true);
       return;
     }
 
-    const rect = element.getBoundingClientRect();
+    const rect = visual.getBoundingClientRect();
     if (control.type === 'dpad') {
       const command = dpadDirection(
         { x: event.clientX, y: event.clientY },
@@ -213,7 +219,7 @@ export class PointerInput {
         dpadLeft: 'left',
         dpadRight: 'right',
       };
-      element.dataset.direction = (command && armNames[command]) || '';
+      visual.dataset.direction = (command && armNames[command]) || '';
       return;
     }
 
@@ -232,8 +238,8 @@ export class PointerInput {
         value.x,
         value.y,
       );
-      element.style.setProperty('--axis-x', `${value.x * 40}%`);
-      element.style.setProperty('--axis-y', `${value.y * 40}%`);
+      visual.style.setProperty('--axis-x', `${value.x * 40}%`);
+      visual.style.setProperty('--axis-y', `${value.y * 40}%`);
       return;
     }
 
@@ -243,7 +249,7 @@ export class PointerInput {
     ) {
       // Triggers act as buttons: full pull while held, neutral on release.
       this.state.setTrigger(source, control.binding as TriggerCommand, 1);
-      element.setAttribute('aria-valuenow', '255');
+      visual.setAttribute('aria-valuenow', '255');
     }
   }
 
@@ -252,16 +258,16 @@ export class PointerInput {
     if (!ownership) return;
     this.pointers.delete(pointerId);
     this.state.clearSource(ownership.source);
-    this.markElement(ownership.element, pointerId, false);
-    ownership.element.style.setProperty('--axis-x', '0%');
-    ownership.element.style.setProperty('--axis-y', '0%');
-    ownership.element.setAttribute('aria-valuenow', '0');
-    ownership.element.dataset.direction = '';
+    this.markElement(ownership.visual, pointerId, false);
+    ownership.visual.style.setProperty('--axis-x', '0%');
+    ownership.visual.style.setProperty('--axis-y', '0%');
+    ownership.visual.setAttribute('aria-valuenow', '0');
+    ownership.visual.dataset.direction = '';
   }
 
   private cancelElement(element: HTMLElement): void {
     for (const [pointerId, ownership] of this.pointers) {
-      if (ownership.element === element) this.finishPointer(pointerId);
+      if (ownership.target === element) this.finishPointer(pointerId);
     }
   }
 

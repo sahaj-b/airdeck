@@ -3,9 +3,14 @@ import {
   type Control,
   DEFAULT_LAYOUT,
   type LayoutDocument,
-  orientationRect,
   validateLayout,
 } from '../shared/layout';
+import {
+  type PixelRect,
+  type ResolvedControl,
+  type ResolvedSection,
+  resolveLayout,
+} from './layout-resolver';
 import { type PointerFeedback, PointerInput } from './pointer-input';
 import type { InputStateStore } from './state';
 
@@ -14,6 +19,7 @@ export interface LayoutRendererOptions {
   feedback?: PointerFeedback;
   orientation?: Orientation;
   assetBasePath?: string;
+  chrome?: HTMLElement;
 }
 
 export interface RenderedLayout {
@@ -26,7 +32,14 @@ export interface RenderedLayout {
 
 interface RenderedControl {
   control: Control;
+  target?: HTMLElement;
+  visual: HTMLElement;
+}
+
+interface RenderedSection {
+  sectionId: string;
   element: HTMLElement;
+  controls: RenderedControl[];
 }
 
 const CHEVRON_SVG =
@@ -39,14 +52,18 @@ export function renderLayout(
 ): RenderedLayout {
   const layout = validateLayout(document) ? document : DEFAULT_LAYOUT;
   const ownerDocument = container.ownerDocument;
+  const view = ownerDocument.defaultView;
   const pointerInput = new PointerInput(options.state, options.feedback);
   const root = ownerDocument.createElement('div');
   root.className = 'controller-layout';
   root.dataset.layoutId = layout.id;
 
-  const surface = ownerDocument.createElement('div');
-  surface.className = 'controller-surface';
-  root.append(surface);
+  const frame = ownerDocument.createElement('div');
+  frame.className = 'controller-frame';
+  const composition = ownerDocument.createElement('div');
+  composition.className = 'controller-composition';
+  frame.append(composition);
+  root.append(frame);
 
   const orientationMessage = ownerDocument.createElement('div');
   orientationMessage.className = 'orientation-message';
@@ -55,15 +72,17 @@ export function renderLayout(
     'Rotate your phone to landscape to use this controller.';
   root.append(orientationMessage);
 
-  const renderedControls: RenderedControl[] = [];
+  const renderedSections: RenderedSection[] = [];
   const assetBasePath = options.assetBasePath ?? '/assets';
   for (const section of layout.sections) {
     const sectionElement = ownerDocument.createElement('section');
     sectionElement.className = 'controller-section';
     sectionElement.dataset.sectionId = section.id;
-    setGeometry(sectionElement, section.rect);
-    surface.append(sectionElement);
-
+    const renderedSection: RenderedSection = {
+      sectionId: section.id,
+      element: sectionElement,
+      controls: [],
+    };
     for (const control of section.controls) {
       if (!control.visible) continue;
       const rendered = renderControl(
@@ -74,38 +93,39 @@ export function renderLayout(
         pointerInput,
       );
       if (!rendered) continue;
-      renderedControls.push(rendered);
-      sectionElement.append(rendered.element);
+      renderedSection.controls.push(rendered);
+      if (rendered.target) sectionElement.append(rendered.target);
+      else sectionElement.append(rendered.visual);
     }
+    renderedSections.push(renderedSection);
+    composition.append(sectionElement);
+  }
+
+  if (options.chrome) {
+    options.chrome.classList.add('controller-runtime-chrome');
+    const centerIndex = Math.max(
+      0,
+      layout.sections.findIndex((section) => section.flexGrow > 0),
+    );
+    renderedSections[centerIndex]?.element.append(options.chrome);
   }
 
   container.replaceChildren(root);
-  const hasPortraitGeometry = layout.sections.some((section) =>
-    section.controls.some((control) => control.orientations?.portrait),
-  );
 
   const applyOrientation = (orientation: Orientation): void => {
-    root.dataset.orientation = orientation;
-    root.classList.toggle('has-portrait-layout', hasPortraitGeometry);
-    root.classList.toggle(
-      'portrait-fallback',
-      orientation === 'portrait' &&
-        layout.defaultOrientation === 'landscape' &&
-        !hasPortraitGeometry,
+    const geometry = resolveLayout(
+      layout,
+      readViewport(composition, view),
+      orientation,
     );
-    for (const rendered of renderedControls) {
-      setControlGeometry(
-        rendered.element,
-        orientationRect(rendered.control, orientation),
-      );
-    }
+    root.dataset.orientation = orientation;
+    root.classList.toggle('portrait-fallback', geometry.portraitFallback);
+    applyResolvedGeometry(renderedSections, geometry);
   };
-  applyOrientation(
-    options.orientation ?? readOrientation(ownerDocument.defaultView),
-  );
+  applyOrientation(options.orientation ?? readOrientation(view, composition));
 
-  const view = ownerDocument.defaultView;
-  const onViewportChange = (): void => applyOrientation(readOrientation(view));
+  const onViewportChange = (): void =>
+    applyOrientation(readOrientation(view, composition));
   view?.addEventListener('resize', onViewportChange);
   view?.addEventListener('orientationchange', onViewportChange);
 
@@ -134,8 +154,7 @@ function renderControl(
     const label = document.createElement('span');
     label.className = 'controller-label';
     label.textContent = control.label;
-    setControlGeometry(label, control.rect);
-    return { control, element: label };
+    return { control, visual: label };
   }
 
   if (control.type === 'image') {
@@ -146,16 +165,15 @@ function renderControl(
       (candidate) => candidate.id === control.asset,
     );
     if (asset) image.src = assetURL(assetBasePath, asset.path);
-    setControlGeometry(image, control.rect);
-    return { control, element: image };
+    return { control, visual: image };
   }
 
+  let visual: HTMLElement;
   if (control.type === 'dpad') {
     const dpad = document.createElement('div');
     dpad.className = 'controller-control controller-dpad';
     dpad.dataset.controlId = control.id;
     dpad.setAttribute('aria-label', control.label);
-    setControlGeometry(dpad, control.rect);
     const directions = ['up', 'right', 'down', 'left'] as const;
     for (const direction of directions) {
       const marker = document.createElement('span');
@@ -164,48 +182,93 @@ function renderControl(
       marker.setAttribute('aria-hidden', 'true');
       dpad.append(marker);
     }
-    pointerInput.bind(dpad, control);
-    return { control, element: dpad };
+    visual = dpad;
+  } else {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `controller-control control-${control.type}`;
+    button.dataset.controlId = control.id;
+    button.dataset.shape = control.shape ?? 'rect';
+    button.textContent = control.label;
+    button.setAttribute('aria-label', control.label);
+    if (control.type === 'button') button.setAttribute('aria-pressed', 'false');
+    if (control.type === 'trigger') {
+      button.setAttribute('aria-valuemin', '0');
+      button.setAttribute('aria-valuemax', '255');
+      button.setAttribute('aria-valuenow', '0');
+    }
+    visual = button;
   }
 
-  const element = document.createElement('button');
-  element.type = 'button';
-  element.className = `controller-control control-${control.type}`;
-  element.dataset.controlId = control.id;
-  element.dataset.shape = control.shape ?? 'rect';
-  element.textContent = control.label;
-  element.setAttribute('aria-label', control.label);
-  if (control.type === 'button') element.setAttribute('aria-pressed', 'false');
-  if (control.type === 'trigger') {
-    element.setAttribute('aria-valuemin', '0');
-    element.setAttribute('aria-valuemax', '255');
-    element.setAttribute('aria-valuenow', '0');
+  const target = document.createElement('div');
+  target.className = 'controller-hit-target';
+  target.dataset.controlId = control.id;
+  target.append(visual);
+  pointerInput.bind(target, control, visual);
+  return { control, target, visual };
+}
+
+function applyResolvedGeometry(
+  sections: RenderedSection[],
+  geometry: {
+    sections: ResolvedSection[];
+  },
+): void {
+  const sectionByID = new Map(
+    geometry.sections.map((section) => [section.section.id, section]),
+  );
+  const controlByID = new Map<string, ResolvedControl>();
+  for (const section of geometry.sections) {
+    for (const control of section.controls)
+      controlByID.set(control.control.id, control);
   }
-  setControlGeometry(element, control.rect);
-  if (control.binding) pointerInput.bind(element, control);
-  return { control, element };
+
+  for (const renderedSection of sections) {
+    const resolved = sectionByID.get(renderedSection.sectionId);
+    if (!resolved) continue;
+    setPixelRect(renderedSection.element, resolved.rect);
+    for (const renderedControl of renderedSection.controls) {
+      const resolvedControl = controlByID.get(renderedControl.control.id);
+      if (!resolvedControl) continue;
+      if (renderedControl.target) {
+        setLocalRect(
+          renderedControl.target,
+          resolvedControl.hit,
+          resolved.rect,
+        );
+        setLocalRect(
+          renderedControl.visual,
+          resolvedControl.visual,
+          resolvedControl.hit,
+        );
+      } else
+        setLocalRect(
+          renderedControl.visual,
+          resolvedControl.visual,
+          resolved.rect,
+        );
+    }
+  }
 }
 
-function setGeometry(
+function setLocalRect(
   element: HTMLElement,
-  rect: { x: number; y: number; width: number; height: number },
+  rect: PixelRect,
+  parent: PixelRect,
 ): void {
-  element.style.setProperty('--x', `${rect.x * 100}%`);
-  element.style.setProperty('--y', `${rect.y * 100}%`);
-  element.style.setProperty('--width', `${rect.width * 100}%`);
-  element.style.setProperty('--height', `${rect.height * 100}%`);
+  setPixelRect(element, {
+    left: rect.left - parent.left,
+    top: rect.top - parent.top,
+    width: rect.width,
+    height: rect.height,
+  });
 }
 
-// Control width/height are fractions of the section height (reference
-// dimension) so controls keep their authored aspect ratio on any screen.
-function setControlGeometry(
-  element: HTMLElement,
-  rect: { x: number; y: number; width: number; height: number },
-): void {
-  element.style.setProperty('--x', `${rect.x * 100}%`);
-  element.style.setProperty('--y', `${rect.y * 100}%`);
-  element.style.setProperty('--w', `${rect.width}`);
-  element.style.setProperty('--h', `${rect.height}`);
+function setPixelRect(element: HTMLElement, rect: PixelRect): void {
+  element.style.left = `${rect.left}px`;
+  element.style.top = `${rect.top}px`;
+  element.style.width = `${rect.width}px`;
+  element.style.height = `${rect.height}px`;
 }
 
 function assetURL(basePath: string, path: string): string {
@@ -216,7 +279,24 @@ function assetURL(basePath: string, path: string): string {
   return `${basePath.replace(/\/$/, '')}/${encodedPath}`;
 }
 
-function readOrientation(view: Window | null): Orientation {
-  if (!view) return 'landscape';
-  return view.innerWidth < view.innerHeight ? 'portrait' : 'landscape';
+function readViewport(
+  element: HTMLElement,
+  view: Window | null,
+): {
+  width: number;
+  height: number;
+} {
+  const rect = element.getBoundingClientRect();
+  return {
+    width: rect.width || element.clientWidth || view?.innerWidth || 0,
+    height: rect.height || element.clientHeight || view?.innerHeight || 0,
+  };
+}
+
+function readOrientation(
+  view: Window | null,
+  element: HTMLElement,
+): Orientation {
+  const viewport = readViewport(element, view);
+  return viewport.width < viewport.height ? 'portrait' : 'landscape';
 }

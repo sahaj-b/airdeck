@@ -33,7 +33,7 @@ describe('validateLayout', () => {
       (control) => control.type === 'joystick',
     );
     if (!stick) throw new Error('built-in joystick missing');
-    stick.rect.height = stick.rect.width / 2;
+    stick.geometry.size.height = stick.geometry.size.width / 2;
     expect(validateLayout(oval)).toBe(false);
 
     const shaped = structuredClone(xboxDefault) as typeof xboxDefault;
@@ -41,13 +41,14 @@ describe('validateLayout', () => {
     expect(validateLayout(shaped)).toBe(false);
   });
 
-  it('allows wide controls whose width fraction exceeds the remaining x space', () => {
-    const wide = structuredClone(xboxDefault) as typeof xboxDefault;
-    const trigger = wide.sections[0].controls.find(
-      (control) => control.type === 'trigger',
-    );
-    if (!trigger) throw new Error('built-in trigger missing');
-    trigger.rect.x = 0.9;
-    expect(validateLayout(wide)).toBe(true);
+  it('rejects invalid section constraints and geometry outside a section', () => {
+    const invalidSection = structuredClone(xboxDefault) as typeof xboxDefault;
+    invalidSection.sections[1].maxWidth =
+      invalidSection.sections[1].minWidth / 2;
+    expect(validateLayout(invalidSection)).toBe(false);
+
+    const invalidGeometry = structuredClone(xboxDefault) as typeof xboxDefault;
+    invalidGeometry.sections[0].controls[0].geometry.position.x = 2;
+    expect(validateLayout(invalidGeometry)).toBe(false);
   });
 });

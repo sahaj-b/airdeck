@@ -5,6 +5,32 @@ import (
 	"testing"
 )
 
+func baseGeometry() Geometry {
+	return Geometry{
+		Position: Point{X: 0, Y: 0},
+		Anchor:   Point{X: 0.5, Y: 0.5},
+		Size:     Size{Width: 0.2, Height: 0.2},
+	}
+}
+
+func baseSection() Section {
+	return Section{
+		ID: "section", AspectRatio: 1, MinWidth: 1, MaxWidth: 1,
+		FlexGrow: 0, FlexShrink: 0, Protected: true,
+		Padding: Padding{}, Controls: []Control{{
+			ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
+		}},
+	}
+}
+
+func baseDocument() Document {
+	return Document{
+		ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape",
+		ReferenceDimension: "height", Gap: 0, GapMax: 0,
+		Sections: []Section{baseSection()}, Assets: []Asset{{ID: "asset", Path: "asset.png"}},
+	}
+}
+
 func TestBuiltInLayoutsValidate(t *testing.T) {
 	documents, err := LoadBuiltins()
 	if err != nil {
@@ -16,19 +42,29 @@ func TestBuiltInLayoutsValidate(t *testing.T) {
 }
 
 func TestValidateRejectsUnsafeAndDuplicateDocuments(t *testing.T) {
-	base := Document{ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape", Sections: []Section{{ID: "section", Rect: Rect{X: 0, Y: 0, Width: 1, Height: 1}, Controls: []Control{{ID: "button", Type: "button", Rect: Rect{X: 0, Y: 0, Width: .2, Height: .2}, Label: "A", Visible: true, Binding: "south"}}}}, Assets: []Asset{{ID: "asset", Path: "../escape.png"}}}
+	base := baseDocument()
+	base.Assets[0].Path = "../escape.png"
 	if err := ValidateDocument(base); err == nil {
 		t.Fatal("unsafe asset path was accepted")
 	}
 	base.Assets[0].Path = "asset.png"
-	base.Sections[0].Controls = append(base.Sections[0].Controls, Control{ID: "button", Type: "button", Rect: Rect{X: .2, Y: 0, Width: .2, Height: .2}, Label: "B", Visible: true, Binding: "east"})
+	duplicate := baseGeometry()
+	duplicate.Position.X = 0.2
+	base.Sections[0].Controls = append(base.Sections[0].Controls, Control{
+		ID: "button", Type: "button", Geometry: duplicate, Label: "B", Visible: true, Binding: "east",
+	})
 	if err := ValidateDocument(base); err == nil {
 		t.Fatal("duplicate control id was accepted")
 	}
 }
 
 func TestValidateRejectsIncompleteDPad(t *testing.T) {
-	doc := Document{ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape", Sections: []Section{{ID: "section", Rect: Rect{X: 0, Y: 0, Width: 1, Height: 1}, Controls: []Control{{ID: "dpad", Type: "dpad", Rect: Rect{X: 0, Y: 0, Width: .5, Height: .5}, Label: "D-pad", Visible: true, Bindings: &DPadBindings{Up: "dpadUp"}}}}}}
+	doc := baseDocument()
+	doc.Sections[0].Controls = []Control{{
+		ID: "dpad", Type: "dpad", Geometry: Geometry{
+			Position: Point{}, Anchor: Point{X: 0.5, Y: 0.5}, Size: Size{Width: 0.5, Height: 0.5},
+		}, Label: "D-pad", Visible: true, Bindings: &DPadBindings{Up: "dpadUp"},
+	}}
 	if err := ValidateDocument(doc); err == nil {
 		t.Fatal("incomplete d-pad was accepted")
 	}
@@ -42,19 +78,28 @@ func TestValidateRejectsIncompleteDPad(t *testing.T) {
 }
 
 func TestValidateControlShapesAndSquares(t *testing.T) {
-	newDoc := func(rect Rect, shape string) Document {
-		return Document{ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape", Sections: []Section{{ID: "section", Rect: Rect{X: 0, Y: 0, Width: 1, Height: 1}, Controls: []Control{{ID: "stick", Type: "joystick", Rect: rect, Label: "Left stick", Visible: true, Binding: "leftStick", Shape: shape}}}}}
+	newDoc := func(size Size, shape string) Document {
+		doc := baseDocument()
+		doc.Sections[0].Controls = []Control{{
+			ID: "stick", Type: "joystick", Geometry: Geometry{
+				Position: Point{}, Anchor: Point{X: 0.5, Y: 0.5}, Size: size,
+			}, Label: "Left stick", Visible: true, Binding: "leftStick", Shape: shape,
+		}}
+		return doc
 	}
-	if err := ValidateDocument(newDoc(Rect{X: 0.9, Y: 0.2, Width: 0.4, Height: 0.4}, "")); err != nil {
-		t.Fatalf("wide control near the right edge was rejected: %v", err)
-	}
-	if err := ValidateDocument(newDoc(Rect{X: 0.2, Y: 0.2, Width: 0.4, Height: 0.2}, "")); err == nil {
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.2}, "")); err == nil {
 		t.Fatal("non-square joystick was accepted")
 	}
-	if err := ValidateDocument(newDoc(Rect{X: 0.2, Y: 0.2, Width: 0.4, Height: 0.4}, "triangle")); err == nil {
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "triangle")); err == nil {
 		t.Fatal("unknown control shape was accepted")
 	}
-	if err := ValidateDocument(newDoc(Rect{X: 0.2, Y: 0.2, Width: 0.4, Height: 0.4}, "circle")); err != nil {
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "circle")); err != nil {
 		t.Fatalf("circle shape was rejected: %v", err)
+	}
+
+	outside := newDoc(Size{Width: 0.4, Height: 0.4}, "circle")
+	outside.Sections[0].Controls[0].Geometry.Position.X = 0.8
+	if err := ValidateDocument(outside); err == nil {
+		t.Fatal("control outside the authored section was accepted")
 	}
 }

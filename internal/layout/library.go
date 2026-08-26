@@ -5,16 +5,32 @@ import (
 	"sort"
 )
 
-type Rect struct {
-	X      float64 `json:"x"`
-	Y      float64 `json:"y"`
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type Size struct {
 	Width  float64 `json:"width"`
 	Height float64 `json:"height"`
 }
 
+type Geometry struct {
+	Position Point `json:"position"`
+	Anchor   Point `json:"anchor"`
+	Size     Size  `json:"size"`
+}
+
 type OrientationOverrides struct {
-	Portrait  *Rect `json:"portrait,omitempty"`
-	Landscape *Rect `json:"landscape,omitempty"`
+	Portrait  *Geometry `json:"portrait,omitempty"`
+	Landscape *Geometry `json:"landscape,omitempty"`
+}
+
+type Padding struct {
+	Left   float64 `json:"left"`
+	Right  float64 `json:"right"`
+	Top    float64 `json:"top"`
+	Bottom float64 `json:"bottom"`
 }
 
 type DPadBindings struct {
@@ -27,7 +43,7 @@ type DPadBindings struct {
 type Control struct {
 	ID           string                `json:"id"`
 	Type         string                `json:"type"`
-	Rect         Rect                  `json:"rect"`
+	Geometry     Geometry              `json:"geometry"`
 	Label        string                `json:"label"`
 	Visible      bool                  `json:"visible"`
 	Shape        string                `json:"shape,omitempty"`
@@ -38,9 +54,15 @@ type Control struct {
 }
 
 type Section struct {
-	ID       string    `json:"id"`
-	Rect     Rect      `json:"rect"`
-	Controls []Control `json:"controls"`
+	ID          string    `json:"id"`
+	AspectRatio float64   `json:"aspectRatio"`
+	MinWidth    float64   `json:"minWidth"`
+	MaxWidth    float64   `json:"maxWidth"`
+	FlexGrow    float64   `json:"flexGrow"`
+	FlexShrink  float64   `json:"flexShrink"`
+	Protected   bool      `json:"protected"`
+	Padding     Padding   `json:"padding"`
+	Controls    []Control `json:"controls"`
 }
 
 type Asset struct {
@@ -53,6 +75,9 @@ type Document struct {
 	Name               string    `json:"name"`
 	SchemaVersion      int       `json:"schemaVersion"`
 	DefaultOrientation string    `json:"defaultOrientation"`
+	ReferenceDimension string    `json:"referenceDimension"`
+	Gap                float64   `json:"gap"`
+	GapMax             float64   `json:"gapMax"`
 	Sections           []Section `json:"sections"`
 	Assets             []Asset   `json:"assets"`
 }

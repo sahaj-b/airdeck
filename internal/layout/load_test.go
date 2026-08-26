@@ -11,8 +11,15 @@ import (
 func baseDoc() Document {
 	return Document{
 		ID: "user-layout", Name: "User Layout", SchemaVersion: 1, DefaultOrientation: "landscape",
-		Sections: []Section{{ID: "section", Rect: Rect{X: 0, Y: 0, Width: 1, Height: 1}, Controls: []Control{{ID: "button", Type: "button", Rect: Rect{X: 0, Y: 0, Width: .2, Height: .2}, Label: "A", Visible: true, Binding: "south"}}}},
-		Assets:   []Asset{{ID: "asset", Path: "asset.png"}},
+		ReferenceDimension: "height", Gap: 0, GapMax: 0,
+		Sections: []Section{{
+			ID: "section", AspectRatio: 1, MinWidth: 1, MaxWidth: 1,
+			FlexGrow: 0, FlexShrink: 0, Protected: true, Padding: Padding{},
+			Controls: []Control{{
+				ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
+			}},
+		}},
+		Assets: []Asset{{ID: "asset", Path: "asset.png"}},
 	}
 }
 

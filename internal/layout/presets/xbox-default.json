@@ -3,25 +3,189 @@
   "name": "Xbox default",
   "schemaVersion": 1,
   "defaultOrientation": "landscape",
+  "referenceDimension": "height",
+  "gap": 0.035,
+  "gapMax": 0.12,
   "sections": [
-    {"id":"main","rect":{"x":0,"y":0,"width":1,"height":1},"controls":[
-      {"id":"lt","type":"trigger","rect":{"x":0.047,"y":0.092,"width":0.469,"height":0.088},"label":"LT","visible":true,"binding":"leftTrigger","shape":"rect"},
-      {"id":"lb","type":"button","rect":{"x":0.047,"y":0.208,"width":0.469,"height":0.088},"label":"LB","visible":true,"binding":"leftShoulder","shape":"rect"},
-      {"id":"rt","type":"trigger","rect":{"x":0.719,"y":0.092,"width":0.469,"height":0.088},"label":"RT","visible":true,"binding":"rightTrigger","shape":"rect"},
-      {"id":"rb","type":"button","rect":{"x":0.719,"y":0.208,"width":0.469,"height":0.088},"label":"RB","visible":true,"binding":"rightShoulder","shape":"rect"},
-      {"id":"left-stick","type":"joystick","rect":{"x":0.036,"y":0.369,"width":0.375,"height":0.375},"label":"Left stick","visible":true,"binding":"leftStick"},
-      {"id":"dpad","type":"dpad","rect":{"x":0.276,"y":0.592,"width":0.271,"height":0.271},"label":"D-pad","visible":true,"bindings":{"up":"dpadUp","down":"dpadDown","left":"dpadLeft","right":"dpadRight"}},
-      {"id":"back","type":"button","rect":{"x":0.388,"y":0.348,"width":0.15,"height":0.067},"label":"Back","visible":true,"binding":"back","shape":"pill"},
-      {"id":"start","type":"button","rect":{"x":0.471,"y":0.348,"width":0.15,"height":0.067},"label":"Start","visible":true,"binding":"start","shape":"pill"},
-      {"id":"right-stick","type":"joystick","rect":{"x":0.573,"y":0.369,"width":0.365,"height":0.365},"label":"Right stick","visible":true,"binding":"rightStick"},
-      {"id":"north","type":"button","rect":{"x":0.839,"y":0.335,"width":0.146,"height":0.146},"label":"Y","visible":true,"binding":"north","shape":"circle"},
-      {"id":"west","type":"button","rect":{"x":0.766,"y":0.473,"width":0.146,"height":0.146},"label":"X","visible":true,"binding":"west","shape":"circle"},
-      {"id":"east","type":"button","rect":{"x":0.911,"y":0.473,"width":0.146,"height":0.146},"label":"B","visible":true,"binding":"east","shape":"circle"},
-      {"id":"south","type":"button","rect":{"x":0.839,"y":0.635,"width":0.146,"height":0.146},"label":"A","visible":true,"binding":"south","shape":"circle"},
-      {"id":"guide","type":"button","rect":{"x":0.44,"y":0.02,"width":0.12,"height":0.05},"label":"Guide","visible":false,"binding":"guide","shape":"circle"},
-      {"id":"ls-click","type":"button","rect":{"x":0.03,"y":0.9,"width":0.12,"height":0.08},"label":"L3","visible":false,"binding":"leftStick","shape":"circle"},
-      {"id":"rs-click","type":"button","rect":{"x":0.17,"y":0.9,"width":0.12,"height":0.08},"label":"R3","visible":false,"binding":"rightStick","shape":"circle"}
-    ]}
+    {
+      "id": "left",
+      "aspectRatio": 0.86,
+      "minWidth": 0.65,
+      "maxWidth": 0.94,
+      "flexGrow": 0,
+      "flexShrink": 1,
+      "protected": true,
+      "padding": { "left": 0.035, "right": 0.035, "top": 0.03, "bottom": 0.03 },
+      "controls": [
+        {
+          "id": "lt",
+          "type": "trigger",
+          "geometry": { "position": { "x": -0.06, "y": -0.39 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.115 } },
+          "label": "LT",
+          "visible": true,
+          "binding": "leftTrigger",
+          "shape": "rect"
+        },
+        {
+          "id": "lb",
+          "type": "button",
+          "geometry": { "position": { "x": -0.06, "y": -0.255 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.09 } },
+          "label": "LB",
+          "visible": true,
+          "binding": "leftShoulder",
+          "shape": "rect"
+        },
+        {
+          "id": "left-stick",
+          "type": "joystick",
+          "geometry": { "position": { "x": -0.15, "y": 0.08 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.42, "height": 0.42 } },
+          "label": "Left stick",
+          "visible": true,
+          "binding": "leftStick",
+          "shape": "circle"
+        },
+        {
+          "id": "dpad",
+          "type": "dpad",
+          "geometry": { "position": { "x": 0.2, "y": 0.26 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.32, "height": 0.32 } },
+          "label": "D-pad",
+          "visible": true,
+          "bindings": { "up": "dpadUp", "down": "dpadDown", "left": "dpadLeft", "right": "dpadRight" }
+        },
+        {
+          "id": "ls-click",
+          "type": "button",
+          "geometry": { "position": { "x": -0.15, "y": 0.43 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.12, "height": 0.08 } },
+          "label": "L3",
+          "visible": false,
+          "binding": "leftStick",
+          "shape": "circle"
+        }
+      ]
+    },
+    {
+      "id": "center",
+      "aspectRatio": 0.5,
+      "minWidth": 0.38,
+      "maxWidth": 0.9,
+      "flexGrow": 1,
+      "flexShrink": 1,
+      "protected": false,
+      "padding": { "left": 0.04, "right": 0.04, "top": 0.03, "bottom": 0.03 },
+      "controls": [
+        {
+          "id": "back",
+          "type": "button",
+          "geometry": { "position": { "x": -0.095, "y": -0.16 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.14, "height": 0.075 } },
+          "label": "Back",
+          "visible": true,
+          "binding": "back",
+          "shape": "pill"
+        },
+        {
+          "id": "start",
+          "type": "button",
+          "geometry": { "position": { "x": 0.095, "y": -0.16 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.14, "height": 0.075 } },
+          "label": "Start",
+          "visible": true,
+          "binding": "start",
+          "shape": "pill"
+        },
+        {
+          "id": "guide",
+          "type": "button",
+          "geometry": { "position": { "x": 0, "y": -0.42 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.1, "height": 0.05 } },
+          "label": "Guide",
+          "visible": false,
+          "binding": "guide",
+          "shape": "circle"
+        }
+      ]
+    },
+    {
+      "id": "right",
+      "aspectRatio": 0.94,
+      "minWidth": 0.67,
+      "maxWidth": 0.98,
+      "flexGrow": 0,
+      "flexShrink": 1,
+      "protected": true,
+      "padding": { "left": 0.035, "right": 0.035, "top": 0.03, "bottom": 0.03 },
+      "controls": [
+        {
+          "id": "rt",
+          "type": "trigger",
+          "geometry": { "position": { "x": 0.05, "y": -0.39 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.115 } },
+          "label": "RT",
+          "visible": true,
+          "binding": "rightTrigger",
+          "shape": "rect"
+        },
+        {
+          "id": "rb",
+          "type": "button",
+          "geometry": { "position": { "x": 0.05, "y": -0.255 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.09 } },
+          "label": "RB",
+          "visible": true,
+          "binding": "rightShoulder",
+          "shape": "rect"
+        },
+        {
+          "id": "right-stick",
+          "type": "joystick",
+          "geometry": { "position": { "x": -0.22, "y": 0.3 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.4, "height": 0.4 } },
+          "label": "Right stick",
+          "visible": true,
+          "binding": "rightStick",
+          "shape": "circle"
+        },
+        {
+          "id": "north",
+          "type": "button",
+          "geometry": { "position": { "x": 0.17, "y": -0.06 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.18, "height": 0.18 } },
+          "label": "Y",
+          "visible": true,
+          "binding": "north",
+          "shape": "circle"
+        },
+        {
+          "id": "west",
+          "type": "button",
+          "geometry": { "position": { "x": 0.03, "y": 0.10 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.18, "height": 0.18 } },
+          "label": "X",
+          "visible": true,
+          "binding": "west",
+          "shape": "circle"
+        },
+        {
+          "id": "east",
+          "type": "button",
+          "geometry": { "position": { "x": 0.31, "y": 0.10 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.18, "height": 0.18 } },
+          "label": "B",
+          "visible": true,
+          "binding": "east",
+          "shape": "circle"
+        },
+        {
+          "id": "south",
+          "type": "button",
+          "geometry": { "position": { "x": 0.17, "y": 0.26 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.18, "height": 0.18 } },
+          "label": "A",
+          "visible": true,
+          "binding": "south",
+          "shape": "circle"
+        },
+        {
+          "id": "rs-click",
+          "type": "button",
+          "geometry": { "position": { "x": -0.22, "y": 0.46 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.12, "height": 0.08 } },
+          "label": "R3",
+          "visible": false,
+          "binding": "rightStick",
+          "shape": "circle"
+        }
+      ]
+    }
   ],
   "assets": []
 }
