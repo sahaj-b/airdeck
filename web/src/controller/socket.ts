@@ -47,6 +47,7 @@ export interface ControllerSocketOptions {
   onLayout?: (layout: LayoutDocument, diagnostic?: string) => void;
   onError?: (error: ErrorMessage) => void;
   onRumble?: (rumble: Rumble) => void;
+  onPing?: (rttMs: number) => void;
   onReconnect?: () => void;
   onClose?: () => void;
 }
@@ -193,9 +194,11 @@ export class ControllerSocket {
         this.handleLayout(message);
         return;
       case 'ping':
-        if (typeof message.id === 'string')
+        if (typeof message.id === 'string') {
+          if (typeof message.rttMs === 'number' && message.rttMs >= 0)
+            this.options.onPing?.(message.rttMs);
           this.sendJSON({ type: 'pong', id: message.id });
-        else
+        } else
           this.reportError(
             'invalid_message',
             'The host sent an invalid heartbeat.',

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -113,8 +114,28 @@ func validateControl(control Control, assetIDs map[string]struct{}) error {
 	default:
 		return fmt.Errorf("unsupported control type %q", control.Type)
 	}
-	if err := validateRect(control.Rect); err != nil {
+	switch control.Shape {
+	case "", "circle", "pill", "rect":
+	default:
+		return fmt.Errorf("unsupported control shape %q", control.Shape)
+	}
+	if err := validateControlRect(control.Rect); err != nil {
 		return err
+	}
+	if control.Type == "joystick" || control.Type == "dpad" {
+		if !isSquare(control.Rect) {
+			return errors.New("joystick and d-pad controls must be square")
+		}
+		if control.Orientations != nil {
+			for name, rect := range map[string]*Rect{
+				"portrait":  control.Orientations.Portrait,
+				"landscape": control.Orientations.Landscape,
+			} {
+				if rect != nil && !isSquare(*rect) {
+					return fmt.Errorf("%s override must be square", name)
+				}
+			}
+		}
 	}
 	if control.Type == "image" {
 		if control.Asset == "" {
@@ -158,12 +179,12 @@ func validateControl(control Control, assetIDs map[string]struct{}) error {
 	}
 	if control.Orientations != nil {
 		if control.Orientations.Portrait != nil {
-			if err := validateRect(*control.Orientations.Portrait); err != nil {
+			if err := validateControlRect(*control.Orientations.Portrait); err != nil {
 				return fmt.Errorf("portrait override: %w", err)
 			}
 		}
 		if control.Orientations.Landscape != nil {
-			if err := validateRect(*control.Orientations.Landscape); err != nil {
+			if err := validateControlRect(*control.Orientations.Landscape); err != nil {
 				return fmt.Errorf("landscape override: %w", err)
 			}
 		}
@@ -176,6 +197,20 @@ func validateRect(rect Rect) error {
 		return fmt.Errorf("geometry is outside normalized bounds")
 	}
 	return nil
+}
+
+// Control width is a fraction of section height while x spans the section
+// width, so horizontal containment cannot be validated numerically.
+func validateControlRect(rect Rect) error {
+	if rect.X < 0 || rect.X > 1 || rect.Y < 0 || rect.Width <= 0 || rect.Height <= 0 || rect.Y+rect.Height > 1 {
+		return fmt.Errorf("geometry is outside normalized bounds")
+	}
+	return nil
+}
+
+func isSquare(rect Rect) bool {
+	const epsilon = 1e-9
+	return math.Abs(rect.Width-rect.Height) < epsilon
 }
 
 func validateAssetPath(path string) error {

@@ -94,7 +94,7 @@ func (s *Server) runClient(r *http.Request, client *Client) {
 	if err := client.Send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: document.ID, Layout: document}); err != nil {
 		return
 	}
-	s.heartbeat(client)
+	s.heartbeat(client, player.ID)
 	s.readClient(client, player.ID, generation)
 }
 
@@ -161,7 +161,7 @@ func (s *Server) handleText(client *Client, playerID string, generation uint64, 
 	}
 }
 
-func (s *Server) heartbeat(client *Client) {
+func (s *Server) heartbeat(client *Client, playerID string) {
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -172,7 +172,11 @@ func (s *Server) heartbeat(client *Client) {
 			case now := <-ticker.C:
 				id := fmt.Sprintf("%d", now.UnixNano())
 				client.trackPing(id, now)
-				if err := client.Send(protocol.Ping{Type: protocol.MessagePing, ID: id, Sent: uint64(now.UnixNano())}); err != nil {
+				ping := protocol.Ping{Type: protocol.MessagePing, ID: id, Sent: uint64(now.UnixNano())}
+				if snapshot, ok := s.Session.Player(playerID); ok && snapshot.RTT > 0 {
+					ping.RttMs = snapshot.RTT / int64(time.Millisecond)
+				}
+				if err := client.Send(ping); err != nil {
 					return
 				}
 			}

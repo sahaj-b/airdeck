@@ -118,7 +118,12 @@
           "enum": ["button", "dpad", "joystick", "trigger", "label", "image"]
         },
         "rect": {
-          "$ref": "#/$defs/rect"
+          "$ref": "#/$defs/rect",
+          "description": "x and y are normalized to the section rect. width and height are fractions of the section height, so a control keeps its authored aspect ratio on every screen; joysticks and D-pads must be square."
+        },
+        "shape": {
+          "description": "Visual shape applied by the renderer. Defaults to rect.",
+          "enum": ["circle", "pill", "rect"]
         },
         "label": {
           "type": "string",

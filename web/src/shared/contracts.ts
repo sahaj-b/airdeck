@@ -69,6 +69,7 @@ export interface Ping {
   type: 'ping';
   id: string;
   sent: number;
+  rttMs?: number;
 }
 export interface ErrorMessage {
   type: 'error';

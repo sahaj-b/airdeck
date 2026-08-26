@@ -89,13 +89,6 @@ export function normalizeJoystickPoint(
   );
 }
 
-export function normalizeTriggerPoint(point: Point, rect: RectLike): number {
-  if (rect.width >= rect.height) {
-    return clamp((point.x - rect.left) / Math.max(1, rect.width), 0, 1);
-  }
-  return clamp(1 - (point.y - rect.top) / Math.max(1, rect.height), 0, 1);
-}
-
 export function dpadDirection(
   point: Point,
   rect: RectLike,
@@ -212,7 +205,15 @@ export class PointerInput {
         this.state.setButton(source, ownership.command, false);
       ownership.command = command;
       if (command) this.state.setButton(source, command, true);
-      element.dataset.direction = command ?? '';
+      const armNames: Partial<
+        Record<Command, 'up' | 'down' | 'left' | 'right'>
+      > = {
+        dpadUp: 'up',
+        dpadDown: 'down',
+        dpadLeft: 'left',
+        dpadRight: 'right',
+      };
+      element.dataset.direction = (command && armNames[command]) || '';
       return;
     }
 
@@ -240,13 +241,9 @@ export class PointerInput {
       control.type === 'trigger' &&
       (control.binding === 'leftTrigger' || control.binding === 'rightTrigger')
     ) {
-      const value = normalizeTriggerPoint(
-        { x: event.clientX, y: event.clientY },
-        rect,
-      );
-      this.state.setTrigger(source, control.binding as TriggerCommand, value);
-      element.style.setProperty('--trigger-value', `${value * 100}%`);
-      element.setAttribute('aria-valuenow', String(Math.round(value * 255)));
+      // Triggers act as buttons: full pull while held, neutral on release.
+      this.state.setTrigger(source, control.binding as TriggerCommand, 1);
+      element.setAttribute('aria-valuenow', '255');
     }
   }
 
@@ -258,7 +255,6 @@ export class PointerInput {
     this.markElement(ownership.element, pointerId, false);
     ownership.element.style.setProperty('--axis-x', '0%');
     ownership.element.style.setProperty('--axis-y', '0%');
-    ownership.element.style.setProperty('--trigger-value', '0%');
     ownership.element.setAttribute('aria-valuenow', '0');
     ownership.element.dataset.direction = '';
   }

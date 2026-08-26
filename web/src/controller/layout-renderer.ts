@@ -29,6 +29,9 @@ interface RenderedControl {
   element: HTMLElement;
 }
 
+const CHEVRON_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 14.5 12 8l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 export function renderLayout(
   container: HTMLElement,
   document: LayoutDocument,
@@ -91,7 +94,7 @@ export function renderLayout(
         !hasPortraitGeometry,
     );
     for (const rendered of renderedControls) {
-      setGeometry(
+      setControlGeometry(
         rendered.element,
         orientationRect(rendered.control, orientation),
       );
@@ -131,7 +134,7 @@ function renderControl(
     const label = document.createElement('span');
     label.className = 'controller-label';
     label.textContent = control.label;
-    setGeometry(label, control.rect);
+    setControlGeometry(label, control.rect);
     return { control, element: label };
   }
 
@@ -143,7 +146,7 @@ function renderControl(
       (candidate) => candidate.id === control.asset,
     );
     if (asset) image.src = assetURL(assetBasePath, asset.path);
-    setGeometry(image, control.rect);
+    setControlGeometry(image, control.rect);
     return { control, element: image };
   }
 
@@ -152,17 +155,12 @@ function renderControl(
     dpad.className = 'controller-control controller-dpad';
     dpad.dataset.controlId = control.id;
     dpad.setAttribute('aria-label', control.label);
-    setGeometry(dpad, control.rect);
-    const directions = [
-      ['up', '↑'],
-      ['right', '→'],
-      ['down', '↓'],
-      ['left', '←'],
-    ] as const;
-    for (const [direction, symbol] of directions) {
+    setControlGeometry(dpad, control.rect);
+    const directions = ['up', 'right', 'down', 'left'] as const;
+    for (const direction of directions) {
       const marker = document.createElement('span');
       marker.className = `dpad-direction dpad-${direction}`;
-      marker.textContent = symbol;
+      marker.innerHTML = CHEVRON_SVG;
       marker.setAttribute('aria-hidden', 'true');
       dpad.append(marker);
     }
@@ -174,6 +172,7 @@ function renderControl(
   element.type = 'button';
   element.className = `controller-control control-${control.type}`;
   element.dataset.controlId = control.id;
+  element.dataset.shape = control.shape ?? 'rect';
   element.textContent = control.label;
   element.setAttribute('aria-label', control.label);
   if (control.type === 'button') element.setAttribute('aria-pressed', 'false');
@@ -182,7 +181,7 @@ function renderControl(
     element.setAttribute('aria-valuemax', '255');
     element.setAttribute('aria-valuenow', '0');
   }
-  setGeometry(element, control.rect);
+  setControlGeometry(element, control.rect);
   if (control.binding) pointerInput.bind(element, control);
   return { control, element };
 }
@@ -195,6 +194,18 @@ function setGeometry(
   element.style.setProperty('--y', `${rect.y * 100}%`);
   element.style.setProperty('--width', `${rect.width * 100}%`);
   element.style.setProperty('--height', `${rect.height * 100}%`);
+}
+
+// Control width/height are fractions of the section height (reference
+// dimension) so controls keep their authored aspect ratio on any screen.
+function setControlGeometry(
+  element: HTMLElement,
+  rect: { x: number; y: number; width: number; height: number },
+): void {
+  element.style.setProperty('--x', `${rect.x * 100}%`);
+  element.style.setProperty('--y', `${rect.y * 100}%`);
+  element.style.setProperty('--w', `${rect.width}`);
+  element.style.setProperty('--h', `${rect.height}`);
 }
 
 function assetURL(basePath: string, path: string): string {

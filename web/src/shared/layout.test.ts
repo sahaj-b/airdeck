@@ -26,4 +26,28 @@ describe('validateLayout', () => {
     delete (dpad.bindings as Partial<typeof dpad.bindings>).right;
     expect(validateLayout(incomplete)).toBe(false);
   });
+
+  it('rejects non-square joysticks and unknown shapes', () => {
+    const oval = structuredClone(xboxDefault) as typeof xboxDefault;
+    const stick = oval.sections[0].controls.find(
+      (control) => control.type === 'joystick',
+    );
+    if (!stick) throw new Error('built-in joystick missing');
+    stick.rect.height = stick.rect.width / 2;
+    expect(validateLayout(oval)).toBe(false);
+
+    const shaped = structuredClone(xboxDefault) as typeof xboxDefault;
+    shaped.sections[0].controls[0].shape = 'triangle';
+    expect(validateLayout(shaped)).toBe(false);
+  });
+
+  it('allows wide controls whose width fraction exceeds the remaining x space', () => {
+    const wide = structuredClone(xboxDefault) as typeof xboxDefault;
+    const trigger = wide.sections[0].controls.find(
+      (control) => control.type === 'trigger',
+    );
+    if (!trigger) throw new Error('built-in trigger missing');
+    trigger.rect.x = 0.9;
+    expect(validateLayout(wide)).toBe(true);
+  });
 });

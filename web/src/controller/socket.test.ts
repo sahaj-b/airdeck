@@ -91,6 +91,32 @@ describe('ControllerSocket', () => {
     expect(socket.sendBinary(new Uint8Array(20))).toBe(true);
   });
 
+  it('reports heartbeat RTT and still replies with a pong', () => {
+    const fake = new FakeSocket();
+    const pings: number[] = [];
+    new ControllerSocket({
+      sessionCode: '4821',
+      capabilities: {
+        haptics: false,
+        sound: false,
+        wakeLock: false,
+        fullscreen: false,
+        orientation: false,
+      },
+      socketFactory: () => fake,
+      onPing: (rttMs) => pings.push(rttMs),
+    }).connect();
+    fake.open();
+    fake.message(
+      JSON.stringify({ type: 'ping', id: 'ping-1', sent: 1, rttMs: 12 }),
+    );
+
+    expect(pings).toEqual([12]);
+    expect(fake.sent.some((value) => String(value).includes('"pong"'))).toBe(
+      true,
+    );
+  });
+
   it('rejects the connection after a pre-welcome admission error', () => {
     const fake = new FakeSocket();
     const states: string[] = [];

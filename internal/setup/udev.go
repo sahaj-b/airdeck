@@ -66,7 +66,7 @@ func Run() error {
 		}
 		fmt.Println("applying rules to the uinput device")
 		if err := run("udevadm", "trigger", "--subsystem-match=misc", "--action=change"); err != nil {
-		return fmt.Errorf("trigger udev rules: %w", err)
+			return fmt.Errorf("trigger udev rules: %w", err)
 		}
 	}
 	if _, err := os.Stat("/dev/uinput"); err != nil {

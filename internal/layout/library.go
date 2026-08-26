@@ -30,6 +30,7 @@ type Control struct {
 	Rect         Rect                  `json:"rect"`
 	Label        string                `json:"label"`
 	Visible      bool                  `json:"visible"`
+	Shape        string                `json:"shape,omitempty"`
 	Binding      string                `json:"binding,omitempty"`
 	Bindings     *DPadBindings         `json:"bindings,omitempty"`
 	Orientations *OrientationOverrides `json:"orientations,omitempty"`

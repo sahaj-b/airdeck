@@ -27,12 +27,34 @@ const RUMBLE_KEY = 'airdeck.rumble';
 const SOUND_KEY = 'airdeck.sound';
 const WAKE_LOCK_KEY = 'airdeck.wakeLock';
 
+const CONNECTION_LABELS: Record<ConnectionState, string> = {
+  connecting: 'Connecting',
+  'hello-sent': 'Joining',
+  'welcome-received': 'Loading',
+  active: 'Connected',
+  reconnecting: 'Reconnecting',
+  rejected: 'Rejected',
+  kicked: 'Kicked',
+  'session-reset': 'Session reset',
+  closed: 'Closed',
+};
+
+const GEAR_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>';
+const CLOSE_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const EXPAND_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const COMPRESS_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+
 let activeSocket: ControllerSocket | undefined;
 let activeSender: FrameSender | undefined;
 let activeRenderer: RenderedLayout | undefined;
 let activeFeedback: FeedbackController | undefined;
 let activeCapabilities: CapabilityManager | undefined;
 let removeVisibilityHandlers: (() => void) | undefined;
+let removeControllerDocumentHandlers: (() => void) | undefined;
 
 renderJoinScreen();
 
@@ -49,6 +71,8 @@ function renderJoinScreen(errorMessage = ''): void {
   activeCapabilities = undefined;
   removeVisibilityHandlers?.();
   removeVisibilityHandlers = undefined;
+  removeControllerDocumentHandlers?.();
+  removeControllerDocumentHandlers = undefined;
 
   const panel = document.createElement('section');
   panel.className = 'join-screen';
@@ -193,21 +217,35 @@ function showController(options: {
   header.className = 'controller-header';
   const identity = document.createElement('div');
   identity.className = 'controller-identity';
-  const accent = document.createElement('span');
-  accent.className = 'controller-accent';
-  accent.setAttribute('aria-hidden', 'true');
-  const identityText = document.createElement('div');
-  const slot = document.createElement('div');
+  const slot = document.createElement('span');
   slot.className = 'controller-slot';
-  slot.textContent = 'Slot --';
-  const name = document.createElement('div');
+  slot.textContent = 'Player --';
+  const name = document.createElement('span');
   name.className = 'controller-name';
   name.textContent = options.displayName || 'Player';
-  identityText.append(slot, name);
-  identity.append(accent, identityText);
+  identity.append(slot, name);
 
-  const tools = document.createElement('div');
-  tools.className = 'controller-tools';
+  const status = document.createElement('p');
+  status.className = 'controller-status';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  status.textContent = 'Connecting';
+
+  const gearButton = document.createElement('button');
+  gearButton.type = 'button';
+  gearButton.className = 'icon-button';
+  gearButton.setAttribute('aria-label', 'Controller settings');
+  gearButton.setAttribute('aria-expanded', 'false');
+  gearButton.innerHTML = GEAR_ICON;
+
+  const center = document.createElement('div');
+  center.className = 'controller-center';
+  center.append(status, gearButton);
+  header.append(identity, center);
+
+  const host = document.createElement('div');
+  host.className = 'controller-host';
+
   const layoutSelect = document.createElement('select');
   layoutSelect.className = 'controller-layout-picker';
   layoutSelect.setAttribute('aria-label', 'Controller layout');
@@ -216,21 +254,64 @@ function showController(options: {
   waitingOption.textContent = 'Loading layout';
   waitingOption.value = '';
   layoutSelect.append(waitingOption);
-  const connection = document.createElement('span');
-  connection.className = 'controller-connection';
-  connection.textContent = 'Connecting';
-  tools.append(layoutSelect, connection);
-  header.append(identity, tools);
 
-  const status = document.createElement('p');
-  status.className = 'controller-status';
-  status.setAttribute('role', 'status');
-  status.setAttribute('aria-live', 'polite');
-  status.textContent = 'Connecting to the host...';
-  const host = document.createElement('div');
-  host.className = 'controller-host';
-  shell.append(header, status, host);
+  const connectionValue = document.createElement('span');
+  connectionValue.className = 'settings-value';
+  connectionValue.textContent = CONNECTION_LABELS.connecting;
+
+  const pingValue = document.createElement('span');
+  pingValue.className = 'settings-value';
+  pingValue.textContent = '—';
+
+  const capabilityMessages = options.capabilities.currentStatus.messages;
+  const settings = buildSettingsSheet({
+    layoutSelect,
+    connectionValue,
+    pingValue,
+    rumble: options.rumble,
+    sound: options.sound,
+    feedback,
+    capabilityNotes: capabilityMessages.length
+      ? capabilityMessages.join(' ')
+      : 'All local feedback capabilities are available.',
+  });
+  const fullscreen = buildFullscreenButton();
+  shell.append(
+    header,
+    host,
+    settings.backdrop,
+    settings.root,
+    fullscreen.button,
+  );
   root.replaceChildren(shell);
+
+  let transientStatus: string | null = null;
+  const updateStatus = (transient: string | null): void => {
+    transientStatus = transient;
+    status.textContent = transient ?? CONNECTION_LABELS[socket.state];
+    connectionValue.textContent = CONNECTION_LABELS[socket.state];
+  };
+
+  const openSettings = (open: boolean): void => {
+    settings.backdrop.hidden = !open;
+    settings.root.hidden = !open;
+    gearButton.setAttribute('aria-expanded', String(open));
+    if (open) settings.closeButton.focus();
+    else gearButton.focus();
+  };
+  gearButton.addEventListener('click', () =>
+    openSettings(settings.root.hidden),
+  );
+  settings.backdrop.addEventListener('click', () => openSettings(false));
+  settings.closeButton.addEventListener('click', () => openSettings(false));
+  const onShellKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && !settings.root.hidden) openSettings(false);
+  };
+  document.addEventListener('keydown', onShellKeyDown);
+  removeControllerDocumentHandlers = () => {
+    document.removeEventListener('keydown', onShellKeyDown);
+    fullscreen.cleanup();
+  };
 
   activeSender = new FrameSender(
     {
@@ -246,7 +327,7 @@ function showController(options: {
     selectedLayout: readStorage(SELECTED_LAYOUT_KEY) ?? undefined,
     capabilities: () => options.capabilities.capabilities,
     onStateChange: (nextState) => {
-      updateConnectionStatus(connection, status, nextState);
+      updateStatus(nextState === 'active' ? transientStatus : null);
       if (nextState === 'active') activeSender?.start();
       if (
         nextState === 'closed' ||
@@ -263,7 +344,7 @@ function showController(options: {
     },
     onWelcome: (welcome) => {
       activeSender?.setInputRate(welcome.targetInputRate);
-      applyWelcome(welcome, slot, name, accent, shell, layoutSelect);
+      applyWelcome(welcome, slot, name, shell, layoutSelect);
       currentLayoutId = welcome.selectedLayout;
       layoutSelect.value = welcome.selectedLayout;
       layoutSelect.disabled = false;
@@ -274,7 +355,7 @@ function showController(options: {
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
       layoutSelect.value = layout.id;
-      status.textContent = diagnostic ?? 'Controller ready.';
+      updateStatus(diagnostic ?? 'Controller ready.');
     },
     onError: (message) => {
       if (
@@ -289,16 +370,18 @@ function showController(options: {
       }
       if (message.code === 'invalid_layout')
         layoutSelect.value = currentLayoutId;
-      status.textContent = message.message;
+      updateStatus(message.message);
     },
     onRumble: (message) => feedback.rumble(message),
+    onPing: (rttMs) => {
+      pingValue.textContent = `${Math.round(rttMs)} ms`;
+    },
     onReconnect: () => {
       activeRenderer?.cancelPointers();
       state.reset();
-      status.textContent = 'Connection lost. Reconnecting...';
     },
     onClose: () => {
-      status.textContent = 'The connection to the host closed.';
+      updateStatus('The connection to the host closed.');
     },
   });
   activeSocket = socket;
@@ -306,8 +389,7 @@ function showController(options: {
   layoutSelect.addEventListener('change', () => {
     const requested = layoutSelect.value;
     if (!requested || requested === currentLayoutId) return;
-    if (socket.selectLayout(requested))
-      status.textContent = 'Loading layout...';
+    if (socket.selectLayout(requested)) updateStatus('Loading layout...');
     else layoutSelect.value = currentLayoutId;
   });
 
@@ -335,13 +417,11 @@ function applyWelcome(
   welcome: Welcome,
   slot: HTMLElement,
   name: HTMLElement,
-  accent: HTMLElement,
   shell: HTMLElement,
   layoutSelect: HTMLSelectElement,
 ): void {
   slot.textContent = `Player ${welcome.slot + 1}`;
   name.textContent = welcome.displayName;
-  accent.style.setProperty('--slot-accent', welcome.accent);
   shell.style.setProperty('--slot-accent', welcome.accent);
   layoutSelect.replaceChildren();
   for (const layout of welcome.availableLayouts) {
@@ -352,28 +432,123 @@ function applyWelcome(
   }
 }
 
-function updateConnectionStatus(
-  connection: HTMLElement,
-  status: HTMLElement,
-  state: ConnectionState,
-): void {
-  const labels: Record<ConnectionState, string> = {
-    connecting: 'Connecting',
-    'hello-sent': 'Joining',
-    'welcome-received': 'Loading',
-    active: 'Connected',
-    reconnecting: 'Reconnecting',
-    rejected: 'Rejected',
-    kicked: 'Kicked',
-    'session-reset': 'Session reset',
-    closed: 'Closed',
+function buildSettingsSheet(parts: {
+  layoutSelect: HTMLSelectElement;
+  connectionValue: HTMLElement;
+  pingValue: HTMLElement;
+  rumble: boolean;
+  sound: boolean;
+  feedback: FeedbackController;
+  capabilityNotes: string;
+}): {
+  root: HTMLElement;
+  backdrop: HTMLElement;
+  closeButton: HTMLButtonElement;
+} {
+  const root = document.createElement('aside');
+  root.className = 'settings-sheet';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.setAttribute('aria-label', 'Controller settings');
+  root.hidden = true;
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'Settings';
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'icon-button';
+  closeButton.setAttribute('aria-label', 'Close settings');
+  closeButton.innerHTML = CLOSE_ICON;
+  const head = document.createElement('div');
+  head.className = 'settings-head';
+  head.append(heading, closeButton);
+
+  const layoutRow = document.createElement('label');
+  layoutRow.className = 'settings-row';
+  layoutRow.append('Layout', parts.layoutSelect);
+
+  const rumbleInput = document.createElement('input');
+  rumbleInput.type = 'checkbox';
+  rumbleInput.checked = parts.rumble;
+  const rumbleRow = document.createElement('label');
+  rumbleRow.className = 'settings-row';
+  rumbleRow.append('Vibration', rumbleInput);
+  rumbleInput.addEventListener('change', () => {
+    parts.feedback.setPreferences({ haptics: rumbleInput.checked });
+    writeStorage(RUMBLE_KEY, String(rumbleInput.checked));
+  });
+
+  const soundInput = document.createElement('input');
+  soundInput.type = 'checkbox';
+  soundInput.checked = parts.sound;
+  const soundRow = document.createElement('label');
+  soundRow.className = 'settings-row';
+  soundRow.append('Button sounds', soundInput);
+  soundInput.addEventListener('change', () => {
+    parts.feedback.setPreferences({ sound: soundInput.checked });
+    writeStorage(SOUND_KEY, String(soundInput.checked));
+  });
+
+  const notes = document.createElement('p');
+  notes.className = 'settings-capabilities';
+  notes.textContent = parts.capabilityNotes;
+
+  root.append(
+    head,
+    layoutRow,
+    rumbleRow,
+    soundRow,
+    settingsRow('Connection', parts.connectionValue),
+    settingsRow('Ping', parts.pingValue),
+    notes,
+  );
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'settings-backdrop';
+  backdrop.hidden = true;
+  return { root, backdrop, closeButton };
+}
+
+function settingsRow(labelText: string, value: HTMLElement): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'settings-row';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  row.append(label, value);
+  return row;
+}
+
+function buildFullscreenButton(): {
+  button: HTMLButtonElement;
+  cleanup: () => void;
+} {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-button fullscreen-button';
+  button.setAttribute('aria-label', 'Enter fullscreen');
+  button.innerHTML = EXPAND_ICON;
+  if (typeof document.documentElement.requestFullscreen !== 'function')
+    button.hidden = true;
+
+  const onFullscreenChange = (): void => {
+    const active = document.fullscreenElement !== null;
+    button.innerHTML = active ? COMPRESS_ICON : EXPAND_ICON;
+    button.setAttribute(
+      'aria-label',
+      active ? 'Exit fullscreen' : 'Enter fullscreen',
+    );
   };
-  connection.textContent = labels[state];
-  if (state === 'reconnecting')
-    status.textContent = 'Connection lost. Reconnecting...';
-  if (state === 'kicked') status.textContent = 'The host disconnected you.';
-  if (state === 'session-reset')
-    status.textContent = 'The host started a new session.';
+  button.addEventListener('click', () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else
+      void document.documentElement.requestFullscreen().catch(() => undefined);
+  });
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  return {
+    button,
+    cleanup: () =>
+      document.removeEventListener('fullscreenchange', onFullscreenChange),
+  };
 }
 
 function updateCapabilityMessage(

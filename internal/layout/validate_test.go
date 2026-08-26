@@ -40,3 +40,21 @@ func TestValidateRejectsIncompleteDPad(t *testing.T) {
 		t.Fatal("schema accepted incomplete d-pad")
 	}
 }
+
+func TestValidateControlShapesAndSquares(t *testing.T) {
+	newDoc := func(rect Rect, shape string) Document {
+		return Document{ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape", Sections: []Section{{ID: "section", Rect: Rect{X: 0, Y: 0, Width: 1, Height: 1}, Controls: []Control{{ID: "stick", Type: "joystick", Rect: rect, Label: "Left stick", Visible: true, Binding: "leftStick", Shape: shape}}}}}
+	}
+	if err := ValidateDocument(newDoc(Rect{X: 0.9, Y: 0.2, Width: 0.4, Height: 0.4}, "")); err != nil {
+		t.Fatalf("wide control near the right edge was rejected: %v", err)
+	}
+	if err := ValidateDocument(newDoc(Rect{X: 0.2, Y: 0.2, Width: 0.4, Height: 0.2}, "")); err == nil {
+		t.Fatal("non-square joystick was accepted")
+	}
+	if err := ValidateDocument(newDoc(Rect{X: 0.2, Y: 0.2, Width: 0.4, Height: 0.4}, "triangle")); err == nil {
+		t.Fatal("unknown control shape was accepted")
+	}
+	if err := ValidateDocument(newDoc(Rect{X: 0.2, Y: 0.2, Width: 0.4, Height: 0.4}, "circle")); err != nil {
+		t.Fatalf("circle shape was rejected: %v", err)
+	}
+}

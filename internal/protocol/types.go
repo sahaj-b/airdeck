@@ -38,9 +38,10 @@ type Welcome struct {
 }
 
 type Ping struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-	Sent uint64 `json:"sent"`
+	Type  string `json:"type"`
+	ID    string `json:"id"`
+	Sent  uint64 `json:"sent"`
+	RttMs int64  `json:"rttMs,omitempty"`
 }
 
 type Pong struct {

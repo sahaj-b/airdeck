@@ -27,12 +27,14 @@ export type ControlType =
   | 'trigger'
   | 'label'
   | 'image';
+export type ControlShape = 'circle' | 'pill' | 'rect';
 export interface Control {
   id: string;
   type: ControlType;
   rect: Rect;
   label: string;
   visible: boolean;
+  shape?: ControlShape;
   binding?: Command;
   bindings?: DPadBindings;
   orientations?: OrientationOverrides;
@@ -95,7 +97,7 @@ export function validateLayout(value: unknown): value is LayoutDocument {
   for (const section of document.sections) {
     if (!add(section.id) || !validRect(section.rect)) return false;
     for (const control of section.controls) {
-      if (!add(control.id) || !validRect(control.rect)) return false;
+      if (!add(control.id) || !validControlRect(control.rect)) return false;
       if (
         control.type === 'image' &&
         (!control.asset || !assetIds.has(control.asset))
@@ -114,10 +116,25 @@ export function validateLayout(value: unknown): value is LayoutDocument {
       if (
         control.orientations &&
         Object.values(control.orientations).some(
-          (rect) => rect && !validRect(rect),
+          (rect) => rect && !validControlRect(rect),
         )
       )
         return false;
+      if (
+        control.shape &&
+        control.shape !== 'circle' &&
+        control.shape !== 'pill' &&
+        control.shape !== 'rect'
+      )
+        return false;
+      if (control.type === 'joystick' || control.type === 'dpad') {
+        const rects = [
+          control.rect,
+          control.orientations?.portrait,
+          control.orientations?.landscape,
+        ];
+        if (rects.some((rect) => rect && !isSquare(rect))) return false;
+      }
     }
   }
   return true;
@@ -141,6 +158,23 @@ function validRect(rect: Rect): boolean {
     rect.x + rect.width <= 1 &&
     rect.y + rect.height <= 1
   );
+}
+
+// Control width is a fraction of section height while x spans the section
+// width, so horizontal containment cannot be validated numerically.
+function validControlRect(rect: Rect): boolean {
+  return (
+    rect.x >= 0 &&
+    rect.x <= 1 &&
+    rect.y >= 0 &&
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.y + rect.height <= 1
+  );
+}
+
+function isSquare(rect: Rect): boolean {
+  return Math.abs(rect.width - rect.height) < 1e-9;
 }
 const KNOWN_COMMANDS = new Set<string>([
   ...Object.keys(ButtonBits),
