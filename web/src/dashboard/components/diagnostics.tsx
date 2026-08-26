@@ -79,6 +79,12 @@ export function Diagnostics({ diagnostics }: DiagnosticsProps) {
                         <span>{sample.goroutines} goroutines</span>
                         <span>{formatBytes(sample.memoryBytes)}</span>
                         <span>{sample.fileDescriptors} fds</span>
+                        <span>
+                          {formatDuration(
+                            sample.userCpuTime + sample.systemCpuTime,
+                          )}{' '}
+                          cpu
+                        </span>
                       </li>
                     ))}
                 </ul>

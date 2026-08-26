@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,10 +69,16 @@ func (s *Server) buildListenerSet(cfg config.Config) (listenerSet, error) {
 	if isLoopbackBind(cfg.Bind) {
 		return set, nil
 	}
-	adminLn, err := net.Listen("tcp", "127.0.0.1:0")
+	// Non-loopback bind: start a loopback admin listener so the host can
+	// always reach the dashboard. Prefer the public port number so the
+	// dashboard URL stays stable; fall back to an ephemeral port.
+	adminLn, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(publicPort)))
 	if err != nil {
-		_ = publicLn.Close()
-		return listenerSet{}, fmt.Errorf("listen loopback admin server: %w", err)
+		adminLn, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			_ = publicLn.Close()
+			return listenerSet{}, fmt.Errorf("listen loopback admin server: %w", err)
+		}
 	}
 	set.admin = &http.Server{Handler: s.routes(true)}
 	set.adminLn = adminLn
@@ -146,7 +153,7 @@ func listenWithFallback(bind string, requested int) (net.Listener, int, error) {
 	}
 	var last error
 	for port := requested; port <= 65535; port++ {
-		listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", bind, port))
+		listener, err := net.Listen("tcp", net.JoinHostPort(bind, strconv.Itoa(port)))
 		if err == nil {
 			return listener, port, nil
 		}
@@ -159,7 +166,11 @@ func listenWithFallback(bind string, requested int) (net.Listener, int, error) {
 }
 
 func isLoopbackBind(bind string) bool {
-	return bind == "127.0.0.1" || bind == "::1" || strings.EqualFold(bind, "localhost")
+	switch bind {
+	case "", "0.0.0.0", "::", "127.0.0.1", "::1":
+		return true
+	}
+	return strings.EqualFold(bind, "localhost")
 }
 
 func (s *Server) AdvertisedJoinURL() string {
@@ -167,13 +178,81 @@ func (s *Server) AdvertisedJoinURL() string {
 	defer s.mu.Unlock()
 	host := s.options.Config.AdvertisedHost
 	if host == "" {
-		host = "127.0.0.1"
+		host = defaultAdvertisedHost()
 	}
 	port := s.options.Config.AdvertisedPort
 	if port == 0 {
 		port = s.publicPort
 	}
 	return advertisedURL(host, port, s.options.Session.Code())
+}
+
+func defaultAdvertisedHost() string {
+	// Pick the interface holding the default route so the QR actually works
+	// on the LAN without the host having to configure it manually.
+	iface, err := defaultRouteInterface()
+	if err == nil && iface != "" {
+		if ip := interfaceIPv4(iface); ip != "" {
+			return ip
+		}
+	}
+	// Fallback: first non-loopback IPv4, then 127.0.0.1.
+	interfaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range interfaces {
+			if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				ipnet, ok := addr.(*net.IPNet)
+				if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+					continue
+				}
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return "127.0.0.1"
+}
+
+func defaultRouteInterface() (string, error) {
+	data, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] == "Iface" {
+			continue
+		}
+		if fields[1] == "00000000" {
+			return fields[0], nil
+		}
+	}
+	return "", nil
+}
+
+func interfaceIPv4(name string) string {
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return ""
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.To4() == nil || ipnet.IP.IsLoopback() {
+			continue
+		}
+		return ipnet.IP.String()
+	}
+	return ""
 }
 
 func (s *Server) DashboardURL() string {

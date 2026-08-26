@@ -6,6 +6,15 @@ export interface ResourceSample {
   goroutines: number;
   memoryBytes: number;
   fileDescriptors: number;
+  userCpuTime: number;
+  systemCpuTime: number;
+}
+
+// DiagnosticsResponse is the shape served by /api/admin/diagnostics: the
+// metrics summary plus the sampled frame trace used by lanbench.
+export interface DiagnosticsResponse {
+  summary: DiagnosticsSummary;
+  trace: unknown[];
 }
 
 export interface DiagnosticsSummary {
@@ -62,8 +71,9 @@ export function getAdminState(): Promise<AdminState> {
   return request<AdminState>('/api/admin/state');
 }
 
-export function getDiagnostics(): Promise<DiagnosticsSummary> {
-  return request<DiagnosticsSummary>('/api/admin/diagnostics');
+export async function getDiagnostics(): Promise<DiagnosticsSummary> {
+  const response = await request<DiagnosticsResponse>('/api/admin/diagnostics');
+  return response.summary;
 }
 
 export function newSession(): Promise<AdminState> {

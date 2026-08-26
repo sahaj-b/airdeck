@@ -209,32 +209,73 @@ func TestRebindFromSettingsHandlerDoesNotDeadlock(t *testing.T) {
 	}
 }
 
+func TestIsLoopbackBind(t *testing.T) {
+	cases := []struct {
+		bind     string
+		loopback bool
+	}{
+		{"", true},
+		{"0.0.0.0", true},
+		{"::", true},
+		{"127.0.0.1", true},
+		{"::1", true},
+		{"localhost", true},
+		{"LOCALHOST", true},
+		{"192.168.1.12", false},
+		{"10.0.0.1", false},
+	}
+	for _, c := range cases {
+		if got := isLoopbackBind(c.bind); got != c.loopback {
+			t.Errorf("isLoopbackBind(%q) = %v, want %v", c.bind, got, c.loopback)
+		}
+	}
+}
+
 func TestRebindMaintainsLoopbackAdminListener(t *testing.T) {
 	server, cfg, sess := newTestHTTPServer(t, "127.0.0.1")
 	defer sess.Close()
 	if err := server.Start(); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Bind = "0.0.0.0"
-	if err := server.Rebind(context.Background(), cfg); err != nil {
+	// Any bind that includes loopback serves the dashboard on the public
+	// listener, so no separate admin listener exists.
+	for _, bind := range []string{"0.0.0.0", "::1", "localhost", "127.0.0.1"} {
+		cfg.Bind = bind
+		if err := server.Rebind(context.Background(), cfg); err != nil {
+			t.Fatal(err)
+		}
+		if server.adminLn != nil {
+			t.Fatalf("bind %q should not create a separate admin listener", bind)
+		}
+	}
+	if err := server.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNonLoopbackBindPrefersPublicPortForAdminListener(t *testing.T) {
+	// 127.0.0.2 is a non-loopback literal per isLoopbackBind but always
+	// bindable, so the test does not depend on a specific LAN address.
+	server, _, sess := newTestHTTPServer(t, "127.0.0.2")
+	defer sess.Close()
+	if err := server.Start(); err != nil {
 		t.Fatal(err)
 	}
 	if server.adminLn == nil {
 		t.Fatal("non-loopback bind has no admin listener")
 	}
-	cfg.Bind = "127.0.0.1"
-	if err := server.Rebind(context.Background(), cfg); err != nil {
-		t.Fatal(err)
+	if server.adminPort != server.publicPort {
+		t.Fatalf("admin port = %d, want public port %d", server.adminPort, server.publicPort)
 	}
-	if server.adminLn != nil {
-		t.Fatal("loopback bind retained a separate admin listener")
+	// The admin listener on 127.0.0.1:<port> must serve the dashboard API.
+	client := &http.Client{Timeout: 2 * time.Second}
+	response, err := client.Get("http://127.0.0.1:" + strconv.Itoa(server.adminPort) + "/api/admin/state")
+	if err != nil {
+		t.Fatalf("admin listener: %v", err)
 	}
-	cfg.Bind = "0.0.0.0"
-	if err := server.Rebind(context.Background(), cfg); err != nil {
-		t.Fatal(err)
-	}
-	if server.adminLn == nil {
-		t.Fatal("admin listener was not recreated")
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("admin listener status = %d, want %d", response.StatusCode, http.StatusOK)
 	}
 	if err := server.Close(context.Background()); err != nil {
 		t.Fatal(err)
