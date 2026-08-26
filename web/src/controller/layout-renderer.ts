@@ -195,6 +195,7 @@ function renderControl(
     button.className = `controller-control control-${control.type}`;
     button.dataset.controlId = control.id;
     button.dataset.shape = control.shape ?? 'rect';
+    button.dataset.command = control.binding ?? '';
     button.textContent = control.label;
     button.setAttribute('aria-label', control.label);
     if (control.type === 'button') button.setAttribute('aria-pressed', 'false');

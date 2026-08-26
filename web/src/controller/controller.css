@@ -1,8 +1,6 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  background: #090b10;
-  color: #f3f6fb;
 }
 
 * {
@@ -21,7 +19,6 @@ body {
   min-height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #090b10;
 }
 
 button,
@@ -29,12 +26,13 @@ select {
   font: inherit;
 }
 
+/* Geometry: position, layout, touch behavior. Visual styling (color,
+   background, border, shadow, font-size, padding) lives in skins. */
+
 .controller-shell {
-  --slot-accent: #6ee7b7;
   position: fixed;
   inset: 0;
   min-height: 100dvh;
-  background: #090b10;
 }
 
 .controller-host {
@@ -59,12 +57,6 @@ select {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  border: 1px solid #293548;
-  border-radius: clamp(0.8rem, 3vw, 1.8rem);
-  background: #0e141d;
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 2%),
-    0 1rem 3rem rgb(0 0 0 / 20%);
 }
 
 .controller-composition {
@@ -112,19 +104,6 @@ select {
 .controller-control {
   display: grid;
   place-items: center;
-  border: 2px solid #8a98ab;
-  border-radius: 0.55rem;
-  padding: 0.3rem;
-  background: #18212e;
-  color: #f3f6fb;
-  font-size: clamp(0.55rem, 2.3vw, 1rem);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.controller-control:hover,
-.dpad-direction:hover {
-  border-color: #c6d0dd;
 }
 
 .controller-control:focus-visible {
@@ -132,30 +111,20 @@ select {
   outline-offset: 3px;
 }
 
-.controller-control.is-pressed {
-  border-color: var(--slot-accent);
-  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
-}
-
-.controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
-  transform: scale(0.96);
-}
-
-.controller-control[data-shape="circle"] {
+/* Shape invariants: the data-skin prefix guarantees these win over any skin
+   rule, so geometric shape never changes with a skin. */
+html[data-skin] .controller-control[data-shape="circle"] {
   border-radius: 50%;
 }
 
-.controller-control[data-shape="pill"] {
+html[data-skin] .controller-control[data-shape="pill"] {
   border-radius: 999px;
 }
 
 .control-joystick {
   overflow: hidden;
   display: block;
-  border-radius: 50%;
   color: transparent;
-  background: radial-gradient(circle at 42% 34%, #2b394d, #121a25 72%);
-  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 45%);
 }
 
 .control-joystick::after {
@@ -164,9 +133,7 @@ select {
   left: calc(50% + var(--axis-x, 0%) / 2);
   width: 42%;
   height: 42%;
-  border: 2px solid var(--slot-accent);
   border-radius: 50%;
-  background: #273447;
   content: "";
   transform: translate(-50%, -50%);
 }
@@ -182,32 +149,8 @@ select {
   background: transparent;
 }
 
-.controller-dpad.is-pressed {
-  background: transparent;
-  transform: none;
-}
-
-.controller-dpad::before {
-  position: absolute;
-  left: 30%;
-  top: 30%;
-  width: 40%;
-  height: 40%;
-  border: 2px solid #8a98ab;
-  border-radius: 14%;
-  background: #18212e;
-  content: "";
-}
-
 .dpad-direction {
   display: grid;
-  width: 40%;
-  height: 35%;
-  border: 2px solid #8a98ab;
-  border-radius: 12%;
-  padding: 0;
-  background: #18212e;
-  color: #aeb9c9;
   place-items: center;
   pointer-events: none;
 }
@@ -257,13 +200,13 @@ select {
   border-radius: 12% 24% 24% 12%;
 }
 
-.controller-dpad[data-direction="up"] .dpad-up,
-.controller-dpad[data-direction="right"] .dpad-right,
-.controller-dpad[data-direction="down"] .dpad-down,
-.controller-dpad[data-direction="left"] .dpad-left {
-  border-color: var(--slot-accent);
-  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
-  color: var(--slot-accent);
+.controller-dpad::before {
+  position: absolute;
+  left: 30%;
+  top: 30%;
+  width: 40%;
+  height: 40%;
+  content: "";
 }
 
 .controller-label,
@@ -274,8 +217,6 @@ select {
 .controller-label {
   display: grid;
   place-items: center;
-  color: #aeb9c9;
-  font-size: clamp(0.65rem, 1.4vw, 0.85rem);
 }
 
 .controller-image {
@@ -304,7 +245,6 @@ select {
 }
 
 .controller-slot {
-  color: var(--slot-accent);
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -315,7 +255,6 @@ select {
 .controller-name {
   max-width: 35vw;
   overflow: hidden;
-  color: #f3f6fb;
   font-size: clamp(0.7rem, 2vw, 0.9rem);
   font-weight: 700;
   text-overflow: ellipsis;
@@ -338,11 +277,8 @@ select {
   max-width: min(28vw, calc(100% - 2.7rem));
   overflow: hidden;
   margin: 0;
-  border: 1px solid #293548;
   border-radius: 999px;
   padding: 0.25rem 0.65rem;
-  background: #151b25;
-  color: #d8e0eb;
   font-size: clamp(0.62rem, 1.7vw, 0.76rem);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -353,11 +289,8 @@ select {
   width: 2.2rem;
   height: 2.2rem;
   place-items: center;
-  border: 1px solid #293548;
   border-radius: 50%;
   padding: 0;
-  background: #151b25;
-  color: #c6d0dd;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -365,16 +298,6 @@ select {
 .icon-button svg {
   width: 1.15rem;
   height: 1.15rem;
-}
-
-.icon-button:hover {
-  border-color: #536174;
-  color: #f3f6fb;
-}
-
-.icon-button:focus-visible {
-  outline: 3px solid var(--slot-accent);
-  outline-offset: 3px;
 }
 
 .fullscreen-button {
@@ -388,7 +311,6 @@ select {
   position: fixed;
   z-index: 8;
   inset: 0;
-  background: rgb(0 0 0 / 55%);
 }
 
 .settings-sheet {
@@ -401,10 +323,8 @@ select {
   max-height: min(80dvh, 30rem);
   gap: 0.85rem;
   overflow-y: auto;
-  border: 1px solid #293548;
   border-radius: 1rem 1rem 0 0;
   padding: 1rem 1.1rem calc(1rem + env(safe-area-inset-bottom));
-  background: #10151d;
   transform: translateX(-50%);
 }
 
@@ -424,39 +344,27 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  color: #d8e0eb;
   font-size: 0.85rem;
 }
 
 .settings-row input[type="checkbox"] {
   width: 1.15rem;
   height: 1.15rem;
-  accent-color: var(--slot-accent, #6ee7b7);
 }
 
 .controller-layout-picker {
   min-height: 2.4rem;
   max-width: 12rem;
-  border: 1px solid #536174;
   border-radius: 0.55rem;
   padding: 0 0.6rem;
-  background: #151b25;
-  color: #f3f6fb;
-}
-
-.controller-layout-picker:focus-visible {
-  outline: 3px solid var(--slot-accent);
-  outline-offset: 3px;
 }
 
 .settings-value {
-  color: #aeb9c9;
   font-weight: 700;
 }
 
 .settings-capabilities {
   margin: 0;
-  color: #8a98ab;
   font-size: 0.75rem;
 }
 
@@ -465,11 +373,8 @@ select {
   position: absolute;
   inset: 20% 8% auto;
   z-index: 6;
-  border: 1px solid #536174;
   border-radius: 0.75rem;
   padding: 1rem;
-  background: #151b25;
-  color: #d8e0eb;
   text-align: center;
 }
 

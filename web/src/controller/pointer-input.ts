@@ -284,6 +284,10 @@ export class PointerInput {
     if (active) pointers.add(pointerId);
     else pointers.delete(pointerId);
     element.classList.toggle('is-pressed', pointers.size > 0);
+    element.classList.toggle('is-active', pointers.size > 0);
+    if (element.classList.contains('control-joystick')) {
+      element.classList.toggle('is-dragging', pointers.size > 0);
+    }
     if (element.getAttribute('aria-pressed') !== null) {
       element.setAttribute('aria-pressed', String(pointers.size > 0));
     }

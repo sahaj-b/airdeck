@@ -1,0 +1,155 @@
+/* Onyx — the default airdeck skin. Dark, high-contrast, emerald accent.
+   Every rule is scoped to html[data-skin="onyx"] so it only fires when
+   active. Add more skins as sibling files in this directory. */
+
+html[data-skin="onyx"] {
+  color-scheme: dark;
+  background: #090b10;
+  color: #f3f6fb;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+html[data-skin="onyx"] body {
+  background: #090b10;
+}
+
+html[data-skin="onyx"] .controller-shell {
+  --slot-accent: #6ee7b7;
+  background: #090b10;
+}
+
+html[data-skin="onyx"] .controller-frame {
+  border: 1px solid #293548;
+  border-radius: clamp(0.8rem, 3vw, 1.8rem);
+  background: #0e141d;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 2%),
+    0 1rem 3rem rgb(0 0 0 / 20%);
+}
+
+html[data-skin="onyx"] .controller-control {
+  border: 2px solid #8a98ab;
+  border-radius: 0.55rem;
+  padding: 0.3rem;
+  background: #18212e;
+  color: #f3f6fb;
+  font-size: clamp(0.55rem, 2.3vw, 1rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+html[data-skin="onyx"] .controller-control:hover,
+html[data-skin="onyx"] .dpad-direction:hover {
+  border-color: #c6d0dd;
+}
+
+html[data-skin="onyx"] .controller-control.is-pressed {
+  border-color: var(--slot-accent);
+  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
+}
+
+html[data-skin="onyx"]
+  .controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
+  transform: scale(0.96);
+}
+
+html[data-skin="onyx"] .control-joystick {
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 34%, #2b394d, #121a25 72%);
+  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 45%);
+}
+
+html[data-skin="onyx"] .control-joystick::after {
+  border: 2px solid var(--slot-accent);
+  background: #273447;
+}
+
+html[data-skin="onyx"] .controller-dpad::before {
+  border: 2px solid #8a98ab;
+  border-radius: 14%;
+  background: #18212e;
+}
+
+html[data-skin="onyx"] .dpad-direction {
+  border: 2px solid #8a98ab;
+  border-radius: 12%;
+  padding: 0;
+  background: #18212e;
+  color: #aeb9c9;
+}
+
+html[data-skin="onyx"] .controller-dpad[data-direction="up"] .dpad-up,
+html[data-skin="onyx"] .controller-dpad[data-direction="right"] .dpad-right,
+html[data-skin="onyx"] .controller-dpad[data-direction="down"] .dpad-down,
+html[data-skin="onyx"] .controller-dpad[data-direction="left"] .dpad-left {
+  border-color: var(--slot-accent);
+  background: color-mix(in srgb, var(--slot-accent) 32%, #18212e);
+  color: var(--slot-accent);
+}
+
+html[data-skin="onyx"] .controller-label {
+  color: #aeb9c9;
+  font-size: clamp(0.65rem, 1.4vw, 0.85rem);
+}
+
+html[data-skin="onyx"] .controller-slot {
+  color: var(--slot-accent);
+}
+
+html[data-skin="onyx"] .controller-name {
+  color: #f3f6fb;
+}
+
+html[data-skin="onyx"] .controller-status {
+  border: 1px solid #293548;
+  background: #151b25;
+  color: #d8e0eb;
+}
+
+html[data-skin="onyx"] .icon-button {
+  border: 1px solid #293548;
+  background: #151b25;
+  color: #c6d0dd;
+}
+
+html[data-skin="onyx"] .icon-button:hover {
+  border-color: #536174;
+  color: #f3f6fb;
+}
+
+html[data-skin="onyx"] .settings-backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+html[data-skin="onyx"] .settings-sheet {
+  border: 1px solid #293548;
+  background: #10151d;
+}
+
+html[data-skin="onyx"] .settings-row {
+  color: #d8e0eb;
+}
+
+html[data-skin="onyx"] .settings-row input[type="checkbox"] {
+  accent-color: var(--slot-accent, #6ee7b7);
+}
+
+html[data-skin="onyx"] .controller-layout-picker {
+  border: 1px solid #536174;
+  background: #151b25;
+  color: #f3f6fb;
+}
+
+html[data-skin="onyx"] .settings-value {
+  color: #aeb9c9;
+}
+
+html[data-skin="onyx"] .settings-capabilities {
+  color: #8a98ab;
+}
+
+html[data-skin="onyx"] .orientation-message {
+  border: 1px solid #536174;
+  background: #151b25;
+  color: #d8e0eb;
+}

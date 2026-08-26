@@ -17,6 +17,7 @@ import {
 } from '../controller/socket';
 import { InputStateStore } from '../controller/state';
 import type { Welcome } from '../shared/contracts';
+import { getSkin, initSkin, SKINS, setSkin } from '../skins/loader';
 import './join.css';
 
 const rootElement = document.querySelector<HTMLElement>('#root');
@@ -89,6 +90,7 @@ let removeControllerDocumentHandlers: (() => void) | undefined;
 let removeJoinFullscreenHandler: (() => void) | undefined;
 
 renderJoinScreen();
+initSkin();
 
 function renderJoinScreen(errorMessage = ''): void {
   activeSocket?.close();
@@ -537,9 +539,25 @@ function buildSettingsSheet(parts: {
   notes.className = 'settings-capabilities';
   notes.textContent = parts.capabilityNotes;
 
+  const skinSelect = document.createElement('select');
+  skinSelect.className = 'controller-layout-picker';
+  skinSelect.setAttribute('aria-label', 'Controller skin');
+  for (const skin of SKINS) {
+    const skinOption = document.createElement('option');
+    skinOption.value = skin.id;
+    skinOption.textContent = skin.name;
+    skinSelect.append(skinOption);
+  }
+  skinSelect.value = getSkin();
+  skinSelect.addEventListener('change', () => setSkin(skinSelect.value));
+  const skinRow = document.createElement('label');
+  skinRow.className = 'settings-row';
+  skinRow.append('Skin', skinSelect);
+
   root.append(
     head,
     layoutRow,
+    skinRow,
     rumbleRow,
     soundRow,
     settingsRow('Connection', parts.connectionValue),
