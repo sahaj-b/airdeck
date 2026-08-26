@@ -94,24 +94,25 @@ func serveListenerSet(set listenerSet) {
 }
 
 func shutdownListenerSet(ctx context.Context, set listenerSet) error {
-	var first error
-	if set.public != nil {
-		if err := set.public.Shutdown(ctx); err != nil && first == nil {
-			first = err
-		}
-	}
-	if set.admin != nil {
-		if err := set.admin.Shutdown(ctx); err != nil && first == nil {
-			first = err
-		}
-	}
+	// Close the listeners synchronously so new connections stop being
+	// accepted. The servers then drain in the background: a rebind can be
+	// triggered from a settings handler on the very server being replaced,
+	// and http.Server.Shutdown waits for active connections to go idle, which
+	// includes that handler. Existing WebSocket connections are owned by
+	// their handlers and survive the listener close, so phones keep playing.
 	if set.publicLn != nil {
 		_ = set.publicLn.Close()
 	}
 	if set.adminLn != nil {
 		_ = set.adminLn.Close()
 	}
-	return first
+	if set.public != nil {
+		go func() { _ = set.public.Shutdown(ctx) }()
+	}
+	if set.admin != nil {
+		go func() { _ = set.admin.Shutdown(ctx) }()
+	}
+	return nil
 }
 
 func (s *Server) Start() error {
@@ -173,6 +174,23 @@ func (s *Server) AdvertisedJoinURL() string {
 		port = s.publicPort
 	}
 	return advertisedURL(host, port, s.options.Session.Code())
+}
+
+func (s *Server) DashboardURL() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	host, port := s.options.Config.Bind, s.publicPort
+	if s.adminLn != nil {
+		host, port = "127.0.0.1", s.adminPort
+	} else {
+		switch host {
+		case "", "0.0.0.0":
+			host = "127.0.0.1"
+		case "::":
+			host = "::1"
+		}
+	}
+	return (&url.URL{Scheme: "http", Host: net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port)), Path: "/dashboard"}).String()
 }
 
 func advertisedURL(host string, port int, code string) string {

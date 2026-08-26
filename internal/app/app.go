@@ -58,6 +58,7 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.HTTP.Start(); err != nil {
 		return err
 	}
+	log.Printf("dashboard URL %s", a.HTTP.DashboardURL())
 	log.Printf("session %s, join URL %s", a.Session.Code(), a.HTTP.AdvertisedJoinURL())
 	resourceDone := make(chan struct{})
 	go a.sampleResources(resourceDone)

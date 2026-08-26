@@ -57,6 +57,118 @@ func newTestSession(t *testing.T) (*Session, *sessionFakeFactory) {
 	return session, factory
 }
 
+func newTwoLayoutSession(t *testing.T) *Session {
+	t.Helper()
+	builtin, err := layout.LoadDefault("", "xbox-default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, ok := builtin.Get("xbox-default")
+	if !ok {
+		t.Fatal("built-in layout missing")
+	}
+	alternative := original
+	alternative.ID = "alt-default"
+	alternative.Name = "Alternative"
+	library, err := layout.NewLibrary([]layout.Document{original, alternative}, "xbox-default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := New(library, device.NewManager(&sessionFakeFactory{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return session
+}
+
+func TestKickSendsCloseMessageBeforeFreeingSlot(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	var sent []any
+	closed := false
+	send := func(value any) error { sent = append(sent, value); return nil }
+	close := func() { closed = true }
+	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, send, close)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Kick(admission.Player.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want exactly one close message", len(sent))
+	}
+	message, ok := sent[0].(protocol.CloseMessage)
+	if !ok || message.Reason != "kicked" {
+		t.Fatalf("sent = %#v, want close message with reason kicked", sent[0])
+	}
+	if !closed {
+		t.Fatal("close callback was not invoked")
+	}
+}
+
+func TestSetLayoutPushesDocumentToPlayer(t *testing.T) {
+	session := newTwoLayoutSession(t)
+	defer session.Close()
+	var sent []any
+	send := func(value any) error { sent = append(sent, value); return nil }
+	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, send, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SetLayout(admission.Player.ID, "alt-default"); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want one layout message", len(sent))
+	}
+	message, ok := sent[0].(protocol.LayoutMessage)
+	if !ok || message.ID != "alt-default" {
+		t.Fatalf("sent = %#v, want layout alt-default", sent[0])
+	}
+	if player, ok := session.Player(admission.Player.ID); !ok || player.LayoutID != "alt-default" {
+		t.Fatalf("player layout = %+v, ok=%v", player, ok)
+	}
+}
+
+func TestSetDefaultLayoutChangesAdmissionDefault(t *testing.T) {
+	session := newTwoLayoutSession(t)
+	defer session.Close()
+	if err := session.SetDefaultLayout("alt-default"); err != nil {
+		t.Fatal(err)
+	}
+	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admission.Player.LayoutID != "alt-default" {
+		t.Fatalf("admitted layout = %q, want alt-default", admission.Player.LayoutID)
+	}
+}
+
+func TestNewSessionEmitsResetBeforeClosingPlayers(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	var order []string
+	unsubscribe := session.Subscribe(func(event Event) {
+		if event.Type == "session.reset" {
+			order = append(order, "reset")
+		}
+	})
+	defer unsubscribe()
+	close := func() { order = append(order, "close") }
+	if _, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, close); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.NewSession(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"reset", "close"}
+	if len(order) != len(want) || order[0] != "reset" || order[1] != "close" {
+		t.Fatalf("order = %v, want %v", order, want)
+	}
+}
+
 func TestAdmissionCeilingAndSlotReuse(t *testing.T) {
 	session, _ := newTestSession(t)
 	defer session.Close()

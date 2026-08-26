@@ -23,10 +23,17 @@ type Server struct {
 	upgrader        websocket.Upgrader
 	mu              sync.Mutex
 	clients         map[*Client]struct{}
+	unsubscribe     func()
 }
 
 func NewServer(s *session.Session, handler *input.Handler, layouts *layout.Library, targetInputRate int) *Server {
-	return &Server{Session: s, Input: handler, Layouts: layouts, TargetInputRate: targetInputRate, clients: make(map[*Client]struct{}), upgrader: websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024, CheckOrigin: func(r *http.Request) bool { return SameOrigin(r) }}}
+	server := &Server{Session: s, Input: handler, Layouts: layouts, TargetInputRate: targetInputRate, clients: make(map[*Client]struct{}), upgrader: websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024, CheckOrigin: func(r *http.Request) bool { return SameOrigin(r) }}}
+	server.unsubscribe = s.Subscribe(func(event session.Event) {
+		if event.Type == "session.reset" {
+			server.broadcastReset()
+		}
+	})
+	return server
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +50,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := newClient(conn)
+	client.startWriter()
 	s.mu.Lock()
 	s.clients[client] = struct{}{}
 	s.mu.Unlock()
@@ -69,7 +77,6 @@ func (s *Server) runClient(r *http.Request, client *Client) {
 		s.sendErrorNow(client, code, message)
 		return
 	}
-	client.startWriter()
 	player := admission.Player
 	generation := player.Generation
 	welcome := protocol.Welcome{Type: protocol.MessageWelcome, PlayerID: player.ID, Slot: player.Slot, DisplayName: player.Name, Accent: player.Accent, ReconnectID: player.ReconnectID, ProtocolVersion: protocol.Version, FrameSize: protocol.FrameSize, TargetInputRate: s.TargetInputRate, SelectedLayout: player.LayoutID}
@@ -145,14 +152,7 @@ func (s *Server) handleText(client *Client, playerID string, generation uint64, 
 		}
 		if err := s.Session.SetLayout(playerID, selectMessage.ID); err != nil {
 			s.sendError(client, "invalid_layout", err.Error())
-			return
 		}
-		document, err := s.Session.Layout(playerID)
-		if err != nil {
-			s.sendError(client, "invalid_layout", err.Error())
-			return
-		}
-		_ = client.Send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: document.ID, Layout: document})
 	case protocol.MessageClose:
 		_ = s.Session.Leave(playerID, generation)
 		client.Close()
@@ -184,12 +184,10 @@ func (s *Server) sendError(client *Client, code, message string) {
 	_ = client.Send(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
 }
 
-// sendErrorNow writes the error synchronously for paths that close the
-// connection immediately, where the async writer may not flush in time.
+// sendErrorNow queues the error before closing the connection so the writer
+// can flush it without concurrent WebSocket writes.
 func (s *Server) sendErrorNow(client *Client, code, message string) {
-	payload, _ := json.Marshal(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
-	_ = client.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	_ = client.conn.WriteMessage(websocket.TextMessage, payload)
+	_ = client.sendAndClose(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
 }
 
 func admissionError(err error) (string, string) {
@@ -207,7 +205,7 @@ func admissionError(err error) (string, string) {
 	}
 }
 
-func (s *Server) Close() {
+func (s *Server) broadcastReset() {
 	s.mu.Lock()
 	clients := make([]*Client, 0, len(s.clients))
 	for client := range s.clients {
@@ -215,6 +213,22 @@ func (s *Server) Close() {
 	}
 	s.mu.Unlock()
 	for _, client := range clients {
-		client.Close()
+		_ = client.sendAndClose(protocol.ResetMessage{Type: protocol.MessageReset})
+	}
+}
+
+func (s *Server) Close() {
+	if s.unsubscribe != nil {
+		s.unsubscribe()
+		s.unsubscribe = nil
+	}
+	s.mu.Lock()
+	clients := make([]*Client, 0, len(s.clients))
+	for client := range s.clients {
+		clients = append(clients, client)
+	}
+	s.mu.Unlock()
+	for _, client := range clients {
+		client.finishClose()
 	}
 }

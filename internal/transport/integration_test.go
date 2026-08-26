@@ -188,3 +188,80 @@ func readLayout(t *testing.T, conn *websocket.Conn) protocol.LayoutMessage {
 	}
 	return message
 }
+
+func newTransportServer(t *testing.T) (*Server, *session.Session, *transportFakeFactory) {
+	t.Helper()
+	library, err := layout.LoadDefault("", "xbox-default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory := &transportFakeFactory{}
+	sess, err := session.New(library, device.NewManager(factory))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := input.NewHandler(sess, diagnostics.NewTrace(64), &diagnostics.Metrics{})
+	server := NewServer(sess, handler, library, 60)
+	t.Cleanup(func() {
+		handler.Close()
+		server.Close()
+		_ = sess.Close()
+	})
+	return server, sess, factory
+}
+
+func TestKickDeliversCloseMessageBeforeSocketClose(t *testing.T) {
+	server, sess, _ := newTransportServer(t)
+	httpServer := httptest.NewServer(server)
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws"
+	conn := dialTransportClient(t, wsURL, httpServer.URL, sess.Code())
+	defer conn.Close()
+	welcome := readWelcome(t, conn)
+	_ = readLayout(t, conn)
+	if err := sess.Kick(welcome.PlayerID); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("close message never arrived: %v", err)
+	}
+	var message protocol.CloseMessage
+	if err := json.Unmarshal(data, &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.Type != protocol.MessageClose || message.Reason != "kicked" {
+		t.Fatalf("got %s, want close/kicked", data)
+	}
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatal("socket stayed open after the kick close message")
+	}
+}
+
+func TestSessionResetBroadcastsToConnectedClients(t *testing.T) {
+	server, sess, _ := newTransportServer(t)
+	httpServer := httptest.NewServer(server)
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws"
+	conn := dialTransportClient(t, wsURL, httpServer.URL, sess.Code())
+	defer conn.Close()
+	_ = readWelcome(t, conn)
+	_ = readLayout(t, conn)
+	if err := sess.NewSession(); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("reset message never arrived: %v", err)
+	}
+	var message protocol.ResetMessage
+	if err := json.Unmarshal(data, &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.Type != protocol.MessageReset {
+		t.Fatalf("got %s, want session.reset", data)
+	}
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatal("socket stayed open after the session reset")
+	}
+}

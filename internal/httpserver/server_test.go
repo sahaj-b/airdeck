@@ -2,10 +2,16 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/sahaj-b/airdeck/internal/config"
 	"github.com/sahaj-b/airdeck/internal/device"
 	"github.com/sahaj-b/airdeck/internal/diagnostics"
@@ -84,6 +90,122 @@ func TestServerCanRestartAfterClose(t *testing.T) {
 	defer cancel()
 	if err := server.Close(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAdminRoutesUseRemoteAddressForLoopbackGuard(t *testing.T) {
+	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	handler := server.routes(false)
+	for _, path := range []string{"/dashboard", "/api/admin/state", "/api/admin/ws"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.RemoteAddr = "192.168.1.20:4321"
+		req.Header.Set("X-Forwarded-For", "127.0.0.1")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusForbidden)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/state", nil)
+	req.RemoteAddr = "[::ffff:127.0.0.1]:4321"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("mapped loopback status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestAdminJoinToggleReturnsUpdatedState(t *testing.T) {
+	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/joins", strings.NewReader(`{"acceptingJoins":false}`))
+	req.RemoteAddr = "127.0.0.1:4321"
+	response := httptest.NewRecorder()
+	server.routes(false).ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("toggle status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var state adminState
+	if err := json.Unmarshal(response.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.AcceptingJoins {
+		t.Fatal("admin state still accepts joins")
+	}
+}
+
+func TestAdminWebSocketStreamsSnapshotAndEvents(t *testing.T) {
+	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	wsURL := "ws://127.0.0.1:" + strconv.Itoa(server.publicPort) + "/api/admin/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var initial adminState
+	if err := json.Unmarshal(data, &initial); err != nil {
+		t.Fatalf("initial snapshot is not an adminState: %v", err)
+	}
+	if initial.Code == "" || !initial.AcceptingJoins {
+		t.Fatalf("initial snapshot = %+v", initial)
+	}
+	sess.SetAcceptingJoins(false)
+	_, data, err = conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event adminEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatalf("update is not an adminEvent: %v", err)
+	}
+	if event.Type != "joins" || event.State.AcceptingJoins {
+		t.Fatalf("event = %+v", event)
+	}
+}
+
+func TestRebindFromSettingsHandlerDoesNotDeadlock(t *testing.T) {
+	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	oldPort := server.publicPort
+	targetPort := freePort(t)
+	client := &http.Client{Timeout: 5 * time.Second}
+	body := strings.NewReader(`{"port":` + strconv.Itoa(targetPort) + `}`)
+	req, err := http.NewRequest(http.MethodPut, "http://127.0.0.1:"+strconv.Itoa(oldPort)+"/api/admin/settings", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.RemoteAddr = "127.0.0.1:12345"
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("settings rebind from its own handler: %v", err)
+	}
+	resp.Body.Close()
+	if server.publicPort != targetPort {
+		t.Fatalf("public port = %d, want %d", server.publicPort, targetPort)
+	}
+	// The replacement listener must actually serve requests.
+	stateReq, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(targetPort)+"/api/admin/state", nil)
+	stateReq.RemoteAddr = "127.0.0.1:12345"
+	stateResp, err := client.Do(stateReq)
+	if err != nil {
+		t.Fatalf("state on new port: %v", err)
+	}
+	stateResp.Body.Close()
+	if stateResp.StatusCode != http.StatusOK {
+		t.Fatalf("state status on new port = %d", stateResp.StatusCode)
 	}
 }
 

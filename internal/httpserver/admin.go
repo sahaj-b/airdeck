@@ -2,7 +2,11 @@ package httpserver
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -21,6 +25,13 @@ type adminState struct {
 	Config            config.Config            `json:"config"`
 	Layouts           []layout.Summary         `json:"layouts"`
 	Players           []session.PlayerSnapshot `json:"players"`
+}
+
+type adminEvent struct {
+	Type    string                  `json:"type"`
+	Player  *session.PlayerSnapshot `json:"player,omitempty"`
+	Message string                  `json:"message,omitempty"`
+	State   adminState              `json:"state"`
 }
 
 func (s *Server) routes(adminOnly bool) http.Handler {
@@ -43,7 +54,7 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 		s.staticHandler(w, r)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if adminOnly && !strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/dashboard" {
+		if adminOnly && !strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/dashboard" && !strings.HasPrefix(r.URL.Path, "/assets/") {
 			http.NotFound(w, r)
 			return
 		}
@@ -58,7 +69,18 @@ func (s *Server) currentState() adminState {
 	s.mu.Lock()
 	cfg, publicPort, adminPort := s.options.Config, s.publicPort, s.adminPort
 	s.mu.Unlock()
-	return adminState{Code: s.options.Session.Code(), AcceptingJoins: s.options.Session.AcceptingJoins(), AdvertisedJoinURL: s.AdvertisedJoinURL(), PublicPort: publicPort, AdminPort: adminPort, Config: cfg, Layouts: s.options.Layouts.Summaries(), Players: s.options.Session.Players()}
+	players := s.options.Session.Players()
+	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
+	return adminState{
+		Code:              s.options.Session.Code(),
+		AcceptingJoins:    s.options.Session.AcceptingJoins(),
+		AdvertisedJoinURL: s.AdvertisedJoinURL(),
+		PublicPort:        publicPort,
+		AdminPort:         adminPort,
+		Config:            cfg,
+		Layouts:           s.options.Layouts.Summaries(),
+		Players:           players,
+	}
 }
 
 func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +100,7 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			AcceptingJoins bool `json:"acceptingJoins"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := decodeJSON(r, &body); err != nil {
 			writeErrorStatus(w, err, http.StatusBadRequest)
 			return
 		}
@@ -106,7 +128,7 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		AdvertisedPort *int    `json:"advertisedPort"`
 		DefaultLayout  *string `json:"defaultLayout"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+	if err := decodeJSON(r, &update); err != nil {
 		writeErrorStatus(w, err, http.StatusBadRequest)
 		return
 	}
@@ -130,6 +152,10 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, err, http.StatusBadRequest)
 		return
 	}
+	if _, ok := s.options.Layouts.Get(current.DefaultLayout); !ok {
+		writeErrorStatus(w, fmt.Errorf("layout %q is not available", current.DefaultLayout), http.StatusBadRequest)
+		return
+	}
 	if current.Bind != previous.Bind || current.Port != previous.Port {
 		if err := s.Rebind(r.Context(), current); err != nil {
 			writeErrorStatus(w, err, http.StatusConflict)
@@ -137,6 +163,14 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		s.UpdateConfig(current)
+	}
+	if current.DefaultLayout != previous.DefaultLayout {
+		if err := s.options.Session.SetDefaultLayout(current.DefaultLayout); err != nil {
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+	} else if current != previous {
+		s.options.Session.NotifySettings()
 	}
 	if s.options.OnSettings != nil {
 		if err := s.options.OnSettings(current); err != nil {
@@ -157,7 +191,7 @@ func (s *Server) playerAPI(w http.ResponseWriter, r *http.Request, value string)
 	switch action {
 	case "kick":
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			methodNotAllowed(w)
 			return
 		}
 		if err := s.options.Session.Kick(id); err != nil {
@@ -166,13 +200,13 @@ func (s *Server) playerAPI(w http.ResponseWriter, r *http.Request, value string)
 		}
 	case "move":
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			methodNotAllowed(w)
 			return
 		}
 		var body struct {
 			Slot int `json:"slot"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := decodeJSON(r, &body); err != nil {
 			writeErrorStatus(w, err, http.StatusBadRequest)
 			return
 		}
@@ -182,13 +216,13 @@ func (s *Server) playerAPI(w http.ResponseWriter, r *http.Request, value string)
 		}
 	case "layout":
 		if r.Method != http.MethodPut {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			methodNotAllowed(w)
 			return
 		}
 		var body struct {
 			LayoutID string `json:"layoutId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := decodeJSON(r, &body); err != nil {
 			writeErrorStatus(w, err, http.StatusBadRequest)
 			return
 		}
@@ -218,10 +252,7 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 		_ = conn.Close()
 	}()
-	if err := conn.WriteJSON(s.currentState()); err != nil {
-		return
-	}
-	events := make(chan any, 32)
+	events := make(chan session.Event, 32)
 	unsubscribe := s.options.Session.Subscribe(func(event session.Event) {
 		select {
 		case events <- event:
@@ -229,6 +260,9 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	defer unsubscribe()
+	if err := conn.WriteJSON(s.currentState()); err != nil {
+		return
+	}
 	readDone := make(chan struct{})
 	go func() {
 		for {
@@ -243,11 +277,27 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 		case <-readDone:
 			return
 		case event := <-events:
-			if err := conn.WriteJSON(event); err != nil {
+			message := adminEvent{Type: event.Type, Player: event.Player, Message: event.Message, State: s.currentState()}
+			if err := conn.WriteJSON(message); err != nil {
 				return
 			}
 		}
 	}
+}
+
+func decodeJSON(r *http.Request, value any) error {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("request contains trailing data")
+	}
+	return nil
+}
+
+func methodNotAllowed(w http.ResponseWriter) {
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

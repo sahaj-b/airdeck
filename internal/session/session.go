@@ -46,6 +46,7 @@ type Session struct {
 	players        map[string]*Player
 	slots          [maxPlayers]*Player
 	layouts        *layout.Library
+	defaultLayout  string
 	devices        *device.Manager
 	listeners      []func(Event)
 }
@@ -58,7 +59,7 @@ func New(layouts *layout.Library, devices *device.Manager) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Session{code: code, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, devices: devices}, nil
+	return &Session{code: code, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices}, nil
 }
 
 func newCode() (string, error) {
@@ -170,10 +171,10 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 		return Admission{}, fmt.Errorf("generate reconnect id: %w", err)
 	}
 	if selectedLayout == "" {
-		selectedLayout = s.layouts.Default().ID
+		selectedLayout = s.defaultLayout
 	}
 	if _, ok := s.layouts.Get(selectedLayout); !ok {
-		selectedLayout = s.layouts.Default().ID
+		selectedLayout = s.defaultLayout
 	}
 	name := strings.TrimSpace(displayName)
 	if runes := []rune(name); len(runes) > 40 {
@@ -371,8 +372,11 @@ func (s *Session) Kick(id string) error {
 		s.mu.RUnlock()
 		return ErrPlayerNotFound
 	}
-	close := player.Close
+	send, close := player.Send, player.Close
 	s.mu.RUnlock()
+	if send != nil {
+		_ = send(protocol.CloseMessage{Type: protocol.MessageClose, Reason: "kicked"})
+	}
 	if close != nil {
 		close()
 	}
@@ -468,7 +472,8 @@ func (s *Session) Move(id string, target int) error {
 }
 
 func (s *Session) SetLayout(id, layoutID string) error {
-	if _, ok := s.layouts.Get(layoutID); !ok {
+	document, ok := s.layouts.Get(layoutID)
+	if !ok {
 		return fmt.Errorf("layout %q is not available", layoutID)
 	}
 	s.mu.Lock()
@@ -478,10 +483,27 @@ func (s *Session) SetLayout(id, layoutID string) error {
 		return ErrPlayerNotFound
 	}
 	player.LayoutID = layoutID
+	send := player.Send
 	s.mu.Unlock()
+	if send != nil {
+		_ = send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: document.ID, Layout: document})
+	}
 	s.emit(Event{Type: "player.layout", Player: s.snapshotByID(id)})
 	return nil
 }
+
+func (s *Session) SetDefaultLayout(layoutID string) error {
+	if _, ok := s.layouts.Get(layoutID); !ok {
+		return fmt.Errorf("layout %q is not available", layoutID)
+	}
+	s.mu.Lock()
+	s.defaultLayout = layoutID
+	s.mu.Unlock()
+	s.emit(Event{Type: "settings"})
+	return nil
+}
+
+func (s *Session) NotifySettings() { s.emit(Event{Type: "settings"}) }
 
 func (s *Session) Layout(id string) (layout.Document, error) {
 	s.mu.RLock()
@@ -490,11 +512,15 @@ func (s *Session) Layout(id string) (layout.Document, error) {
 	if player != nil {
 		layoutID = player.LayoutID
 	}
+	defaultID := s.defaultLayout
 	s.mu.RUnlock()
 	if player == nil {
 		return layout.Document{}, ErrPlayerNotFound
 	}
 	doc, ok := s.layouts.Get(layoutID)
+	if !ok {
+		doc, ok = s.layouts.Get(defaultID)
+	}
 	if !ok {
 		return s.layouts.Default(), nil
 	}
@@ -533,6 +559,10 @@ func (s *Session) NewSession() error {
 	s.players = make(map[string]*Player)
 	s.slots = [maxPlayers]*Player{}
 	s.mu.Unlock()
+	// Notify connected clients before their close callbacks run. The transport
+	// can flush the reset message and then close each socket without leaving
+	// phones stuck on the previous session.
+	s.emit(Event{Type: "session.reset"})
 	for _, player := range players {
 		if player.Close != nil {
 			player.Close()
@@ -541,7 +571,6 @@ func (s *Session) NewSession() error {
 	if err := s.devices.DestroyAll(); err != nil {
 		return err
 	}
-	s.emit(Event{Type: "session.reset"})
 	return nil
 }
 
