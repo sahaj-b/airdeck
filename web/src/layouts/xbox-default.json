@@ -1,0 +1,29 @@
+{
+  "id": "xbox-default",
+  "name": "Xbox default",
+  "schemaVersion": 1,
+  "defaultOrientation": "landscape",
+  "sections": [
+    {"id":"left","rect":{"x":0,"y":0,"width":0.34,"height":1},"controls":[
+      {"id":"left-stick","type":"joystick","rect":{"x":0.08,"y":0.25,"width":0.42,"height":0.42},"label":"Left stick","visible":true,"binding":"leftStick","orientations":{"portrait":{"x":0.1,"y":0.56,"width":0.34,"height":0.25}}},
+      {"id":"dpad","type":"dpad","rect":{"x":0.52,"y":0.25,"width":0.36,"height":0.36},"label":"D-pad","visible":true,"bindings":{"up":"dpadUp","down":"dpadDown","left":"dpadLeft","right":"dpadRight"},"orientations":{"portrait":{"x":0.54,"y":0.57,"width":0.36,"height":0.25}}},
+      {"id":"back","type":"button","rect":{"x":0.49,"y":0.73,"width":0.15,"height":0.12},"label":"Back","visible":true,"binding":"back"},
+      {"id":"start","type":"button","rect":{"x":0.67,"y":0.73,"width":0.15,"height":0.12},"label":"Start","visible":true,"binding":"start"}
+    ]},
+    {"id":"right","rect":{"x":0.66,"y":0,"width":0.34,"height":1},"controls":[
+      {"id":"right-stick","type":"joystick","rect":{"x":0.02,"y":0.25,"width":0.42,"height":0.42},"label":"Right stick","visible":true,"binding":"rightStick","orientations":{"portrait":{"x":0.1,"y":0.29,"width":0.34,"height":0.25}}},
+      {"id":"south","type":"button","rect":{"x":0.54,"y":0.42,"width":0.2,"height":0.2},"label":"A","visible":true,"binding":"south"},
+      {"id":"east","type":"button","rect":{"x":0.76,"y":0.58,"width":0.2,"height":0.2},"label":"B","visible":true,"binding":"east"},
+      {"id":"west","type":"button","rect":{"x":0.32,"y":0.58,"width":0.2,"height":0.2},"label":"X","visible":true,"binding":"west"},
+      {"id":"north","type":"button","rect":{"x":0.54,"y":0.74,"width":0.2,"height":0.2},"label":"Y","visible":true,"binding":"north"},
+      {"id":"lb","type":"button","rect":{"x":0.02,"y":0.04,"width":0.3,"height":0.12},"label":"LB","visible":true,"binding":"leftShoulder"},
+      {"id":"rb","type":"button","rect":{"x":0.67,"y":0.04,"width":0.3,"height":0.12},"label":"RB","visible":true,"binding":"rightShoulder"},
+      {"id":"lt","type":"trigger","rect":{"x":0.34,"y":0.04,"width":0.28,"height":0.12},"label":"LT","visible":true,"binding":"leftTrigger"},
+      {"id":"rt","type":"trigger","rect":{"x":0.37,"y":0.2,"width":0.28,"height":0.12},"label":"RT","visible":true,"binding":"rightTrigger"},
+      {"id":"guide","type":"button","rect":{"x":0.35,"y":0.04,"width":0.3,"height":0.1},"label":"Guide","visible":false,"binding":"guide"},
+      {"id":"ls-click","type":"button","rect":{"x":0.03,"y":0.73,"width":0.18,"height":0.12},"label":"L3","visible":false,"binding":"leftStick"},
+      {"id":"rs-click","type":"button","rect":{"x":0.22,"y":0.73,"width":0.18,"height":0.12},"label":"R3","visible":false,"binding":"rightStick"}
+    ]}
+  ],
+  "assets": []
+}

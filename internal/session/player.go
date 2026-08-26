@@ -1,0 +1,66 @@
+package session
+
+import "time"
+
+type PlayerState string
+
+const (
+	StateJoining           PlayerState = "joining"
+	StateActive            PlayerState = "active"
+	StateStale             PlayerState = "stale"
+	StateDisconnectedGrace PlayerState = "disconnected-grace"
+	StateDeviceError       PlayerState = "device-error"
+	StateClosed            PlayerState = "closed"
+)
+
+type Player struct {
+	ID            string
+	Slot          int
+	Name          string
+	FallbackName  string
+	Accent        string
+	State         PlayerState
+	LayoutID      string
+	Generation    uint64
+	ReconnectID   string
+	LastInput     time.Time
+	LastPong      time.Time
+	RTT           time.Duration
+	DeviceStatus  string
+	DeviceReason  string
+	RumbleCapable bool
+	Send          func(any) error
+	Close         func()
+	LastSequence  uint32
+	HasSequence   bool
+	GraceDeadline time.Time
+}
+
+type PlayerSnapshot struct {
+	ID            string      `json:"id"`
+	Slot          int         `json:"slot"`
+	Name          string      `json:"name"`
+	FallbackName  string      `json:"fallbackName"`
+	Accent        string      `json:"accent"`
+	State         PlayerState `json:"state"`
+	LayoutID      string      `json:"layoutId"`
+	Generation    uint64      `json:"generation"`
+	ReconnectID   string      `json:"-"`
+	LastInput     time.Time   `json:"lastInput"`
+	LastPong      time.Time   `json:"lastPong"`
+	RTT           int64       `json:"rttNanos"`
+	DeviceStatus  string      `json:"deviceStatus"`
+	DeviceReason  string      `json:"deviceReason,omitempty"`
+	RumbleCapable bool        `json:"rumbleCapable"`
+	GraceDeadline time.Time   `json:"graceDeadline,omitempty"`
+}
+
+func (p *Player) Snapshot() PlayerSnapshot {
+	return PlayerSnapshot{
+		ID: p.ID, Slot: p.Slot, Name: p.Name, FallbackName: p.FallbackName, Accent: p.Accent,
+		State: p.State, LayoutID: p.LayoutID, Generation: p.Generation, ReconnectID: p.ReconnectID,
+		LastInput: p.LastInput,
+		LastPong:  p.LastPong, RTT: p.RTT.Nanoseconds(), DeviceStatus: p.DeviceStatus,
+		DeviceReason: p.DeviceReason, RumbleCapable: p.RumbleCapable, GraceDeadline: p.GraceDeadline,
+	}
+}

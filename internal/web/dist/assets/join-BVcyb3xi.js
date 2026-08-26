@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-P2Xu9kJm.js";var e=document.querySelector(`#root`);if(!e)throw Error(`join root is missing`);var t=document.createElement(`h1`);t.textContent=`Airdeck controller`;var n=document.createElement(`p`);n.textContent=`The touch controller runtime is not installed in this build.`,e.append(t,n);

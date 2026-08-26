@@ -1,0 +1,9 @@
+/airdeck
+/lanbench
+web/node_modules/
+web/.vite/
+benchmarks/
+*.tmp
+*.log
+.airdeck-config/
+.DS_Store
