@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDeadzone,
   dpadDirection,
+  joystickVisualOffset,
   normalizeJoystickPoint,
 } from './pointer-input';
 
@@ -20,6 +21,30 @@ describe('pointer input math', () => {
     });
     expect(normalizeJoystickPoint({ x: 200, y: 100 }, rect).x).toBe(1);
     expect(normalizeJoystickPoint({ x: 100, y: 200 }, rect).y).toBe(1);
+  });
+
+  it('tracks the finger 1:1 and clamps the thumb center to the rim', () => {
+    const rect = { left: 0, top: 0, width: 200, height: 200 };
+    expect(joystickVisualOffset({ x: 110, y: 100 }, rect)).toEqual({
+      x: 0.1,
+      y: 0,
+    });
+    expect(joystickVisualOffset({ x: 200, y: 100 }, rect)).toEqual({
+      x: 1,
+      y: 0,
+    });
+    expect(joystickVisualOffset({ x: 300, y: 100 }, rect)).toEqual({
+      x: 1,
+      y: 0,
+    });
+  });
+
+  it('pins the thumb to the circular rim in corners instead of the square', () => {
+    const rect = { left: 0, top: 0, width: 200, height: 200 };
+    const corner = joystickVisualOffset({ x: 200, y: 200 }, rect);
+    expect(Math.hypot(corner.x, corner.y)).toBeCloseTo(1);
+    expect(corner.x).toBeCloseTo(Math.SQRT1_2);
+    expect(corner.y).toBeCloseTo(Math.SQRT1_2);
   });
 
   it('maps the dominant touch axis to the d-pad binding', () => {

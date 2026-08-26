@@ -72,7 +72,7 @@ describe('FeedbackController', () => {
   it('holds vibration for the whole rumble and cancels on stop', () => {
     const vibrate = vi.fn();
     const feedback = new FeedbackController(
-      { haptics: true, sound: false },
+      { pressVibrationMs: 40, rumble: true, sound: false },
       { navigator: createNavigator(vibrate) },
     );
 
@@ -92,7 +92,7 @@ describe('FeedbackController', () => {
   it('buzzes on button press when the game is silent', () => {
     const vibrate = vi.fn();
     const feedback = new FeedbackController(
-      { haptics: true, sound: false },
+      { pressVibrationMs: 50, rumble: true, sound: false },
       { navigator: createNavigator(vibrate) },
     );
 
@@ -100,10 +100,21 @@ describe('FeedbackController', () => {
     expect(vibrate).toHaveBeenCalledWith(50);
   });
 
+  it('uses the configured press vibration duration', () => {
+    const vibrate = vi.fn();
+    const feedback = new FeedbackController(
+      { pressVibrationMs: 70, rumble: true, sound: false },
+      { navigator: createNavigator(vibrate) },
+    );
+
+    feedback.press();
+    expect(vibrate).toHaveBeenCalledWith(70);
+  });
+
   it('does not let a button press truncate a held game rumble', () => {
     const vibrate = vi.fn();
     const feedback = new FeedbackController(
-      { haptics: true, sound: false },
+      { pressVibrationMs: 40, rumble: true, sound: false },
       { navigator: createNavigator(vibrate) },
     );
     feedback.rumble(RUMBLE_START);
@@ -118,7 +129,7 @@ describe('FeedbackController', () => {
 
   it('plays a click when sound is enabled', () => {
     const feedback = new FeedbackController(
-      { haptics: false, sound: true },
+      { pressVibrationMs: 0, rumble: false, sound: true },
       { window: createWindow() },
     );
 
@@ -128,10 +139,24 @@ describe('FeedbackController', () => {
     expect(context?.oscillators[0].frequency.value).toBe(660);
   });
 
-  it('skips vibration entirely when haptics are disabled', () => {
+  it('still rumbles when press vibration is off', () => {
     const vibrate = vi.fn();
     const feedback = new FeedbackController(
-      { haptics: false, sound: false },
+      { pressVibrationMs: 0, rumble: true, sound: false },
+      { navigator: createNavigator(vibrate) },
+    );
+
+    feedback.press();
+    expect(vibrate).not.toHaveBeenCalled();
+
+    feedback.rumble(RUMBLE_START);
+    expect(vibrate).toHaveBeenCalledWith(999999);
+  });
+
+  it('skips vibration entirely when press vibration and rumble are off', () => {
+    const vibrate = vi.fn();
+    const feedback = new FeedbackController(
+      { pressVibrationMs: 0, rumble: false, sound: false },
       { navigator: createNavigator(vibrate) },
     );
 

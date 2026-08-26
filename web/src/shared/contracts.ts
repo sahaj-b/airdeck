@@ -129,6 +129,7 @@ export interface AdminState {
     advertisedPort: number;
     defaultLayout: string;
     inputRate: number;
+    gracePeriodSeconds: number;
   };
   layouts: LayoutSummary[];
   players: PlayerSnapshot[];

@@ -15,7 +15,9 @@ import (
 	"github.com/sahaj-b/airdeck/internal/uinput"
 )
 
-const GracePeriod = 10 * time.Second
+// DefaultGracePeriod reserves a disconnected player's slot while a transient
+// client blip resolves. The host can override it per session.
+const DefaultGracePeriod = 5 * time.Second
 
 var (
 	ErrInvalidCode      = errors.New("invalid session code")
@@ -49,10 +51,11 @@ type Session struct {
 	layouts        *layout.Library
 	defaultLayout  string
 	devices        *device.Manager
+	gracePeriod    time.Duration
 	listeners      []func(Event)
 }
 
-func New(layouts *layout.Library, devices *device.Manager) (*Session, error) {
+func New(layouts *layout.Library, devices *device.Manager, gracePeriod time.Duration) (*Session, error) {
 	if layouts == nil || devices == nil {
 		return nil, errors.New("session requires layout library and device manager")
 	}
@@ -60,7 +63,10 @@ func New(layouts *layout.Library, devices *device.Manager) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Session{code: code, codeRequired: true, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices}, nil
+	if gracePeriod <= 0 {
+		gracePeriod = DefaultGracePeriod
+	}
+	return &Session{code: code, codeRequired: true, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices, gracePeriod: gracePeriod}, nil
 }
 
 func newCode() (string, error) {
@@ -341,14 +347,14 @@ func (s *Session) Disconnect(id string, generation uint64) error {
 	player.Generation++
 	generation = player.Generation
 	player.State = StateDisconnectedGrace
-	player.GraceDeadline = time.Now().Add(GracePeriod)
+	player.GraceDeadline = time.Now().Add(s.gracePeriod)
 	player.Send = nil
 	player.Close = nil
 	slot := player.Slot
 	s.mu.Unlock()
 	_ = s.devices.Neutralize(slot)
 	s.emit(Event{Type: "player.disconnected", Player: s.snapshotByID(id)})
-	time.AfterFunc(GracePeriod, func() { s.expireGrace(id, generation) })
+	time.AfterFunc(s.gracePeriod, func() { s.expireGrace(id, generation) })
 	return nil
 }
 
@@ -512,6 +518,18 @@ func (s *Session) SetDefaultLayout(layoutID string) error {
 	s.mu.Unlock()
 	s.emit(Event{Type: "settings"})
 	return nil
+}
+
+// SetGracePeriod changes the reconnect grace window for the running session.
+// It affects players who disconnect after the update, not in-flight deadlines.
+func (s *Session) SetGracePeriod(gracePeriod time.Duration) {
+	if gracePeriod <= 0 {
+		return
+	}
+	s.mu.Lock()
+	s.gracePeriod = gracePeriod
+	s.mu.Unlock()
+	s.emit(Event{Type: "settings"})
 }
 
 func (s *Session) NotifySettings() { s.emit(Event{Type: "settings"}) }

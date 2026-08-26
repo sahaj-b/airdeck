@@ -89,3 +89,44 @@ func TestNoCodeOverride(t *testing.T) {
 		t.Fatal("expected NoCode override to apply")
 	}
 }
+
+func TestGracePeriodDefault(t *testing.T) {
+	cfg := Defaults()
+	if cfg.GracePeriodSeconds != 5 {
+		t.Fatalf("grace period default = %d, want 5", cfg.GracePeriodSeconds)
+	}
+}
+
+func TestGracePeriodMigratesFromZero(t *testing.T) {
+	cfg := migrate(Config{Version: 0, GracePeriodSeconds: 0})
+	if cfg.GracePeriodSeconds != 5 {
+		t.Fatalf("grace period after migration = %d, want 5", cfg.GracePeriodSeconds)
+	}
+}
+
+func TestGracePeriodOverride(t *testing.T) {
+	val := 15
+	updated, err := ApplyOverrides(Defaults(), Overrides{GracePeriodSeconds: &val})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.GracePeriodSeconds != 15 {
+		t.Fatalf("grace period = %d, want 15", updated.GracePeriodSeconds)
+	}
+}
+
+func TestGracePeriodValidationRejectsZero(t *testing.T) {
+	cfg := Defaults()
+	cfg.GracePeriodSeconds = 0
+	if err := Validate(cfg); err == nil {
+		t.Fatal("zero grace period should be rejected")
+	}
+}
+
+func TestGracePeriodValidationRejectsOutOfRange(t *testing.T) {
+	cfg := Defaults()
+	cfg.GracePeriodSeconds = 301
+	if err := Validate(cfg); err == nil {
+		t.Fatal("grace period > 300 should be rejected")
+	}
+}

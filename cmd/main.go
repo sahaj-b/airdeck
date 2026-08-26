@@ -99,6 +99,7 @@ func runServe(args []string) error {
 	advertisedPort := flags.Int("advertised-port", -1, "advertised port override")
 	defaultLayout := flags.String("default-layout", "", "default layout override")
 	inputRate := flags.Int("input-rate", 0, "startup input rate override")
+	gracePeriod := flags.Int("grace-period", 0, "reconnect grace period override in seconds")
 	noCode := flags.Bool("no-code", false, "let clients join /join without entering a session code")
 	flags.BoolVar(noCode, "n", false, "shorthand for --no-code")
 	if err := flags.Parse(args); err != nil {
@@ -132,6 +133,9 @@ func runServe(args []string) error {
 	}
 	if *inputRate != 0 {
 		overrides.InputRate = inputRate
+	}
+	if *gracePeriod != 0 {
+		overrides.GracePeriodSeconds = gracePeriod
 	}
 	if *noCode {
 		overrides.NoCode = noCode

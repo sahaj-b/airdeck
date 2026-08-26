@@ -41,7 +41,7 @@ func TestWatchdogMarksPlayerStaleAndNeutralizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	factory := &inputFakeFactory{}
-	sess, err := session.New(library, device.NewManager(factory))
+	sess, err := session.New(library, device.NewManager(factory), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestHandlerRejectsStaleSequence(t *testing.T) {
 		t.Fatal(err)
 	}
 	factory := &inputFakeFactory{}
-	sess, err := session.New(library, device.NewManager(factory))
+	sess, err := session.New(library, device.NewManager(factory), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

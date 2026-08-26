@@ -53,6 +53,7 @@ export interface Control {
   geometry: Geometry;
   label: string;
   visible: boolean;
+  hitOnly?: boolean;
   shape?: ControlShape;
   binding?: Command;
   bindings?: DPadBindings;
