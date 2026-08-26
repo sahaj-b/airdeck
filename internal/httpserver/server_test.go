@@ -240,3 +240,67 @@ func TestRebindMaintainsLoopbackAdminListener(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestListenFallbackAdvancesPastOccupiedPort(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+	port := occupied.Addr().(*net.TCPAddr).Port
+	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	server.mu.Lock()
+	server.options.Config.Port = port
+	server.mu.Unlock()
+	if err := server.Start(); err != nil {
+		t.Fatalf("start with occupied port: %v", err)
+	}
+	if server.publicPort != port+1 {
+		t.Fatalf("public port = %d, want %d", server.publicPort, port+1)
+	}
+	if err := server.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStartFailsOnUnavailableBindAddress(t *testing.T) {
+	server, _, sess := newTestHTTPServer(t, "192.0.2.1")
+	defer sess.Close()
+	if err := server.Start(); err == nil {
+		t.Fatal("start on an unavailable bind address succeeded")
+	}
+	if server.publicLn != nil || server.adminLn != nil {
+		t.Fatal("failed start left listeners installed")
+	}
+}
+
+func TestRebindFailureKeepsOldListenerAlive(t *testing.T) {
+	server, cfg, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	oldPort := server.publicPort
+	cfg.Bind = "192.0.2.1"
+	if err := server.Rebind(context.Background(), cfg); err == nil {
+		t.Fatal("rebind to an unavailable address succeeded")
+	}
+	if server.publicPort != oldPort {
+		t.Fatalf("public port = %d after failed rebind, want %d", server.publicPort, oldPort)
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	stateReq, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(oldPort)+"/api/admin/state", nil)
+	stateReq.RemoteAddr = "127.0.0.1:12345"
+	response, err := client.Do(stateReq)
+	if err != nil {
+		t.Fatalf("old listener after failed rebind: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("old listener status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	if err := server.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

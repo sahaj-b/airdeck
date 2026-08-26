@@ -6,6 +6,7 @@ import (
 )
 
 type FrameTrace struct {
+	PlayerID      string        `json:"playerId"`
 	Sequence      uint32        `json:"sequence"`
 	ClientTime    uint64        `json:"clientTime"`
 	ReceivedAt    time.Time     `json:"receivedAt"`

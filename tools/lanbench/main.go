@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,18 +15,25 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/sahaj-b/airdeck/internal/diagnostics"
 	"github.com/sahaj-b/airdeck/internal/protocol"
 )
 
+type hostDiagnostics struct {
+	Summary diagnostics.Summary      `json:"summary"`
+	Trace   []diagnostics.FrameTrace `json:"trace,omitempty"`
+}
+
 type result struct {
-	Players      int      `json:"players"`
-	Rate         int      `json:"rate"`
-	Duration     string   `json:"duration"`
-	FramesSent   uint64   `json:"framesSent"`
-	DebugSamples uint64   `json:"debugSamples"`
-	StartedAt    string   `json:"startedAt"`
-	FinishedAt   string   `json:"finishedAt"`
-	Errors       []string `json:"errors,omitempty"`
+	Players      int              `json:"players"`
+	Rate         int              `json:"rate"`
+	Duration     string           `json:"duration"`
+	FramesSent   uint64           `json:"framesSent"`
+	DebugSamples uint64           `json:"debugSamples"`
+	StartedAt    string           `json:"startedAt"`
+	FinishedAt   string           `json:"finishedAt"`
+	Host         *hostDiagnostics `json:"host,omitempty"`
+	Errors       []string         `json:"errors,omitempty"`
 }
 
 func main() {
@@ -34,14 +43,15 @@ func main() {
 	duration := flag.Duration("duration", 5*time.Second, "benchmark duration")
 	rate := flag.Int("rate", 60, "input frame rate")
 	output := flag.String("output", "benchmarks/lanbench.json", "local JSON output path")
+	adminURL := flag.String("admin-url", "", "host admin URL for diagnostics (loopback; derived from advertised-url when empty)")
 	flag.Parse()
-	if err := run(*advertised, *code, *players, *duration, *rate, *output); err != nil {
+	if err := run(*advertised, *code, *players, *duration, *rate, *output, *adminURL); err != nil {
 		fmt.Fprintln(os.Stderr, "lanbench:", err)
 		os.Exit(1)
 	}
 }
 
-func run(advertised, code string, players int, duration time.Duration, rate int, output string) error {
+func run(advertised, code string, players int, duration time.Duration, rate int, output, adminURL string) error {
 	if advertised == "" || code == "" {
 		return errors.New("advertised-url and session-code are required")
 	}
@@ -54,6 +64,9 @@ func run(advertised, code string, players int, duration time.Duration, rate int,
 	wsURL, err := websocketURL(advertised)
 	if err != nil {
 		return err
+	}
+	if adminURL == "" {
+		adminURL = deriveAdminURL(advertised)
 	}
 	started := time.Now()
 	var totalFrames atomic.Uint64
@@ -74,12 +87,20 @@ func run(advertised, code string, players int, duration time.Duration, rate int,
 	}
 	group.Wait()
 	close(errorsCh)
+	// Allow the host watchdog to expire and record any late timing.
+	time.Sleep(500 * time.Millisecond)
 	var messages []string
 	for err := range errorsCh {
 		messages = append(messages, err.Error())
 	}
 	finished := time.Now()
-	data, err := json.MarshalIndent(result{Players: players, Rate: rate, Duration: duration.String(), FramesSent: totalFrames.Load(), DebugSamples: totalSamples.Load(), StartedAt: started.UTC().Format(time.RFC3339Nano), FinishedAt: finished.UTC().Format(time.RFC3339Nano), Errors: messages}, "", "  ")
+	var hostDiag *hostDiagnostics
+	if diag, err := fetchDiagnostics(adminURL); err == nil {
+		hostDiag = diag
+	} else {
+		messages = append(messages, "diagnostics: "+err.Error())
+	}
+	data, err := json.MarshalIndent(result{Players: players, Rate: rate, Duration: duration.String(), FramesSent: totalFrames.Load(), DebugSamples: totalSamples.Load(), StartedAt: started.UTC().Format(time.RFC3339Nano), FinishedAt: finished.UTC().Format(time.RFC3339Nano), Host: hostDiag, Errors: messages}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -93,6 +114,37 @@ func run(advertised, code string, players int, duration time.Duration, rate int,
 		return fmt.Errorf("%d benchmark clients failed", len(messages))
 	}
 	return nil
+}
+
+func deriveAdminURL(advertised string) string {
+	parsed, err := url.Parse(advertised)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	host := "127.0.0.1"
+	port := parsed.Port()
+	if port == "" {
+		port = "80"
+	}
+	return fmt.Sprintf("http://%s:%s", host, port)
+}
+
+func fetchDiagnostics(adminURL string) (*hostDiagnostics, error) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(adminURL + "/api/admin/diagnostics")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var diag hostDiagnostics
+	if err := json.Unmarshal(data, &diag); err != nil {
+		return nil, err
+	}
+	return &diag, nil
 }
 
 func websocketURL(advertised string) (string, error) {
@@ -161,8 +213,6 @@ func runClient(wsURL, code string, index int, duration time.Duration, rate int) 
 			}
 		case <-ticker.C:
 			next := sequence + 1
-			// Announce the frame before sending it so the host can match
-			// the debug trace's client time against the incoming frame.
 			if next%60 == 0 {
 				if err := conn.WriteJSON(protocol.DebugInputTrace{Type: protocol.MessageDebugTrace, Sequence: next, ClientTime: uint64(time.Now().UnixNano())}); err != nil {
 					return frames, samples, err

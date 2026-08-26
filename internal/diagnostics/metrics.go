@@ -7,11 +7,13 @@ import (
 )
 
 type ResourceSample struct {
-	At              time.Time `json:"at"`
-	Players         int       `json:"players"`
-	Goroutines      int       `json:"goroutines"`
-	Memory          uint64    `json:"memoryBytes"`
-	FileDescriptors int       `json:"fileDescriptors"`
+	At              time.Time     `json:"at"`
+	Players         int           `json:"players"`
+	Goroutines      int           `json:"goroutines"`
+	Memory          uint64        `json:"memoryBytes"`
+	FileDescriptors int           `json:"fileDescriptors"`
+	UserCPUTime     time.Duration `json:"userCpuTime"`
+	SystemCPUTime   time.Duration `json:"systemCpuTime"`
 }
 
 const metricSampleCap = 8192

@@ -67,3 +67,14 @@ func TestLoadMigratesVersionZeroAndRejectsFuture(t *testing.T) {
 		t.Fatal("future config version was accepted")
 	}
 }
+
+func TestLoadRejectsGarbageConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("garbage config was accepted")
+	}
+}

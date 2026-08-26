@@ -53,7 +53,7 @@ func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) err
 	duration := applied.Sub(applyStart)
 	h.metrics.Accepted()
 	h.metrics.Apply(duration)
-	h.trace.Add(diagnostics.FrameTrace{Sequence: frame.Seq, ClientTime: clientTime, ReceivedAt: received, AppliedAt: applied, ApplyDuration: duration})
+	h.trace.Add(diagnostics.FrameTrace{PlayerID: id, Sequence: frame.Seq, ClientTime: clientTime, ReceivedAt: received, AppliedAt: applied, ApplyDuration: duration})
 	h.resetWatchdog(id, generation, received)
 	return nil
 }
@@ -78,7 +78,7 @@ func (h *Handler) resetWatchdog(id string, generation uint64, received time.Time
 		if err := h.session.MarkStale(id, generation); err == nil {
 			delay := fired.Sub(received)
 			h.metrics.Watchdog(delay)
-			h.trace.Add(diagnostics.FrameTrace{ReceivedAt: received, Watchdog: true})
+			h.trace.Add(diagnostics.FrameTrace{PlayerID: id, ReceivedAt: received, Watchdog: true})
 		}
 	})
 	h.timers[id] = timer
@@ -125,3 +125,5 @@ func (h *Handler) takeClientTime(id string, sequence uint32) uint64 {
 }
 
 func (h *Handler) Metrics() diagnostics.Summary { return h.metrics.Summary() }
+
+func (h *Handler) TraceSnapshot() []diagnostics.FrameTrace { return h.trace.Snapshot() }

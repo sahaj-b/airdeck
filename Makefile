@@ -29,4 +29,4 @@ fmt:
 	pnpm --dir web format
 
 bench:
-	go run ./tools/lanbench --advertised-url "$(ADVERTISED_URL)" --session-code "$(SESSION_CODE)" --players "$(PLAYERS)" --duration "$(DURATION)" --rate "$(RATE)" --output "$(OUTPUT)"
+	go run ./tools/lanbench --advertised-url "$(ADVERTISED_URL)" --session-code "$(SESSION_CODE)" --players "$(PLAYERS)" --duration "$(DURATION)" --rate "$(RATE)" --output "$(OUTPUT)" --admin-url "$(ADMIN_URL)"
