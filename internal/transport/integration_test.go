@@ -62,7 +62,7 @@ func TestTwoWebSocketClientsStayBoundToSeparateDevices(t *testing.T) {
 		t.Fatal(err)
 	}
 	factory := &transportFakeFactory{}
-	sess, err := session.New(library, device.NewManager(factory))
+	sess, err := session.New(library, device.NewManager(factory), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestDeviceErrorAdmissionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sess, err := session.New(library, device.NewManager(failingFactory{}))
+	sess, err := session.New(library, device.NewManager(failingFactory{}), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func newTransportServer(t *testing.T) (*Server, *session.Session, *transportFake
 		t.Fatal(err)
 	}
 	factory := &transportFakeFactory{}
-	sess, err := session.New(library, device.NewManager(factory))
+	sess, err := session.New(library, device.NewManager(factory), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,7 +42,7 @@ func newTestHTTPServer(t *testing.T, bind string) (*Server, config.Config, *sess
 	if err != nil {
 		t.Fatal(err)
 	}
-	sess, err := session.New(library, device.NewManager(serverFakeFactory{}))
+	sess, err := session.New(library, device.NewManager(serverFakeFactory{}), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

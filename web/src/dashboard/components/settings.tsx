@@ -23,6 +23,9 @@ export function Settings({ state, onSave }: SettingsProps) {
   const [defaultLayout, setDefaultLayout] = useState(
     state.config.defaultLayout,
   );
+  const [gracePeriodSeconds, setGracePeriodSeconds] = useState(
+    String(state.config.gracePeriodSeconds),
+  );
 
   useEffect(() => {
     setBind(state.config.bind);
@@ -30,11 +33,13 @@ export function Settings({ state, onSave }: SettingsProps) {
     setAdvertisedHost(state.config.advertisedHost);
     setAdvertisedPort(String(state.config.advertisedPort));
     setDefaultLayout(state.config.defaultLayout);
+    setGracePeriodSeconds(String(state.config.gracePeriodSeconds));
   }, [
     state.config.advertisedHost,
     state.config.advertisedPort,
     state.config.bind,
     state.config.defaultLayout,
+    state.config.gracePeriodSeconds,
     state.config.port,
   ]);
 
@@ -46,6 +51,7 @@ export function Settings({ state, onSave }: SettingsProps) {
       advertisedHost: advertisedHost.trim(),
       advertisedPort: numberValue(advertisedPort),
       defaultLayout,
+      gracePeriodSeconds: numberValue(gracePeriodSeconds),
     });
   }
 
@@ -116,6 +122,20 @@ export function Settings({ state, onSave }: SettingsProps) {
                 </option>
               ))}
             </Select>
+          </label>
+          <label htmlFor="grace-period">
+            Reconnect grace period
+            <Input
+              id="grace-period"
+              type="number"
+              min="1"
+              max="300"
+              value={gracePeriodSeconds}
+              onChange={(event) => setGracePeriodSeconds(event.target.value)}
+            />
+            <small>
+              How long to reserve a disconnected player's slot, in seconds.
+            </small>
           </label>
           <div className="settings-submit">
             <Button type="submit">Save settings</Button>

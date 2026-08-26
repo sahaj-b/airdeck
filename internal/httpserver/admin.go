@@ -126,11 +126,12 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	current := s.options.Config
 	s.mu.Unlock()
 	var update struct {
-		Bind           *string `json:"bind"`
-		Port           *int    `json:"port"`
-		AdvertisedHost *string `json:"advertisedHost"`
-		AdvertisedPort *int    `json:"advertisedPort"`
-		DefaultLayout  *string `json:"defaultLayout"`
+		Bind               *string `json:"bind"`
+		Port               *int    `json:"port"`
+		AdvertisedHost     *string `json:"advertisedHost"`
+		AdvertisedPort     *int    `json:"advertisedPort"`
+		DefaultLayout      *string `json:"defaultLayout"`
+		GracePeriodSeconds *int    `json:"gracePeriodSeconds"`
 	}
 	if err := decodeJSON(r, &update); err != nil {
 		writeErrorStatus(w, err, http.StatusBadRequest)
@@ -173,7 +174,11 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 			writeErrorStatus(w, err, http.StatusBadRequest)
 			return
 		}
-	} else if current != previous {
+	}
+	if update.GracePeriodSeconds != nil && current.GracePeriodSeconds != previous.GracePeriodSeconds {
+		s.options.Session.SetGracePeriod(time.Duration(current.GracePeriodSeconds) * time.Second)
+	}
+	if current != previous {
 		s.options.Session.NotifySettings()
 	}
 	if s.options.OnSettings != nil {

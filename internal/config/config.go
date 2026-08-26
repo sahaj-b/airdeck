@@ -11,18 +11,19 @@ import (
 const CurrentVersion = 1
 
 type Config struct {
-	Version        int    `json:"version"`
-	Port           int    `json:"port"`
-	Bind           string `json:"bind"`
-	AdvertisedHost string `json:"advertisedHost"`
-	AdvertisedPort int    `json:"advertisedPort"`
-	DefaultLayout  string `json:"defaultLayout"`
-	InputRate      int    `json:"inputRate"`
-	NoCode         bool   `json:"noCode"`
+	Version            int    `json:"version"`
+	Port               int    `json:"port"`
+	Bind               string `json:"bind"`
+	AdvertisedHost     string `json:"advertisedHost"`
+	AdvertisedPort     int    `json:"advertisedPort"`
+	DefaultLayout      string `json:"defaultLayout"`
+	InputRate          int    `json:"inputRate"`
+	GracePeriodSeconds int    `json:"gracePeriodSeconds"`
+	NoCode             bool   `json:"noCode"`
 }
 
 func Defaults() Config {
-	return Config{Version: CurrentVersion, Port: 6969, Bind: "0.0.0.0", AdvertisedPort: 0, DefaultLayout: "xbox-default", InputRate: 60}
+	return Config{Version: CurrentVersion, Port: 6969, Bind: "0.0.0.0", AdvertisedPort: 0, DefaultLayout: "xbox-default", InputRate: 60, GracePeriodSeconds: 5}
 }
 
 func Load(path string) (Config, error) {
@@ -65,6 +66,9 @@ func migrate(cfg Config) Config {
 	if cfg.DefaultLayout == "" {
 		cfg.DefaultLayout = defaults.DefaultLayout
 	}
+	if cfg.GracePeriodSeconds == 0 {
+		cfg.GracePeriodSeconds = defaults.GracePeriodSeconds
+	}
 	return cfg
 }
 
@@ -77,6 +81,9 @@ func Validate(cfg Config) error {
 	}
 	if cfg.InputRate < 1 || cfg.InputRate > 240 {
 		return errors.New("input rate must be between 1 and 240")
+	}
+	if cfg.GracePeriodSeconds < 1 || cfg.GracePeriodSeconds > 300 {
+		return errors.New("grace period must be between 1 and 300 seconds")
 	}
 	if cfg.Bind == "" || cfg.DefaultLayout == "" {
 		return errors.New("config bind and default layout are required")
@@ -123,13 +130,14 @@ func Save(path string, cfg Config) error {
 }
 
 type Overrides struct {
-	Bind           *string
-	Port           *int
-	AdvertisedHost *string
-	AdvertisedPort *int
-	DefaultLayout  *string
-	InputRate      *int
-	NoCode         *bool
+	Bind               *string
+	Port               *int
+	AdvertisedHost     *string
+	AdvertisedPort     *int
+	DefaultLayout      *string
+	InputRate          *int
+	GracePeriodSeconds *int
+	NoCode             *bool
 }
 
 func ApplyOverrides(cfg Config, overrides Overrides) (Config, error) {
@@ -150,6 +158,9 @@ func ApplyOverrides(cfg Config, overrides Overrides) (Config, error) {
 	}
 	if overrides.InputRate != nil {
 		cfg.InputRate = *overrides.InputRate
+	}
+	if overrides.GracePeriodSeconds != nil {
+		cfg.GracePeriodSeconds = *overrides.GracePeriodSeconds
 	}
 	if overrides.NoCode != nil {
 		cfg.NoCode = *overrides.NoCode

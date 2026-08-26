@@ -37,7 +37,7 @@ func New(cfg config.Config, configPath string) (*App, error) {
 		return nil, err
 	}
 	devices := device.NewManager(device.UInputFactory{})
-	sess, err := session.New(layouts, devices)
+	sess, err := session.New(layouts, devices, time.Duration(cfg.GracePeriodSeconds)*time.Second)
 	if err != nil {
 		return nil, err
 	}

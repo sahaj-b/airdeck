@@ -38,6 +38,7 @@ export interface SettingsUpdate {
   advertisedHost?: string;
   advertisedPort?: number;
   defaultLayout?: string;
+  gracePeriodSeconds?: number;
 }
 
 export interface AdminEvent {

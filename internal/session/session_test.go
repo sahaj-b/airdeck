@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/sahaj-b/airdeck/internal/device"
 	"github.com/sahaj-b/airdeck/internal/layout"
@@ -50,7 +51,7 @@ func newTestSession(t *testing.T) (*Session, *sessionFakeFactory) {
 		t.Fatal(err)
 	}
 	factory := &sessionFakeFactory{}
-	session, err := New(library, device.NewManager(factory))
+	session, err := New(library, device.NewManager(factory), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func newTwoLayoutSession(t *testing.T) *Session {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := New(library, device.NewManager(&sessionFakeFactory{}))
+	session, err := New(library, device.NewManager(&sessionFakeFactory{}), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,5 +304,39 @@ func TestAdmitHonorsCodeRequiredToggle(t *testing.T) {
 	}
 	if admission.Reconnected {
 		t.Fatal("expected a fresh admission, not a reconnect")
+	}
+}
+
+func TestCustomGracePeriodFreesSlotAfterExpiry(t *testing.T) {
+	library, err := layout.LoadDefault("", "xbox-default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory := &sessionFakeFactory{}
+	sess, err := New(library, device.NewManager(factory), 10*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	admission, err := sess.Admit(sess.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Disconnect(admission.Player.ID, admission.Player.Generation); err != nil {
+		t.Fatal(err)
+	}
+	slot := admission.Player.Slot
+	if sess.slots[slot] == nil {
+		t.Fatal("slot should be reserved during grace")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if sess.slots[slot] != nil {
+		t.Fatal("slot should be free after grace expiry")
+	}
+	factory.mu.Lock()
+	destroyed := factory.devices[0].destroyed
+	factory.mu.Unlock()
+	if destroyed == 0 {
+		t.Fatal("device should be destroyed after grace expiry")
 	}
 }
