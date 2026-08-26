@@ -15,9 +15,31 @@ import (
 	"github.com/sahaj-b/airdeck/internal/setup"
 )
 
+const (
+	colorRed    = "31"
+	colorGreen  = "32"
+	colorYellow = "33"
+)
+
+// colorsEnabled reports whether stdout is a terminal and NO_COLOR is unset.
+func colorsEnabled() bool {
+	if _, set := os.LookupEnv("NO_COLOR"); set {
+		return false
+	}
+	info, err := os.Stdout.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func paint(code, text string) string {
+	if !colorsEnabled() {
+		return text
+	}
+	return "\x1b[" + code + "m" + text + "\x1b[0m"
+}
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "airdeck:", err)
+		fmt.Fprintln(os.Stderr, "airdeck:", paint(colorRed, err.Error()))
 		os.Exit(1)
 	}
 }
@@ -44,21 +66,28 @@ func runDoctor(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	if os.Geteuid() == 0 {
+		fmt.Fprintln(os.Stderr, paint(colorYellow, "warning: doctor as root checks root's access, not yours; rerun as your normal user"))
+	}
 	report, err := doctor.Run(*cleanup)
 	for _, check := range report.Checks {
-		fmt.Printf("%-32s %s: %s\n", check.Name, status(check.OK), check.Detail)
+		fmt.Printf("%-32s %s: %s\n", check.Name, checkStatus(check), check.Detail)
 	}
 	for _, leftover := range report.Leftovers {
-		fmt.Println("leftover airdeck device:", leftover)
+		fmt.Println(paint(colorRed, "leftover airdeck device: "+leftover))
 	}
 	return err
 }
 
-func status(ok bool) string {
-	if ok {
-		return "ok"
+func checkStatus(check doctor.Check) string {
+	code, text := colorGreen, "ok"
+	if !check.OK {
+		code, text = colorRed, "fail"
+		if check.Critical {
+			code = "1;" + colorRed
+		}
 	}
-	return "fail"
+	return paint(code, text)
 }
 
 func runServe(args []string) error {
@@ -74,7 +103,7 @@ func runServe(args []string) error {
 		return err
 	}
 	if os.Geteuid() == 0 {
-		return errors.New("serve must run as the normal user; run airdeck setup as root first")
+		return errors.New("serve must run as your normal user, not as root; run it without sudo")
 	}
 	if _, err := doctor.Run(false); err != nil {
 		return fmt.Errorf("serve prerequisites: %w", err)

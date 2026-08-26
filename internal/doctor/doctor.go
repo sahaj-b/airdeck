@@ -82,15 +82,24 @@ func infoMode(info os.FileInfo) string {
 }
 
 func inInputGroup() bool {
-	current, err := user.Current()
+	username := os.Getenv("SUDO_USER")
+	if username == "" {
+		if current, err := user.Current(); err == nil {
+			username = current.Username
+		} else {
+			return false
+		}
+	}
+	target, err := user.Lookup(username)
 	if err != nil {
 		return false
 	}
-	groups, err := current.GroupIds()
+	groupIDs, err := target.GroupIds()
 	if err != nil {
 		return false
 	}
-	for _, id := range groups {
+	groupIDs = append(groupIDs, target.Gid)
+	for _, id := range groupIDs {
 		group, err := user.LookupGroupId(id)
 		if err == nil && group.Name == "input" {
 			return true
