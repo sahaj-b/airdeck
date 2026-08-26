@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sahaj-b/airdeck/internal/config"
@@ -275,10 +276,19 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+	// Push the full state at 1 Hz so inputs, lastInput ages, and RTT refresh
+	// between session events. ApplyInput never emits an event, so without this
+	// the dashboard would freeze lastInput at the last join/kick/stale update.
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-readDone:
 			return
+		case <-ticker.C:
+			if err := conn.WriteJSON(adminEvent{Type: "state", State: s.currentState()}); err != nil {
+				return
+			}
 		case event := <-events:
 			message := adminEvent{Type: event.Type, Player: event.Player, Message: event.Message, State: s.currentState()}
 			if err := conn.WriteJSON(message); err != nil {

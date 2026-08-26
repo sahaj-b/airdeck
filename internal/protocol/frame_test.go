@@ -48,6 +48,29 @@ func TestDecodeFrameRejectsMalformedInput(t *testing.T) {
 	}
 }
 
+func TestIsNeutral(t *testing.T) {
+	if !(Frame{}).IsNeutral() {
+		t.Fatal("zero frame should be neutral")
+	}
+	cases := []struct {
+		name  string
+		frame Frame
+	}{
+		{"button", Frame{Buttons: BitSouth}},
+		{"stick x", Frame{LX: 1}},
+		{"stick y", Frame{RY: -1}},
+		{"left trigger", Frame{LT: 1}},
+		{"right trigger", Frame{RT: 255}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if test.frame.IsNeutral() {
+				t.Fatalf("frame %+v should not be neutral", test.frame)
+			}
+		})
+	}
+}
+
 func TestIsNewerSequenceWraps(t *testing.T) {
 	if !IsNewerSequence(1, ^uint32(0)) {
 		t.Fatal("expected wrapped sequence to be newer")

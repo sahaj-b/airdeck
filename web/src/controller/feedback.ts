@@ -23,7 +23,7 @@ interface AudioContextLike {
 
 type AudioContextConstructor = new () => AudioContextLike;
 
-type NavigatorWithVibration = Navigator & {
+export type NavigatorWithVibration = Navigator & {
   vibrate?: (pattern: number | number[]) => boolean;
 };
 
@@ -40,16 +40,23 @@ export interface FeedbackOptions {
   };
 }
 
+// Browsers clamp a single vibration well below a game-length rumble, so hold
+// the pattern for the whole START..STOP span instead of timing out locally.
+const RUMBLE_ON_PATTERN = 999999;
+// A button-press buzz must outlast the phone's minimum perceptible pulse.
+const PRESS_VIBRATION_MS = 50;
+
 export class FeedbackController {
   private readonly currentNavigator: NavigatorWithVibration;
   private readonly currentWindow: FeedbackOptions['window'];
   private preferences: FeedbackPreferences;
   private audio: AudioContextLike | undefined;
-  private rumbleTimer: ReturnType<typeof setTimeout> | undefined;
+  private rumbleActive = false;
 
   constructor(preferences: FeedbackPreferences, options: FeedbackOptions = {}) {
     this.currentNavigator = options.navigator ?? navigator;
-    this.currentWindow = options.window ?? window;
+    this.currentWindow =
+      options.window ?? (typeof window === 'undefined' ? undefined : window);
     this.preferences = { ...preferences };
   }
 
@@ -63,8 +70,10 @@ export class FeedbackController {
   }
 
   press(): void {
-    this.vibrate(10);
-    this.playClick();
+    // A held game rumble owns the single vibration channel; a press buzz
+    // would truncate it, so only buzz while the game is silent.
+    if (!this.rumbleActive) this.vibrate(PRESS_VIBRATION_MS);
+    void this.playClick();
   }
 
   rumble(message: Rumble): void {
@@ -73,21 +82,15 @@ export class FeedbackController {
       this.stopRumble();
       return;
     }
-    const strength = Math.max(message.strong, message.weak) / 65535;
-    const duration = Math.max(10, Math.round(10 + strength * 50));
-    this.vibrate(duration);
-    if (this.rumbleTimer !== undefined) clearTimeout(this.rumbleTimer);
-    this.rumbleTimer = setTimeout(() => {
-      this.rumbleTimer = undefined;
-      this.vibrate(0);
-    }, duration);
+    // Re-arm on every START so the buzz survives browsers that clamp a single
+    // vibration call; STOP (or zero magnitudes) cancels it.
+    this.rumbleActive = true;
+    this.vibrate(RUMBLE_ON_PATTERN);
   }
 
   stopRumble(): void {
-    if (this.rumbleTimer !== undefined) {
-      clearTimeout(this.rumbleTimer);
-      this.rumbleTimer = undefined;
-    }
+    if (!this.rumbleActive) return;
+    this.rumbleActive = false;
     this.vibrate(0);
   }
 
@@ -105,7 +108,7 @@ export class FeedbackController {
     }
   }
 
-  private playClick(): void {
+  private async playClick(): Promise<void> {
     if (!this.preferences.sound) return;
     try {
       const AudioContext =
@@ -113,19 +116,24 @@ export class FeedbackController {
         this.currentWindow?.webkitAudioContext;
       if (!AudioContext) return;
       this.audio ??= new AudioContext();
-      if (this.audio.state === 'suspended')
-        void this.audio.resume().catch(() => undefined);
+      if (this.audio.state === 'suspended') {
+        try {
+          await this.audio.resume();
+        } catch {
+          return;
+        }
+      }
       const oscillator = this.audio.createOscillator();
       const gain = this.audio.createGain();
       const now = this.audio.currentTime;
       oscillator.type = 'sine';
-      oscillator.frequency.value = 220;
-      gain.gain.setValueAtTime(0.04, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+      oscillator.frequency.value = 660;
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       oscillator.connect(gain);
       gain.connect(this.audio.destination);
       oscillator.start();
-      oscillator.stop(now + 0.04);
+      oscillator.stop(now + 0.06);
     } catch {
       // A denied audio context must not interrupt touch handling.
     }

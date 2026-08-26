@@ -241,7 +241,8 @@ function showController(options: {
   const center = document.createElement('div');
   center.className = 'controller-center';
   center.append(status, gearButton);
-  header.append(identity, center);
+  // Connection status and the settings gear sit above the player identity.
+  header.append(center, identity);
 
   const host = document.createElement('div');
   host.className = 'controller-host';

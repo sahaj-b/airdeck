@@ -282,8 +282,10 @@ func (s *Session) ApplyInput(id string, generation uint64, frame protocol.Frame)
 		s.mu.Unlock()
 		return errors.New("player device is unavailable")
 	}
-	player.LastInput = time.Now()
 	player.State = StateActive
+	if !frame.IsNeutral() {
+		player.LastInput = time.Now()
+	}
 	slot := player.Slot
 	s.mu.Unlock()
 	return s.devices.Apply(slot, uinput.State{Buttons: frame.Buttons, LX: frame.LX, LY: frame.LY, RX: frame.RX, RY: frame.RY, LT: frame.LT, RT: frame.RT})

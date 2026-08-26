@@ -57,6 +57,14 @@ func (f Frame) Encode() []byte {
 	return data
 }
 
+// IsNeutral returns true when every control is at its rest position, meaning
+// the player is not actively touching the controller. The host uses this to
+// track meaningful last-input time for the dashboard rather than counting
+// every 60 Hz neutral stream as fresh input.
+func (f Frame) IsNeutral() bool {
+	return f.Buttons == 0 && f.LX == 0 && f.LY == 0 && f.RX == 0 && f.RY == 0 && f.LT == 0 && f.RT == 0
+}
+
 func IsNewerSequence(next, previous uint32) bool {
 	delta := next - previous
 	return delta != 0 && delta < 1<<31

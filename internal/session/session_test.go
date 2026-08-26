@@ -230,6 +230,42 @@ func TestReconnectInvalidatesOldGeneration(t *testing.T) {
 	}
 }
 
+func TestLastInputOnlyUpdatesOnNonNeutralFrames(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	admission, err := session.Admit(session.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	playerID := admission.Player.ID
+	generation := admission.Player.Generation
+
+	// Neutral frame should not update LastInput.
+	before := admission.Player.LastInput
+	if err := session.ApplyInput(playerID, generation, protocol.Frame{Seq: 1}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, ok := session.Player(playerID)
+	if !ok {
+		t.Fatal("player not found")
+	}
+	if snapshot.LastInput != before {
+		t.Fatal("neutral frame should not update LastInput")
+	}
+
+	// Non-neutral frame should update LastInput.
+	if err := session.ApplyInput(playerID, generation, protocol.Frame{Seq: 2, Buttons: protocol.BitSouth}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, ok = session.Player(playerID)
+	if !ok {
+		t.Fatal("player not found")
+	}
+	if snapshot.LastInput == before {
+		t.Fatal("non-neutral frame should update LastInput")
+	}
+}
+
 func TestMoveChangesOwnershipWithoutCreatingSeventeenthDevice(t *testing.T) {
 	session, factory := newTestSession(t)
 	defer session.Close()

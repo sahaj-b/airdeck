@@ -398,6 +398,7 @@ p {
   border-top: 1px solid #252c38;
   padding: 13px 12px;
   color: #cbd5e2;
+  font-variant-numeric: tabular-nums;
   vertical-align: middle;
 }
 
