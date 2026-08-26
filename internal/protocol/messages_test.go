@@ -18,3 +18,14 @@ func TestDecodeHelloValidatesAdmissionFields(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeHelloAllowsEmptySessionCode(t *testing.T) {
+	data := []byte(`{"type":"hello","sessionCode":"","displayName":"Player","clientVersion":"test","capabilities":{"haptics":true}}`)
+	hello, err := DecodeHello(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hello.SessionCode != "" {
+		t.Fatalf("expected empty session code, got %q", hello.SessionCode)
+	}
+}

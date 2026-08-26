@@ -5,6 +5,7 @@ import {
 } from '../controller/capabilities';
 import { FeedbackController } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
+import { buildFullscreenButton } from '../controller/fullscreen-button';
 import {
   type RenderedLayout,
   renderLayout,
@@ -26,7 +27,12 @@ const DISPLAY_NAME_KEY = 'airdeck.displayName';
 const RUMBLE_KEY = 'airdeck.rumble';
 const SOUND_KEY = 'airdeck.sound';
 const WAKE_LOCK_KEY = 'airdeck.wakeLock';
+// Prefilled so the field never looks mandatory; a value matching this pattern
+// is sent as empty so the host assigns its live slot-based fallback name.
+const DEFAULT_NAME = 'Player';
+const DEFAULT_NAME_PATTERN = /^player(?: \d{1,2})?$/i;
 
+// Full status strings for the settings sheet.
 const CONNECTION_LABELS: Record<ConnectionState, string> = {
   connecting: 'Connecting',
   'hello-sent': 'Joining',
@@ -39,14 +45,39 @@ const CONNECTION_LABELS: Record<ConnectionState, string> = {
   closed: 'Closed',
 };
 
+// Short status strings for the controller header pill, which truncates.
+const PILL_LABELS: Record<ConnectionState, string> = {
+  connecting: 'Connecting',
+  'hello-sent': 'Joining',
+  'welcome-received': 'Loading',
+  active: 'Ready',
+  reconnecting: 'Reconnecting',
+  rejected: 'Rejected',
+  kicked: 'Kicked',
+  'session-reset': 'Session reset',
+  closed: 'Closed',
+};
+
+const SHORT_STATUS: Record<string, string> = {
+  'Controller ready.': 'Ready',
+  'The connection to the host closed.': 'Connection closed',
+  'Loading layout...': 'Loading layout',
+  'The session code is invalid.': 'Invalid code',
+  'This session is not accepting new joins.': 'Joins closed',
+  'This session already has 16 players.': 'Session full',
+  'The reconnect window has expired. Join as a new player.':
+    'Reconnect expired',
+  'The host could not create your virtual controller.': 'Device error',
+  'The host sent an invalid layout. The default layout is being used.':
+    'Invalid layout',
+};
+
+const shortStatus = (full: string): string => SHORT_STATUS[full] ?? full;
+
 const GEAR_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>';
 const CLOSE_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-const EXPAND_ICON =
-  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
-const COMPRESS_ICON =
-  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
 
 let activeSocket: ControllerSocket | undefined;
 let activeSender: FrameSender | undefined;
@@ -55,6 +86,7 @@ let activeFeedback: FeedbackController | undefined;
 let activeCapabilities: CapabilityManager | undefined;
 let removeVisibilityHandlers: (() => void) | undefined;
 let removeControllerDocumentHandlers: (() => void) | undefined;
+let removeJoinFullscreenHandler: (() => void) | undefined;
 
 renderJoinScreen();
 
@@ -73,6 +105,8 @@ function renderJoinScreen(errorMessage = ''): void {
   removeVisibilityHandlers = undefined;
   removeControllerDocumentHandlers?.();
   removeControllerDocumentHandlers = undefined;
+  removeJoinFullscreenHandler?.();
+  removeJoinFullscreenHandler = undefined;
 
   const panel = document.createElement('section');
   panel.className = 'join-screen';
@@ -88,8 +122,12 @@ function renderJoinScreen(errorMessage = ''): void {
   const intro = document.createElement('p');
   intro.className = 'join-intro';
   intro.textContent =
-    'Use the code shown on the host dashboard. Keep this page open while you play.';
+    'Enter the session code if your host uses one. Keep this page open while you play.';
   content.append(kicker, heading, intro);
+
+  const fullscreen = buildFullscreenButton();
+  fullscreen.button.classList.add('join-fullscreen');
+  removeJoinFullscreenHandler = fullscreen.cleanup;
 
   const form = document.createElement('form');
   form.className = 'join-form';
@@ -105,9 +143,9 @@ function renderJoinScreen(errorMessage = ''): void {
   codeField.input.maxLength = 4;
   codeField.input.pattern = '[0-9]{4}';
   const nameField = textField(
-    'Display name (optional)',
+    `Display name (optional, defaults to ${DEFAULT_NAME})`,
     'displayName',
-    readStorage(DISPLAY_NAME_KEY) ?? '',
+    readStorage(DISPLAY_NAME_KEY) || DEFAULT_NAME,
     'Your name',
   );
   nameField.input.maxLength = 40;
@@ -151,7 +189,7 @@ function renderJoinScreen(errorMessage = ''): void {
   submit.type = 'submit';
   submit.textContent = 'Join';
   form.append(capabilityMessage, error, submit);
-  content.append(form);
+  content.append(form, fullscreen.button);
 
   const capabilities = new CapabilityManager({
     onStatus: (status) => updateCapabilityMessage(capabilityMessage, status),
@@ -161,13 +199,16 @@ function renderJoinScreen(errorMessage = ''): void {
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    // An empty code is valid when the host runs with --no-code; the host
+    // rejects it otherwise and the form re-renders with the error.
     const code = codeField.input.value.trim();
-    if (!/^\d{4}$/.test(code)) {
+    if (code !== '' && !/^\d{4}$/.test(code)) {
       showError(error, 'Enter the 4-digit session code.');
       codeField.input.focus();
       return;
     }
-    const displayName = nameField.input.value.trim();
+    let displayName = nameField.input.value.trim();
+    if (DEFAULT_NAME_PATTERN.test(displayName)) displayName = '';
     if ([...displayName].length > 40) {
       showError(error, 'Display name must be at most 40 characters.');
       nameField.input.focus();
@@ -192,7 +233,8 @@ function renderJoinScreen(errorMessage = ''): void {
   });
 
   root.replaceChildren(panel);
-  codeField.input.focus();
+  if (!codeField.input.value) codeField.input.focus();
+  else nameField.input.focus();
 }
 
 function showController(options: {
@@ -283,8 +325,11 @@ function showController(options: {
   let transientStatus: string | null = null;
   const updateStatus = (transient: string | null): void => {
     transientStatus = transient;
-    status.textContent = transient ?? CONNECTION_LABELS[socket.state];
-    connectionValue.textContent = CONNECTION_LABELS[socket.state];
+    const full = transient ?? CONNECTION_LABELS[socket.state];
+    status.textContent = transient
+      ? shortStatus(transient)
+      : PILL_LABELS[socket.state];
+    connectionValue.textContent = full;
   };
 
   const openSettings = (open: boolean): void => {
@@ -515,39 +560,6 @@ function settingsRow(labelText: string, value: HTMLElement): HTMLDivElement {
   label.textContent = labelText;
   row.append(label, value);
   return row;
-}
-
-function buildFullscreenButton(): {
-  button: HTMLButtonElement;
-  cleanup: () => void;
-} {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'icon-button fullscreen-button';
-  button.setAttribute('aria-label', 'Enter fullscreen');
-  button.innerHTML = EXPAND_ICON;
-  if (typeof document.documentElement.requestFullscreen !== 'function')
-    button.hidden = true;
-
-  const onFullscreenChange = (): void => {
-    const active = document.fullscreenElement !== null;
-    button.innerHTML = active ? COMPRESS_ICON : EXPAND_ICON;
-    button.setAttribute(
-      'aria-label',
-      active ? 'Exit fullscreen' : 'Enter fullscreen',
-    );
-  };
-  button.addEventListener('click', () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else
-      void document.documentElement.requestFullscreen().catch(() => undefined);
-  });
-  document.addEventListener('fullscreenchange', onFullscreenChange);
-  return {
-    button,
-    cleanup: () =>
-      document.removeEventListener('fullscreenchange', onFullscreenChange),
-  };
 }
 
 function updateCapabilityMessage(

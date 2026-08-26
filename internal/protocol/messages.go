@@ -50,7 +50,9 @@ func DecodeHello(data []byte) (Hello, error) {
 	if message.Type != MessageHello {
 		return message, fmt.Errorf("expected %q message", MessageHello)
 	}
-	if len(message.SessionCode) != 4 || !digitsOnly(message.SessionCode) {
+	// An empty code is allowed at this layer so no-code sessions can admit
+	// without one; Session.Admit still enforces the code when it is required.
+	if message.SessionCode != "" && (len(message.SessionCode) != 4 || !digitsOnly(message.SessionCode)) {
 		return message, fmt.Errorf("session code must contain exactly four digits")
 	}
 	if !utf8.ValidString(message.DisplayName) || utf8.RuneCountInString(message.DisplayName) > 40 {

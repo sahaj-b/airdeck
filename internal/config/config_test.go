@@ -78,3 +78,14 @@ func TestLoadRejectsGarbageConfig(t *testing.T) {
 		t.Fatal("garbage config was accepted")
 	}
 }
+
+func TestNoCodeOverride(t *testing.T) {
+	noCode := true
+	updated, err := ApplyOverrides(Defaults(), Overrides{NoCode: &noCode})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.NoCode {
+		t.Fatal("expected NoCode override to apply")
+	}
+}

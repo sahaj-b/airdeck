@@ -41,6 +41,7 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	sess.SetCodeRequired(!cfg.NoCode)
 	trace := diagnostics.NewTrace(4096)
 	metrics := &diagnostics.Metrics{}
 	handler := input.NewHandler(sess, trace, metrics)

@@ -99,6 +99,8 @@ func runServe(args []string) error {
 	advertisedPort := flags.Int("advertised-port", -1, "advertised port override")
 	defaultLayout := flags.String("default-layout", "", "default layout override")
 	inputRate := flags.Int("input-rate", 0, "startup input rate override")
+	noCode := flags.Bool("no-code", false, "let clients join /join without entering a session code")
+	flags.BoolVar(noCode, "n", false, "shorthand for --no-code")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -130,6 +132,9 @@ func runServe(args []string) error {
 	}
 	if *inputRate != 0 {
 		overrides.InputRate = inputRate
+	}
+	if *noCode {
+		overrides.NoCode = noCode
 	}
 	cfg, err = config.ApplyOverrides(cfg, overrides)
 	if err != nil {

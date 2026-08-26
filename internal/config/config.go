@@ -18,6 +18,7 @@ type Config struct {
 	AdvertisedPort int    `json:"advertisedPort"`
 	DefaultLayout  string `json:"defaultLayout"`
 	InputRate      int    `json:"inputRate"`
+	NoCode         bool   `json:"noCode"`
 }
 
 func Defaults() Config {
@@ -128,6 +129,7 @@ type Overrides struct {
 	AdvertisedPort *int
 	DefaultLayout  *string
 	InputRate      *int
+	NoCode         *bool
 }
 
 func ApplyOverrides(cfg Config, overrides Overrides) (Config, error) {
@@ -148,6 +150,9 @@ func ApplyOverrides(cfg Config, overrides Overrides) (Config, error) {
 	}
 	if overrides.InputRate != nil {
 		cfg.InputRate = *overrides.InputRate
+	}
+	if overrides.NoCode != nil {
+		cfg.NoCode = *overrides.NoCode
 	}
 	return cfg, Validate(cfg)
 }

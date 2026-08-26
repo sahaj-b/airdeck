@@ -5,6 +5,7 @@ import {
   type LayoutDocument,
   validateLayout,
 } from '../shared/layout';
+import { buildFullscreenButton } from './fullscreen-button';
 import {
   type PixelRect,
   type ResolvedControl,
@@ -70,6 +71,10 @@ export function renderLayout(
   orientationMessage.setAttribute('role', 'status');
   orientationMessage.textContent =
     'Rotate your phone to landscape to use this controller.';
+  // Stuck-in-portrait escape hatch: fullscreen can retrigger orientation lock
+  // where the browser supports it.
+  const fallbackFullscreen = buildFullscreenButton();
+  orientationMessage.append(fallbackFullscreen.button);
   root.append(orientationMessage);
 
   const renderedSections: RenderedSection[] = [];
@@ -136,6 +141,7 @@ export function renderLayout(
     cancelPointers: () => pointerInput.clear(),
     destroy: () => {
       pointerInput.destroy();
+      fallbackFullscreen.cleanup();
       view?.removeEventListener('resize', onViewportChange);
       view?.removeEventListener('orientationchange', onViewportChange);
       root.remove();

@@ -481,6 +481,12 @@ select {
   display: block;
 }
 
+.orientation-message .fullscreen-button {
+  position: static;
+  transform: none;
+  margin: 0.75rem auto 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .controller-control,
   .dpad-direction {

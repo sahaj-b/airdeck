@@ -290,3 +290,18 @@ func TestMoveChangesOwnershipWithoutCreatingSeventeenthDevice(t *testing.T) {
 		t.Fatal("old device was not destroyed during move")
 	}
 }
+
+func TestAdmitHonorsCodeRequiredToggle(t *testing.T) {
+	session, _ := newTestSession(t)
+	if _, err := session.Admit("", "", "", "", protocol.Capabilities{}, func(any) error { return nil }, func() {}); !errors.Is(err, ErrInvalidCode) {
+		t.Fatalf("expected ErrInvalidCode with empty code, got %v", err)
+	}
+	session.SetCodeRequired(false)
+	admission, err := session.Admit("", "", "", "", protocol.Capabilities{}, func(any) error { return nil }, func() {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admission.Reconnected {
+		t.Fatal("expected a fresh admission, not a reconnect")
+	}
+}

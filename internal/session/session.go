@@ -42,6 +42,7 @@ type Session struct {
 	lifecycleMu    sync.Mutex
 	mu             sync.RWMutex
 	code           string
+	codeRequired   bool
 	acceptingJoins bool
 	players        map[string]*Player
 	slots          [maxPlayers]*Player
@@ -59,7 +60,7 @@ func New(layouts *layout.Library, devices *device.Manager) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Session{code: code, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices}, nil
+	return &Session{code: code, codeRequired: true, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices}, nil
 }
 
 func newCode() (string, error) {
@@ -103,6 +104,14 @@ func (s *Session) SetAcceptingJoins(value bool) {
 	s.emit(Event{Type: "joins"})
 }
 
+// SetCodeRequired(false) lets clients admit with an empty session code,
+// trading the LAN room guard for a frictionless drop-in join.
+func (s *Session) SetCodeRequired(value bool) {
+	s.mu.Lock()
+	s.codeRequired = value
+	s.mu.Unlock()
+}
+
 func (s *Session) Subscribe(listener func(Event)) func() {
 	s.mu.Lock()
 	s.listeners = append(s.listeners, listener)
@@ -121,7 +130,7 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
-	if sessionCode != s.code {
+	if s.codeRequired && sessionCode != s.code {
 		s.mu.Unlock()
 		return Admission{}, ErrInvalidCode
 	}
