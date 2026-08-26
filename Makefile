@@ -28,5 +28,14 @@ fmt:
 	gofumpt -w $(GO_FILES)
 	pnpm --dir web format
 
+PLAYERS ?= 1
+DURATION ?= 5s
+RATE ?= 60
+OUTPUT ?= benchmarks/lanbench.json
+
 bench:
-	go run ./tools/lanbench --advertised-url "$(ADVERTISED_URL)" --session-code "$(SESSION_CODE)" --players "$(PLAYERS)" --duration "$(DURATION)" --rate "$(RATE)" --output "$(OUTPUT)" --admin-url "$(ADMIN_URL)"
+	go run ./tools/lanbench \
+		$(if $(ADVERTISED_URL),--advertised-url "$(ADVERTISED_URL)",) \
+		$(if $(SESSION_CODE),--session-code "$(SESSION_CODE)",) \
+		--players "$(PLAYERS)" --duration "$(DURATION)" --rate "$(RATE)" --output "$(OUTPUT)" \
+		$(if $(ADMIN_URL),--admin-url "$(ADMIN_URL)",)
