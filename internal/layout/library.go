@@ -46,6 +46,7 @@ type Control struct {
 	Geometry     Geometry              `json:"geometry"`
 	Label        string                `json:"label"`
 	Visible      bool                  `json:"visible"`
+	HitOnly      bool                  `json:"hitOnly,omitempty"`
 	Shape        string                `json:"shape,omitempty"`
 	Binding      string                `json:"binding,omitempty"`
 	Bindings     *DPadBindings         `json:"bindings,omitempty"`

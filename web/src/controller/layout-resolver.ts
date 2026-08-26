@@ -86,7 +86,7 @@ export function resolveLayout(
       ),
     };
     const controls = section.controls
-      .filter((control) => control.visible)
+      .filter((control) => control.visible || control.hitOnly)
       .map((control) =>
         resolveControl(
           control,
@@ -270,8 +270,8 @@ function expandedHitRect(
 
 function limitHitTargets(sections: ResolvedSection[]): void {
   for (const section of sections) {
-    const interactive = section.controls.filter((control) =>
-      isInteractive(control.control),
+    const interactive = section.controls.filter(
+      (control) => isInteractive(control.control) && !control.control.hitOnly,
     );
     for (const current of interactive) {
       for (const neighbor of interactive) {

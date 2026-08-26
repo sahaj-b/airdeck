@@ -223,6 +223,10 @@
         "visible": {
           "type": "boolean"
         },
+        "hitOnly": {
+          "type": "boolean",
+          "description": "When true, creates a touch hit target but no visible element. Use for invisible filler areas that route touches to a binding."
+        },
         "binding": {
           "$ref": "#/$defs/binding"
         },

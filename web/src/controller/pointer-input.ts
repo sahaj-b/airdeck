@@ -67,6 +67,12 @@ export function applyDeadzone(
   };
 }
 
+function clampToUnitCircle(rawX: number, rawY: number): Point {
+  const length = Math.hypot(rawX, rawY);
+  if (length > 1) return { x: rawX / length, y: rawY / length };
+  return { x: rawX, y: rawY };
+}
+
 export function normalizeJoystickPoint(
   point: Point,
   rect: RectLike,
@@ -77,16 +83,25 @@ export function normalizeJoystickPoint(
   const centerY = rect.top + rect.height / 2 + (calibration.centerY ?? 0);
   const radiusX = Math.max(1, (rect.width / 2) * (calibration.radiusX ?? 1));
   const radiusY = Math.max(1, (rect.height / 2) * (calibration.radiusY ?? 1));
-  const rawX = (point.x - centerX) / radiusX;
-  const rawY = (point.y - centerY) / radiusY;
-  const length = Math.hypot(rawX, rawY);
-  const bounded =
-    length > 1 ? { x: rawX / length, y: rawY / length } : { x: rawX, y: rawY };
+  const bounded = clampToUnitCircle(
+    (point.x - centerX) / radiusX,
+    (point.y - centerY) / radiusY,
+  );
   return applyDeadzone(
     bounded.x,
     bounded.y,
     options.deadzone,
     options.sensitivity,
+  );
+}
+
+export function joystickVisualOffset(point: Point, rect: RectLike): Point {
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const radius = Math.max(1, Math.min(rect.width, rect.height) / 2);
+  return clampToUnitCircle(
+    (point.x - centerX) / radius,
+    (point.y - centerY) / radius,
   );
 }
 
@@ -238,8 +253,15 @@ export class PointerInput {
         value.x,
         value.y,
       );
-      visual.style.setProperty('--axis-x', `${value.x * 40}%`);
-      visual.style.setProperty('--axis-y', `${value.y * 40}%`);
+      // The thumb tracks the finger 1:1 (deadzone only affects the output
+      // value), clamped so its center stops at the rim and half the thumb
+      // hangs over the base edge, like a physical stick.
+      const thumbOffset = joystickVisualOffset(
+        { x: event.clientX, y: event.clientY },
+        rect,
+      );
+      visual.style.setProperty('--axis-x', `${thumbOffset.x * 100}%`);
+      visual.style.setProperty('--axis-y', `${thumbOffset.y * 100}%`);
       return;
     }
 

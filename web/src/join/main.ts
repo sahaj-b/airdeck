@@ -24,12 +24,15 @@ if (!rootElement) throw new Error('join root is missing');
 const root: HTMLElement = rootElement;
 
 const DISPLAY_NAME_KEY = 'airdeck.displayName';
+const VIBRATION_KEY = 'airdeck.vibrationMs';
 const RUMBLE_KEY = 'airdeck.rumble';
 const SOUND_KEY = 'airdeck.sound';
 const WAKE_LOCK_KEY = 'airdeck.wakeLock';
-// Prefilled so the field never looks mandatory; a value matching this pattern
-// is sent as empty so the host assigns its live slot-based fallback name.
-const DEFAULT_NAME = 'Player';
+const CUTOUT_KEY = 'airdeck.ignoreCutout';
+
+const DEFAULT_VIBRATION_MS = 40;
+// A display name matching this pattern is treated as empty so the host
+// assigns its live slot-based fallback name.
 const DEFAULT_NAME_PATTERN = /^player(?: \d{1,2})?$/i;
 
 // Full status strings for the settings sheet.
@@ -143,10 +146,10 @@ function renderJoinScreen(errorMessage = ''): void {
   codeField.input.maxLength = 4;
   codeField.input.pattern = '[0-9]{4}';
   const nameField = textField(
-    `Display name (optional, defaults to ${DEFAULT_NAME})`,
+    'Display name',
     'displayName',
-    readStorage(DISPLAY_NAME_KEY) || DEFAULT_NAME,
-    'Your name',
+    readStorage(DISPLAY_NAME_KEY) ?? '',
+    'Optional',
   );
   nameField.input.maxLength = 40;
   form.append(codeField.wrapper, nameField.wrapper);
@@ -156,9 +159,10 @@ function renderJoinScreen(errorMessage = ''): void {
   const legend = document.createElement('legend');
   legend.textContent = 'Local feedback';
   preferences.append(legend);
+  const vibrationMs = readNumber(VIBRATION_KEY, DEFAULT_VIBRATION_MS);
   const rumble = checkboxField(
     'rumble',
-    'Vibration and game rumble',
+    'Game rumble',
     readBoolean(RUMBLE_KEY, true),
   );
   const sound = checkboxField(
@@ -171,7 +175,17 @@ function renderJoinScreen(errorMessage = ''): void {
     'Keep the screen awake',
     readBoolean(WAKE_LOCK_KEY, true),
   );
-  preferences.append(rumble.wrapper, sound.wrapper, wakeLock.wrapper);
+  const cutout = checkboxField(
+    'ignoreCutout',
+    'Ignore display cutout',
+    readBoolean(CUTOUT_KEY, true),
+  );
+  preferences.append(
+    rumble.wrapper,
+    sound.wrapper,
+    wakeLock.wrapper,
+    cutout.wrapper,
+  );
   form.append(preferences);
 
   const capabilityMessage = document.createElement('p');
@@ -219,6 +233,7 @@ function renderJoinScreen(errorMessage = ''): void {
     writeStorage(RUMBLE_KEY, String(rumble.input.checked));
     writeStorage(SOUND_KEY, String(sound.input.checked));
     writeStorage(WAKE_LOCK_KEY, String(wakeLock.input.checked));
+    writeStorage(CUTOUT_KEY, String(cutout.input.checked));
     capabilities.setWakeLockPreference(wakeLock.input.checked);
     void capabilities.requestJoinCapabilities(wakeLock.input.checked);
 
@@ -226,6 +241,7 @@ function renderJoinScreen(errorMessage = ''): void {
     showController({
       sessionCode: code,
       displayName,
+      vibrationMs,
       rumble: rumble.input.checked,
       sound: sound.input.checked,
       capabilities,
@@ -240,13 +256,15 @@ function renderJoinScreen(errorMessage = ''): void {
 function showController(options: {
   sessionCode: string;
   displayName: string;
+  vibrationMs: number;
   rumble: boolean;
   sound: boolean;
   capabilities: CapabilityManager;
 }): void {
   const state = new InputStateStore();
   const feedback = new FeedbackController({
-    haptics: options.rumble,
+    pressVibrationMs: options.vibrationMs,
+    rumble: options.rumble,
     sound: options.sound,
   });
   activeFeedback = feedback;
@@ -287,6 +305,7 @@ function showController(options: {
 
   const host = document.createElement('div');
   host.className = 'controller-host';
+  if (readBoolean(CUTOUT_KEY, true)) host.classList.add('ignore-cutout');
 
   const layoutSelect = document.createElement('select');
   layoutSelect.className = 'controller-layout-picker';
@@ -310,8 +329,13 @@ function showController(options: {
     layoutSelect,
     connectionValue,
     pingValue,
+    vibrationMs: options.vibrationMs,
     rumble: options.rumble,
     sound: options.sound,
+    ignoreCutout: readBoolean(CUTOUT_KEY, true),
+    onCutoutChange: (ignored) => {
+      host.classList.toggle('ignore-cutout', ignored);
+    },
     feedback,
     capabilityNotes: capabilityMessages.length
       ? capabilityMessages.join(' ')
@@ -480,8 +504,11 @@ function buildSettingsSheet(parts: {
   layoutSelect: HTMLSelectElement;
   connectionValue: HTMLElement;
   pingValue: HTMLElement;
+  vibrationMs: number;
   rumble: boolean;
   sound: boolean;
+  ignoreCutout: boolean;
+  onCutoutChange: (ignored: boolean) => void;
   feedback: FeedbackController;
   capabilityNotes: string;
 }): {
@@ -511,14 +538,37 @@ function buildSettingsSheet(parts: {
   layoutRow.className = 'settings-row';
   layoutRow.append('Layout', parts.layoutSelect);
 
+  const vibrationInput = document.createElement('input');
+  vibrationInput.type = 'range';
+  vibrationInput.min = '0';
+  vibrationInput.max = '100';
+  vibrationInput.step = '10';
+  vibrationInput.value = String(parts.vibrationMs);
+  vibrationInput.setAttribute('aria-label', 'Button vibration duration');
+  const vibrationValue = document.createElement('span');
+  vibrationValue.className = 'settings-value';
+  vibrationValue.textContent = formatVibration(parts.vibrationMs);
+  const vibrationHead = document.createElement('div');
+  vibrationHead.className = 'settings-row';
+  vibrationHead.append('Button vibration', vibrationValue);
+  const vibrationRow = document.createElement('div');
+  vibrationRow.className = 'settings-vibration';
+  vibrationRow.append(vibrationHead, vibrationInput);
+  vibrationInput.addEventListener('input', () => {
+    const ms = vibrationInput.valueAsNumber;
+    vibrationValue.textContent = formatVibration(ms);
+    parts.feedback.setPreferences({ pressVibrationMs: ms });
+    writeStorage(VIBRATION_KEY, String(ms));
+  });
+
   const rumbleInput = document.createElement('input');
   rumbleInput.type = 'checkbox';
   rumbleInput.checked = parts.rumble;
   const rumbleRow = document.createElement('label');
   rumbleRow.className = 'settings-row';
-  rumbleRow.append('Vibration', rumbleInput);
+  rumbleRow.append('Game rumble', rumbleInput);
   rumbleInput.addEventListener('change', () => {
-    parts.feedback.setPreferences({ haptics: rumbleInput.checked });
+    parts.feedback.setPreferences({ rumble: rumbleInput.checked });
     writeStorage(RUMBLE_KEY, String(rumbleInput.checked));
   });
 
@@ -533,6 +583,17 @@ function buildSettingsSheet(parts: {
     writeStorage(SOUND_KEY, String(soundInput.checked));
   });
 
+  const cutoutInput = document.createElement('input');
+  cutoutInput.type = 'checkbox';
+  cutoutInput.checked = parts.ignoreCutout;
+  const cutoutRow = document.createElement('label');
+  cutoutRow.className = 'settings-row';
+  cutoutRow.append('Ignore display cutout', cutoutInput);
+  cutoutInput.addEventListener('change', () => {
+    writeStorage(CUTOUT_KEY, String(cutoutInput.checked));
+    parts.onCutoutChange(cutoutInput.checked);
+  });
+
   const notes = document.createElement('p');
   notes.className = 'settings-capabilities';
   notes.textContent = parts.capabilityNotes;
@@ -540,8 +601,10 @@ function buildSettingsSheet(parts: {
   root.append(
     head,
     layoutRow,
+    vibrationRow,
     rumbleRow,
     soundRow,
+    cutoutRow,
     settingsRow('Connection', parts.connectionValue),
     settingsRow('Ping', parts.pingValue),
     notes,
@@ -615,6 +678,10 @@ function checkboxField(
   return { wrapper, input };
 }
 
+function formatVibration(ms: number): string {
+  return ms > 0 ? `${ms} ms` : 'Off';
+}
+
 function getSessionCode(): string {
   const code = new URLSearchParams(window.location.search).get('code') ?? '';
   return /^\d{4}$/.test(code) ? code : '';
@@ -628,6 +695,13 @@ function showError(element: HTMLElement, message: string): void {
 function readBoolean(key: string, fallback: boolean): boolean {
   const value = readStorage(key);
   return value === null ? fallback : value === 'true';
+}
+
+function readNumber(key: string, fallback: number): number {
+  const value = readStorage(key);
+  if (value === null) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function readStorage(key: string): string | null {

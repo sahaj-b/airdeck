@@ -89,7 +89,7 @@ export function renderLayout(
       controls: [],
     };
     for (const control of section.controls) {
-      if (!control.visible) continue;
+      if (!control.visible && !control.hitOnly) continue;
       const rendered = renderControl(
         ownerDocument,
         control,
@@ -189,6 +189,11 @@ function renderControl(
       dpad.append(marker);
     }
     visual = dpad;
+  } else if (control.hitOnly) {
+    const filler = document.createElement('div');
+    filler.className = 'controller-control';
+    filler.dataset.controlId = control.id;
+    visual = filler;
   } else {
     const button = document.createElement('button');
     button.type = 'button';
@@ -205,6 +210,8 @@ function renderControl(
     }
     visual = button;
   }
+
+  if (control.hitOnly) visual.classList.add('hit-only');
 
   const target = document.createElement('div');
   target.className = 'controller-hit-target';

@@ -22,7 +22,9 @@ describe('validateLayout', () => {
     const dpad = incomplete.sections[0].controls.find(
       (control) => control.type === 'dpad',
     );
-    if (!dpad?.bindings) throw new Error('built-in d-pad missing');
+    if (!dpad || !('bindings' in dpad) || !dpad.bindings) {
+      throw new Error('built-in d-pad missing');
+    }
     delete (dpad.bindings as Partial<typeof dpad.bindings>).right;
     expect(validateLayout(incomplete)).toBe(false);
   });

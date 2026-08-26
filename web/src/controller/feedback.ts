@@ -28,7 +28,8 @@ export type NavigatorWithVibration = Navigator & {
 };
 
 export interface FeedbackPreferences {
-  haptics: boolean;
+  pressVibrationMs: number;
+  rumble: boolean;
   sound: boolean;
 }
 
@@ -43,8 +44,6 @@ export interface FeedbackOptions {
 // Browsers clamp a single vibration well below a game-length rumble, so hold
 // the pattern for the whole START..STOP span instead of timing out locally.
 const RUMBLE_ON_PATTERN = 999999;
-// A button-press buzz must outlast the phone's minimum perceptible pulse.
-const PRESS_VIBRATION_MS = 50;
 
 export class FeedbackController {
   private readonly currentNavigator: NavigatorWithVibration;
@@ -66,18 +65,19 @@ export class FeedbackController {
 
   setPreferences(preferences: Partial<FeedbackPreferences>): void {
     this.preferences = { ...this.preferences, ...preferences };
-    if (!this.preferences.haptics) this.stopRumble();
+    if (!this.preferences.rumble) this.stopRumble();
   }
 
   press(): void {
     // A held game rumble owns the single vibration channel; a press buzz
     // would truncate it, so only buzz while the game is silent.
-    if (!this.rumbleActive) this.vibrate(PRESS_VIBRATION_MS);
+    if (!this.rumbleActive && this.preferences.pressVibrationMs > 0)
+      this.vibrate(this.preferences.pressVibrationMs);
     void this.playClick();
   }
 
   rumble(message: Rumble): void {
-    if (!this.preferences.haptics || !this.hapticsAvailable) return;
+    if (!this.preferences.rumble || !this.hapticsAvailable) return;
     if (!message.active) {
       this.stopRumble();
       return;
@@ -100,7 +100,7 @@ export class FeedbackController {
   }
 
   private vibrate(pattern: number): void {
-    if (!this.preferences.haptics || !this.hapticsAvailable) return;
+    if (!this.hapticsAvailable) return;
     try {
       this.currentNavigator.vibrate?.(pattern);
     } catch {
