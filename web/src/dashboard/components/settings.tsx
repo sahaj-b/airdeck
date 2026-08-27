@@ -17,7 +17,6 @@ import {
   SelectValue,
 } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
-import { Slider } from '../../components/ui/slider';
 import type { AdminState } from '../../shared/contracts';
 import type { SettingsUpdate } from '../api';
 
@@ -159,16 +158,15 @@ export function Settings({ state, onSave }: SettingsProps) {
                 {gracePeriodSeconds}s
               </span>
             </div>
-            <Slider
+            <input
               id="grace-period"
-              value={[gracePeriodSeconds]}
+              type="range"
               min={1}
               max={60}
               step={1}
-              onValueChange={(value) => {
-                const next = (value as number[])[0];
-                if (next != null) setGracePeriodSeconds(next);
-              }}
+              value={gracePeriodSeconds}
+              onChange={(e) => setGracePeriodSeconds(Number(e.target.value))}
+              className="h-2 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
             />
             <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
               <span>1s</span>

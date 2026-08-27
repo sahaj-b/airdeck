@@ -87,7 +87,7 @@ select {
 }
 
 .hit-only {
-  opacity: 0.4;
+  opacity: 0;
 }
 
 .controller-control,

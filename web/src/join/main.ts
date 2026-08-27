@@ -36,9 +36,13 @@ import {
   writeStorage,
 } from './storage';
 
+// dark mode: shadcn uses .dark ancestor (see @custom-variant dark in index.css)
+document.documentElement.classList.add('dark');
+
 const rootElement = document.querySelector<HTMLElement>('#root');
 if (!rootElement) throw new Error('join root is missing');
 const root: HTMLElement = rootElement;
+root.classList.add('dark');
 
 let activeSocket: ControllerSocket | undefined;
 let activeSender: FrameSender | undefined;
@@ -304,32 +308,29 @@ function showController(options: {
       ? shortStatus(transient)
       : PILL_LABELS[socket.state];
     connectionText = full;
-    island?.update({ connectionText });
+    if (island && !island.isDestroyed()) island.update({ connectionText });
   };
 
   const updatePing = (text: string) => {
     pingText = text;
-    island?.update({ pingText });
+    if (island && !island.isDestroyed()) island.update({ pingText });
   };
 
   const openSettings = async (): Promise<void> => {
     if (islandLoading) return;
     if (island) {
-      // already mounted, reopen
-      island.update({
-        layouts: availableLayouts,
-        selectedLayout: currentLayoutId,
-        connectionText,
-        pingText,
-      });
-      // re-mount by re-creating if previously closed via Drawer
-      // if container removed, recreate
-      if (
-        !document.body.contains(island.container) &&
-        !islandHost.contains(island.container)
-      ) {
+      if (island.isDestroyed()) {
         island = undefined;
       } else {
+        // already mounted — reopen (cancels closing animation if in progress)
+        island.setOpen(true);
+        gearButton.setAttribute('aria-expanded', 'true');
+        island.update({
+          layouts: availableLayouts,
+          selectedLayout: currentLayoutId,
+          connectionText,
+          pingText,
+        });
         return;
       }
     }
@@ -349,23 +350,22 @@ function showController(options: {
         },
         connectionText,
         pingText,
+        onClose: () => {
+          gearButton.setAttribute('aria-expanded', 'false');
+          // focus back to gear for a11y, but only if still in DOM
+          if (document.contains(gearButton)) gearButton.focus();
+          island = undefined;
+          islandLoading = false;
+        },
       });
-      const originalUnmount = island.unmount.bind(island);
-      island.unmount = () => {
-        gearButton.setAttribute('aria-expanded', 'false');
-        gearButton.focus();
-        originalUnmount();
-        island = undefined;
-        islandLoading = false;
-      };
-      // patch onOpenChange to track gear state
-      const originalUpdate = island.update.bind(island);
-      island.update = (next) => originalUpdate(next);
     } catch (err) {
       console.error('Failed to load settings island', err);
       gearButton.setAttribute('aria-expanded', 'false');
-    } finally {
       islandLoading = false;
+    } finally {
+      // on success, keep loading false (onClose will also clear). Don't
+      // overwrite the true->false from onClose double clear.
+      if (island) islandLoading = false;
     }
   };
 
@@ -419,10 +419,11 @@ function showController(options: {
       applyWelcome(welcome, slot, name, shell);
       availableLayouts = welcome.availableLayouts;
       currentLayoutId = welcome.selectedLayout;
-      island?.update({
-        layouts: availableLayouts,
-        selectedLayout: currentLayoutId,
-      });
+      if (island && !island.isDestroyed())
+        island.update({
+          layouts: availableLayouts,
+          selectedLayout: currentLayoutId,
+        });
     },
     onLayout: (layout, diagnostic) => {
       activeRenderer?.destroy();
@@ -433,7 +434,8 @@ function showController(options: {
       });
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
-      island?.update({ selectedLayout: currentLayoutId });
+      if (island && !island.isDestroyed())
+        island.update({ selectedLayout: currentLayoutId });
       updateStatus(diagnostic ?? 'Controller ready.');
     },
     onError: (message) => {
@@ -448,7 +450,8 @@ function showController(options: {
         return;
       }
       if (message.code === 'invalid_layout') {
-        island?.update({ selectedLayout: currentLayoutId });
+        if (island && !island.isDestroyed())
+          island.update({ selectedLayout: currentLayoutId });
       }
       updateStatus(message.message);
     },
