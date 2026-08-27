@@ -92,14 +92,13 @@ function renderJoinScreen(errorMessage = ''): void {
 
   const kicker = document.createElement('p');
   kicker.className = 'join-kicker';
-  kicker.textContent = 'Airdeck LAN controller';
+  kicker.textContent = 'Airdeck';
   const heading = document.createElement('h1');
   heading.textContent = 'Join a session';
   const intro = document.createElement('p');
   intro.className = 'join-intro';
   intro.textContent =
     'Enter the session code if your host uses one. Keep this page open while you play.';
-  content.append(kicker, heading, intro);
 
   const fullscreen = buildFullscreenButton();
   fullscreen.button.classList.add('join-fullscreen');
@@ -125,7 +124,6 @@ function renderJoinScreen(errorMessage = ''): void {
     'Optional',
   );
   nameField.input.maxLength = 40;
-  form.append(codeField.wrapper, nameField.wrapper);
 
   const storeState = settingsStore.getState();
   const preferences = document.createElement('fieldset');
@@ -151,7 +149,6 @@ function renderJoinScreen(errorMessage = ''): void {
     wakeLock.wrapper,
     cutout.wrapper,
   );
-  form.append(preferences);
 
   const capabilityMessage = document.createElement('p');
   capabilityMessage.className = 'join-capabilities';
@@ -167,7 +164,16 @@ function renderJoinScreen(errorMessage = ''): void {
   submit.className = 'join-submit';
   submit.type = 'submit';
   submit.textContent = 'Join';
-  form.append(capabilityMessage, error, submit);
+
+  // left/right split: left holds branding + inputs where empty space was,
+  // right holds options + action so Join is always visible in landscape
+  const left = document.createElement('div');
+  left.className = 'join-left';
+  left.append(kicker, heading, intro, codeField.wrapper, nameField.wrapper);
+  const right = document.createElement('div');
+  right.className = 'join-right';
+  right.append(preferences, capabilityMessage, error, submit);
+  form.append(left, right);
   content.append(form, fullscreen.button);
 
   const capabilities = new CapabilityManager({
@@ -199,9 +205,14 @@ function renderJoinScreen(errorMessage = ''): void {
     settingsStore.getState().setIgnoreCutout(cutout.input.checked);
     writeStorage(WAKE_LOCK_KEY, String(wakeLock.input.checked));
     capabilities.setWakeLockPreference(wakeLock.input.checked);
-    void capabilities.requestJoinCapabilities(wakeLock.input.checked);
+    // don't go fullscreen/orientation-lock yet — wait until the server confirms
+    // the code is actually valid. This avoids flashing fullscreen then popping
+    // back to the join screen on a bad code. The transient user-activation
+    // from this click is still alive when the welcome arrives (~100-300ms on
+    // LAN) so the deferred request still counts as a user gesture.
 
     submit.disabled = true;
+    submit.textContent = 'Connecting…';
     showController({
       sessionCode: code,
       displayName,
@@ -471,6 +482,13 @@ function showController(options: {
       }
     },
     onWelcome: (welcome) => {
+      // code is valid — now it's safe to grab fullscreen/orientation. Still
+      // inside the transient user-activation window from the Join click (LAN
+      // round-trip is ~50-300ms, activation lives ~5s) so browsers accept it.
+      void options.capabilities
+        .requestJoinCapabilities()
+        .catch(() => undefined);
+
       activeSender?.setInputRate(welcome.targetInputRate);
       applyWelcome(welcome, slot, name, shell);
       availableLayouts = welcome.availableLayouts;

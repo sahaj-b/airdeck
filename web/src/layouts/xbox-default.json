@@ -15,12 +15,30 @@
       "flexGrow": 0,
       "flexShrink": 1,
       "protected": true,
-      "padding": { "left": 0.035, "right": 0.035, "top": 0.03, "bottom": 0.03 },
+      "padding": {
+        "left": 0.035,
+        "right": 0.035,
+        "top": 0.03,
+        "bottom": 0.03
+      },
       "controls": [
         {
           "id": "lt",
           "type": "trigger",
-          "geometry": { "position": { "x": -0.06, "y": -0.39 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.115 } },
+          "geometry": {
+            "position": {
+              "x": -0.06,
+              "y": -0.39
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.5,
+              "height": 0.115
+            }
+          },
           "label": "LT",
           "visible": true,
           "binding": "leftTrigger",
@@ -29,7 +47,20 @@
         {
           "id": "lb",
           "type": "button",
-          "geometry": { "position": { "x": -0.06, "y": -0.255 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.09 } },
+          "geometry": {
+            "position": {
+              "x": -0.06,
+              "y": -0.255
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.5,
+              "height": 0.09
+            }
+          },
           "label": "LB",
           "visible": true,
           "binding": "leftShoulder",
@@ -38,7 +69,20 @@
         {
           "id": "left-stick",
           "type": "joystick",
-          "geometry": { "position": { "x": -0.13, "y": 0.11 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.336, "height": 0.336 } },
+          "geometry": {
+            "position": {
+              "x": -0.13,
+              "y": 0.11
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.336,
+              "height": 0.336
+            }
+          },
           "label": "Left stick",
           "visible": true,
           "binding": "leftStick",
@@ -47,15 +91,46 @@
         {
           "id": "dpad",
           "type": "dpad",
-          "geometry": { "position": { "x": 0.2, "y": 0.26 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.32, "height": 0.32 } },
+          "geometry": {
+            "position": {
+              "x": 0.2,
+              "y": 0.26
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.32,
+              "height": 0.32
+            }
+          },
           "label": "D-pad",
           "visible": true,
-          "bindings": { "up": "dpadUp", "down": "dpadDown", "left": "dpadLeft", "right": "dpadRight" }
+          "bindings": {
+            "up": "dpadUp",
+            "down": "dpadDown",
+            "left": "dpadLeft",
+            "right": "dpadRight"
+          }
         },
         {
           "id": "ls-click",
           "type": "button",
-          "geometry": { "position": { "x": -0.15, "y": 0.43 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.12, "height": 0.08 } },
+          "geometry": {
+            "position": {
+              "x": -0.15,
+              "y": 0.43
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.12,
+              "height": 0.08
+            }
+          },
           "label": "L3",
           "visible": false,
           "binding": "leftStick",
@@ -71,12 +146,30 @@
       "flexGrow": 1,
       "flexShrink": 1,
       "protected": false,
-      "padding": { "left": 0.04, "right": 0.04, "top": 0.03, "bottom": 0.03 },
+      "padding": {
+        "left": 0.04,
+        "right": 0.04,
+        "top": 0.03,
+        "bottom": 0.03
+      },
       "controls": [
         {
           "id": "back",
           "type": "button",
-          "geometry": { "position": { "x": -0.095, "y": -0.16 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.14, "height": 0.075 } },
+          "geometry": {
+            "position": {
+              "x": -0.095,
+              "y": 0.08
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.14,
+              "height": 0.075
+            }
+          },
           "label": "Back",
           "visible": true,
           "binding": "back",
@@ -85,7 +178,20 @@
         {
           "id": "start",
           "type": "button",
-          "geometry": { "position": { "x": 0.095, "y": -0.16 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.14, "height": 0.075 } },
+          "geometry": {
+            "position": {
+              "x": 0.095,
+              "y": 0.08
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.14,
+              "height": 0.075
+            }
+          },
           "label": "Start",
           "visible": true,
           "binding": "start",
@@ -94,7 +200,20 @@
         {
           "id": "guide",
           "type": "button",
-          "geometry": { "position": { "x": 0, "y": -0.42 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.1, "height": 0.05 } },
+          "geometry": {
+            "position": {
+              "x": 0,
+              "y": -0.42
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.1,
+              "height": 0.05
+            }
+          },
           "label": "Guide",
           "visible": false,
           "binding": "guide",
@@ -110,12 +229,30 @@
       "flexGrow": 0,
       "flexShrink": 1,
       "protected": true,
-      "padding": { "left": 0.035, "right": 0.035, "top": 0.03, "bottom": 0.03 },
+      "padding": {
+        "left": 0.035,
+        "right": 0.035,
+        "top": 0.03,
+        "bottom": 0.03
+      },
       "controls": [
         {
           "id": "rt",
           "type": "trigger",
-          "geometry": { "position": { "x": 0.05, "y": -0.39 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.115 } },
+          "geometry": {
+            "position": {
+              "x": 0.05,
+              "y": -0.39
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.5,
+              "height": 0.115
+            }
+          },
           "label": "RT",
           "visible": true,
           "binding": "rightTrigger",
@@ -124,7 +261,20 @@
         {
           "id": "rb",
           "type": "button",
-          "geometry": { "position": { "x": 0.05, "y": -0.255 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.5, "height": 0.09 } },
+          "geometry": {
+            "position": {
+              "x": 0.05,
+              "y": -0.255
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.5,
+              "height": 0.09
+            }
+          },
           "label": "RB",
           "visible": true,
           "binding": "rightShoulder",
@@ -133,7 +283,20 @@
         {
           "id": "right-stick",
           "type": "joystick",
-          "geometry": { "position": { "x": -0.25, "y": 0.3 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.32, "height": 0.32 } },
+          "geometry": {
+            "position": {
+              "x": -0.25,
+              "y": 0.3
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.32,
+              "height": 0.32
+            }
+          },
           "label": "Right stick",
           "visible": true,
           "binding": "rightStick",
@@ -142,7 +305,20 @@
         {
           "id": "xyab-fill-n",
           "type": "button",
-          "geometry": { "position": { "x": 0.1175, "y": 0.065 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.05, "height": 0.05 } },
+          "geometry": {
+            "position": {
+              "x": 0.1175,
+              "y": 0.065
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.05,
+              "height": 0.05
+            }
+          },
           "label": "",
           "visible": false,
           "hitOnly": true,
@@ -152,7 +328,20 @@
         {
           "id": "xyab-fill-s",
           "type": "button",
-          "geometry": { "position": { "x": 0.1175, "y": 0.135 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.05, "height": 0.05 } },
+          "geometry": {
+            "position": {
+              "x": 0.1175,
+              "y": 0.135
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.05,
+              "height": 0.05
+            }
+          },
           "label": "",
           "visible": false,
           "hitOnly": true,
@@ -162,7 +351,20 @@
         {
           "id": "xyab-fill-w",
           "type": "button",
-          "geometry": { "position": { "x": 0.085, "y": 0.10 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.05, "height": 0.05 } },
+          "geometry": {
+            "position": {
+              "x": 0.085,
+              "y": 0.1
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.05,
+              "height": 0.05
+            }
+          },
           "label": "",
           "visible": false,
           "hitOnly": true,
@@ -172,7 +374,20 @@
         {
           "id": "xyab-fill-e",
           "type": "button",
-          "geometry": { "position": { "x": 0.15, "y": 0.10 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.05, "height": 0.05 } },
+          "geometry": {
+            "position": {
+              "x": 0.15,
+              "y": 0.1
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.05,
+              "height": 0.05
+            }
+          },
           "label": "",
           "visible": false,
           "hitOnly": true,
@@ -182,7 +397,20 @@
         {
           "id": "north",
           "type": "button",
-          "geometry": { "position": { "x": 0.1175, "y": -0.06 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.22, "height": 0.22 } },
+          "geometry": {
+            "position": {
+              "x": 0.1175,
+              "y": -0.06
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.22,
+              "height": 0.22
+            }
+          },
           "label": "Y",
           "visible": true,
           "binding": "north",
@@ -191,7 +419,20 @@
         {
           "id": "west",
           "type": "button",
-          "geometry": { "position": { "x": -0.03, "y": 0.10 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.22, "height": 0.22 } },
+          "geometry": {
+            "position": {
+              "x": -0.03,
+              "y": 0.1
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.22,
+              "height": 0.22
+            }
+          },
           "label": "X",
           "visible": true,
           "binding": "west",
@@ -200,7 +441,20 @@
         {
           "id": "east",
           "type": "button",
-          "geometry": { "position": { "x": 0.265, "y": 0.10 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.22, "height": 0.22 } },
+          "geometry": {
+            "position": {
+              "x": 0.265,
+              "y": 0.1
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.22,
+              "height": 0.22
+            }
+          },
           "label": "B",
           "visible": true,
           "binding": "east",
@@ -209,7 +463,20 @@
         {
           "id": "south",
           "type": "button",
-          "geometry": { "position": { "x": 0.1175, "y": 0.26 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.22, "height": 0.22 } },
+          "geometry": {
+            "position": {
+              "x": 0.1175,
+              "y": 0.26
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.22,
+              "height": 0.22
+            }
+          },
           "label": "A",
           "visible": true,
           "binding": "south",
@@ -218,7 +485,20 @@
         {
           "id": "rs-click",
           "type": "button",
-          "geometry": { "position": { "x": -0.22, "y": 0.46 }, "anchor": { "x": 0.5, "y": 0.5 }, "size": { "width": 0.12, "height": 0.08 } },
+          "geometry": {
+            "position": {
+              "x": -0.22,
+              "y": 0.46
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "size": {
+              "width": 0.12,
+              "height": 0.08
+            }
+          },
           "label": "R3",
           "visible": false,
           "binding": "rightStick",

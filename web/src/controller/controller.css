@@ -113,6 +113,19 @@ select {
 .controller-control {
   display: grid;
   place-items: center;
+  font-size: clamp(0.51rem, 1.92vw, 0.87rem);
+}
+
+.controller-control[data-command="leftShoulder"],
+.controller-control[data-command="rightShoulder"] {
+  font-size: clamp(0.68rem, 2.56vw, 1.16rem);
+}
+
+.controller-control.control-trigger,
+.controller-control[data-command="north"],
+.controller-control[data-command="south"],
+.controller-control[data-command="east"],
+.controller-control[data-command="west"] {
   font-size: clamp(0.85rem, 3.2vw, 1.45rem);
 }
 
