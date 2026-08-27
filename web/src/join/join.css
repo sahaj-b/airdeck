@@ -124,6 +124,37 @@ input {
   letter-spacing: 0.22em;
 }
 
+.join-code-toggle {
+  justify-self: start;
+  border: none;
+  background: none;
+  padding: 0.15rem 0;
+  margin-top: -0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(
+    in oklch,
+    var(--muted-foreground) 35%,
+    transparent
+  );
+  cursor: pointer;
+}
+
+.join-code-toggle:hover {
+  color: var(--foreground);
+  text-decoration-color: currentColor;
+}
+
+.join-code-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .join-preferences {
   display: grid;
   gap: 0.6rem;

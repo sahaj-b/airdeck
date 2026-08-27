@@ -33,7 +33,7 @@ html[data-skin="oled"] .controller-control {
   border: 1.5px solid var(--edge);
   border-radius: 0.5rem;
   background: var(--void);
-  color: var(--muted);
+  color: var(--edge);
   transition:
     border-color 120ms ease,
     color 120ms ease;
@@ -71,9 +71,11 @@ html[data-skin="oled"] .control-joystick.is-active {
 html[data-skin="oled"] .control-joystick::after {
   width: 36%;
   height: 36%;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--edge);
   background: var(--void);
-  transition: border-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
 }
 
 html[data-skin="oled"] .control-joystick.is-dragging::after {
@@ -85,7 +87,7 @@ html[data-skin="oled"] .dpad-direction {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--edge);
   transition: color 100ms ease;
 }
 
@@ -94,12 +96,34 @@ html[data-skin="oled"] .dpad-direction svg {
   height: 44%;
 }
 
-html[data-skin="oled"] .controller-dpad[data-direction="up"] .dpad-up,
-html[data-skin="oled"] .controller-dpad[data-direction="right"] .dpad-right,
-html[data-skin="oled"] .controller-dpad[data-direction="down"] .dpad-down,
+html[data-skin="oled"] .controller-dpad[data-direction="up"] .dpad-up {
+  background: transparent !important;
+  border: 1.5px solid var(--accent) !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  color: var(--accent);
+}
+
+html[data-skin="oled"] .controller-dpad[data-direction="down"] .dpad-down {
+  background: transparent !important;
+  border: 1.5px solid var(--accent) !important;
+  border-top: 0 !important;
+  box-shadow: none !important;
+  color: var(--accent);
+}
+
 html[data-skin="oled"] .controller-dpad[data-direction="left"] .dpad-left {
   background: transparent !important;
-  border-color: transparent !important;
+  border: 1.5px solid var(--accent) !important;
+  border-right: 0 !important;
+  box-shadow: none !important;
+  color: var(--accent);
+}
+
+html[data-skin="oled"] .controller-dpad[data-direction="right"] .dpad-right {
+  background: transparent !important;
+  border: 1.5px solid var(--accent) !important;
+  border-left: 0 !important;
   box-shadow: none !important;
   color: var(--accent);
 }
@@ -107,13 +131,13 @@ html[data-skin="oled"] .controller-dpad[data-direction="left"] .dpad-left {
 html[data-skin="oled"] .controller-status {
   border: 1.5px solid var(--edge);
   background: var(--void);
-  color: var(--muted);
+  color: var(--edge);
 }
 
 html[data-skin="oled"] .icon-button {
   border: 1.5px solid var(--edge);
   background: var(--void);
-  color: var(--muted);
+  color: var(--edge);
 }
 
 html[data-skin="oled"] .icon-button:hover {

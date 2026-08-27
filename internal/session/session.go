@@ -147,31 +147,35 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 		return Admission{}, ErrInvalidCode
 	}
 	if reconnectID != "" {
+		var matched *Player
 		for _, player := range s.players {
 			if player.ReconnectID == reconnectID {
-				if player.State != StateDisconnectedGrace {
-					s.mu.Unlock()
-					return Admission{}, ErrInvalidReconnect
-				}
-				player.Generation++
-				player.State = StateActive
-				player.GraceDeadline = time.Time{}
-				player.Send = send
-				player.Close = close
-				player.RumbleCapable = capabilities.Haptics
-				player.HasSequence = false
-				player.LastSequence = 0
-				snapshot := player.Snapshot()
-				slot := player.Slot
-				s.mu.Unlock()
-				_ = s.devices.Neutralize(slot)
-				log.Printf("player %s slot %d reconnected", player.ID, slot)
-				s.emit(Event{Type: "player.reconnected", Player: &snapshot})
-				return Admission{Player: snapshot, Reconnected: true}, nil
+				matched = player
+				break
 			}
 		}
-		s.mu.Unlock()
-		return Admission{}, ErrInvalidReconnect
+		if matched != nil && matched.State == StateDisconnectedGrace {
+			matched.Generation++
+			matched.State = StateActive
+			matched.GraceDeadline = time.Time{}
+			matched.Send = send
+			matched.Close = close
+			matched.RumbleCapable = capabilities.Haptics
+			matched.HasSequence = false
+			matched.LastSequence = 0
+			snapshot := matched.Snapshot()
+			slot := matched.Slot
+			s.mu.Unlock()
+			_ = s.devices.Neutralize(slot)
+			log.Printf("player %s slot %d reconnected", matched.ID, slot)
+			s.emit(Event{Type: "player.reconnected", Player: &snapshot})
+			return Admission{Player: snapshot, Reconnected: true}, nil
+		}
+		if matched != nil {
+			log.Printf("stale reconnect %s state=%s, joining as new player", reconnectID, matched.State)
+		} else {
+			log.Printf("expired reconnect %s, joining as new player", reconnectID)
+		}
 	}
 	if !s.acceptingJoins {
 		s.mu.Unlock()

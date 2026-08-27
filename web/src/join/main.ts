@@ -64,7 +64,7 @@ initSkin();
   if (s && s !== getSkin()) setSkin(s);
 }
 
-function renderJoinScreen(errorMessage = ''): void {
+function renderJoinScreen(errorMessage = '', revealCode = false): void {
   activeSocket?.close();
   activeSender?.destroy();
   activeRenderer?.destroy();
@@ -107,16 +107,34 @@ function renderJoinScreen(errorMessage = ''): void {
   const form = document.createElement('form');
   form.className = 'join-form';
   form.noValidate = true;
+  const urlCode = getSessionCode();
+  const hasUrlCode = urlCode !== '';
+  const shouldHideCode = hasUrlCode && !revealCode;
   const codeField = textField(
     'Session code',
     'code',
-    getSessionCode(),
+    urlCode,
     'Enter the 4-digit code',
   );
   codeField.input.className = 'join-code';
   codeField.input.inputMode = 'numeric';
   codeField.input.maxLength = 4;
   codeField.input.pattern = '[0-9]{4}';
+  if (shouldHideCode) codeField.wrapper.hidden = true;
+  const codeToggle = document.createElement('button');
+  codeToggle.type = 'button';
+  codeToggle.className = 'join-code-toggle';
+  codeToggle.textContent = 'Enter code manually';
+  codeToggle.setAttribute('aria-expanded', 'false');
+  codeToggle.setAttribute('aria-controls', 'code');
+  if (!shouldHideCode) codeToggle.hidden = true;
+  codeToggle.addEventListener('click', () => {
+    codeField.wrapper.hidden = false;
+    codeToggle.hidden = true;
+    codeToggle.setAttribute('aria-expanded', 'true');
+    codeField.input.focus();
+    codeField.input.select();
+  });
   const nameField = textField(
     'Display name',
     'displayName',
@@ -169,7 +187,14 @@ function renderJoinScreen(errorMessage = ''): void {
   // right holds options + action so Join is always visible in landscape
   const left = document.createElement('div');
   left.className = 'join-left';
-  left.append(kicker, heading, intro, codeField.wrapper, nameField.wrapper);
+  left.append(
+    kicker,
+    heading,
+    intro,
+    codeField.wrapper,
+    codeToggle,
+    nameField.wrapper,
+  );
   const right = document.createElement('div');
   right.className = 'join-right';
   right.append(preferences, capabilityMessage, error, submit);
@@ -184,7 +209,10 @@ function renderJoinScreen(errorMessage = ''): void {
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    const code = codeField.input.value.trim();
+    const rawCode = codeField.wrapper.hidden
+      ? urlCode
+      : codeField.input.value.trim();
+    const code = rawCode;
     if (code !== '' && !/^\d{4}$/.test(code)) {
       showError(error, 'Enter the 4-digit session code.');
       codeField.input.focus();
@@ -221,7 +249,12 @@ function renderJoinScreen(errorMessage = ''): void {
   });
 
   root.replaceChildren(panel);
-  if (!codeField.input.value) codeField.input.focus();
+  if (shouldHideCode) {
+    nameField.input.focus();
+  } else if (revealCode && errorMessage) {
+    codeField.input.focus();
+    codeField.input.select();
+  } else if (!codeField.input.value) codeField.input.focus();
   else nameField.input.focus();
 }
 
@@ -478,6 +511,7 @@ function showController(options: {
       if (nextState === 'session-reset') {
         renderJoinScreen(
           'The host started a new session. Enter the new code to join.',
+          true,
         );
       }
     },
@@ -521,7 +555,10 @@ function showController(options: {
         message.code === 'session_full' ||
         message.code === 'device_error'
       ) {
-        renderJoinScreen(message.message);
+        const reveal =
+          message.code === 'invalid_code' ||
+          message.code === 'invalid_reconnect';
+        renderJoinScreen(message.message, reveal);
         return;
       }
       if (message.code === 'invalid_layout') {
