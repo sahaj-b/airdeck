@@ -1,3 +1,4 @@
+import { UserX } from 'lucide-react';
 import { memo, useState } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -55,22 +56,18 @@ export const PlayerRow = memo(function PlayerRow({
       </TableCell>
 
       <TableCell>
-        <div className="flex items-center gap-2.5">
+        <div className="grid gap-0.5">
           <span
-            className="size-3 shrink-0 rounded-full border border-foreground/15 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)]"
-            style={{ backgroundColor: player.accent }}
-            aria-hidden="true"
-          />
-          <span className="grid gap-0.5">
-            <span className="text-sm font-medium leading-none">
-              {player.name}
-            </span>
-            {player.name !== player.fallbackName && (
-              <span className="max-w-[140px] truncate text-[11px] leading-none text-muted-foreground">
-                {player.fallbackName}
-              </span>
-            )}
+            className="text-sm font-medium leading-none"
+            style={{ color: player.accent }}
+          >
+            {player.name}
           </span>
+          {player.name !== player.fallbackName && (
+            <span className="max-w-[140px] truncate text-[11px] leading-none text-muted-foreground">
+              {player.fallbackName}
+            </span>
+          )}
         </div>
       </TableCell>
 
@@ -88,9 +85,26 @@ export const PlayerRow = memo(function PlayerRow({
         {formatRTT(player.rttNanos)}
       </TableCell>
 
-      <TableCell className="max-w-[120px] truncate text-xs">
-        {layouts.find((layout) => layout.id === player.layoutId)?.name ??
-          player.layoutId}
+      <TableCell>
+        <Select
+          value={player.layoutId}
+          disabled={busy || player.state === 'closed'}
+          onValueChange={(value) => {
+            if (value == null) return;
+            void run(() => onLayout(player.id, value));
+          }}
+        >
+          <SelectTrigger size="sm" className="h-7 w-[130px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {layouts.map((layout) => (
+              <SelectItem key={layout.id} value={layout.id}>
+                {layout.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </TableCell>
 
       <TableCell>
@@ -106,16 +120,6 @@ export const PlayerRow = memo(function PlayerRow({
             </span>
           )}
         </div>
-      </TableCell>
-
-      <TableCell className="text-xs text-muted-foreground">
-        {player.rumbleCapable ? (
-          <span className="text-emerald-600 dark:text-emerald-400">
-            Available
-          </span>
-        ) : (
-          'Unavailable'
-        )}
       </TableCell>
 
       <TableCell>
@@ -146,35 +150,17 @@ export const PlayerRow = memo(function PlayerRow({
             </SelectContent>
           </Select>
 
-          <Select
-            value={player.layoutId}
-            disabled={busy || player.state === 'closed'}
-            onValueChange={(value) => {
-              if (value == null) return;
-              void run(() => onLayout(player.id, value));
-            }}
-          >
-            <SelectTrigger size="sm" className="h-7 w-[128px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {layouts.map((layout) => (
-                <SelectItem key={layout.id} value={layout.id}>
-                  {layout.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Button
             type="button"
             size="sm"
-            variant="destructive"
+            variant="ghost"
+            title="Kick player"
+            aria-label="Kick player"
             disabled={busy}
             onClick={() => void run(() => onKick(player.id))}
-            className="h-7 px-2.5 text-xs"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
           >
-            Kick
+            <UserX className="size-4" />
           </Button>
         </div>
       </TableCell>

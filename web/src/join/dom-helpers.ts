@@ -59,14 +59,9 @@ export function formatVibration(ms: number): string {
 
 export function updateCapabilityMessage(
   element: HTMLElement,
-  status: { haptics: boolean; wakeLock: boolean; messages: string[] },
+  status: { wakeLock: boolean; messages: string[] },
 ): void {
   const messages = [...status.messages];
-  if (
-    !status.haptics &&
-    !messages.includes('Vibration unavailable. Input still works.')
-  )
-    messages.unshift('Vibration unavailable. Input still works.');
   if (!status.wakeLock && !messages.includes('Screen wake lock unavailable.'))
     messages.push('Screen wake lock unavailable.');
   element.textContent = messages.join(' ');

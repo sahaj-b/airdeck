@@ -66,7 +66,6 @@ export function detectCapabilities(
   const currentScreen = browserScreen(options);
   const currentWindow = browserWindow(options);
   return {
-    haptics: hasHapticsHardware(currentNavigator, currentWindow),
     sound:
       currentWindow !== undefined &&
       ('AudioContext' in currentWindow ||

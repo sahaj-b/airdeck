@@ -71,7 +71,7 @@ func (s *Server) runClient(r *http.Request, client *Client) {
 		s.sendErrorNow(client, "invalid_hello", "the first message must be a valid hello")
 		return
 	}
-	admission, err := s.Session.Admit(hello.SessionCode, hello.DisplayName, hello.ReconnectID, hello.SelectedLayout, hello.Capabilities, client.Send, client.Close)
+	admission, err := s.Session.Admit(hello.SessionCode, hello.DisplayName, hello.ReconnectID, hello.SelectedLayout, client.Send, client.Close)
 	if err != nil {
 		code, message := admissionError(err)
 		s.sendErrorNow(client, code, message)

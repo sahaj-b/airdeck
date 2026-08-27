@@ -138,7 +138,7 @@ func (s *Session) Subscribe(listener func(Event)) func() {
 	}
 }
 
-func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout string, capabilities protocol.Capabilities, send func(any) error, close func()) (Admission, error) {
+func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout string, send func(any) error, close func()) (Admission, error) {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
@@ -160,7 +160,6 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 			matched.GraceDeadline = time.Time{}
 			matched.Send = send
 			matched.Close = close
-			matched.RumbleCapable = capabilities.Haptics
 			matched.HasSequence = false
 			matched.LastSequence = 0
 			snapshot := matched.Snapshot()
@@ -209,7 +208,7 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	if name == "" {
 		name = fmt.Sprintf("Player %d", slot+1)
 	}
-	player := &Player{ID: id, Slot: slot, Name: name, FallbackName: fmt.Sprintf("Player %d", slot+1), Accent: slotAccents[slot], State: StateJoining, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, RumbleCapable: capabilities.Haptics, DeviceStatus: "creating", Send: send, Close: close}
+	player := &Player{ID: id, Slot: slot, Name: name, FallbackName: fmt.Sprintf("Player %d", slot+1), Accent: slotAccents[slot], State: StateJoining, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, DeviceStatus: "creating", Send: send, Close: close}
 	playerID := player.ID
 	if err := s.devices.Create(slot, func(strong, weak uint16) { s.dispatchRumble(playerID, strong, weak) }); err != nil {
 		s.mu.Unlock()

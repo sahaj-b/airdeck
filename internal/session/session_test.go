@@ -89,7 +89,7 @@ func TestKickSendsCloseMessageBeforeFreeingSlot(t *testing.T) {
 	closed := false
 	send := func(value any) error { sent = append(sent, value); return nil }
 	close := func() { closed = true }
-	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, send, close)
+	admission, err := session.Admit(session.Code(), "", "", "", send, close)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestSetLayoutPushesDocumentToPlayer(t *testing.T) {
 	defer session.Close()
 	var sent []any
 	send := func(value any) error { sent = append(sent, value); return nil }
-	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, send, nil)
+	admission, err := session.Admit(session.Code(), "", "", "", send, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestSetDefaultLayoutChangesAdmissionDefault(t *testing.T) {
 	if err := session.SetDefaultLayout("alt-default"); err != nil {
 		t.Fatal(err)
 	}
-	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := session.Admit(session.Code(), "", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestNewSessionEmitsResetBeforeClosingPlayers(t *testing.T) {
 	})
 	defer unsubscribe()
 	close := func() { order = append(order, "close") }
-	if _, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, close); err != nil {
+	if _, err := session.Admit(session.Code(), "", "", "", nil, close); err != nil {
 		t.Fatal(err)
 	}
 	if err := session.NewSession(); err != nil {
@@ -175,7 +175,7 @@ func TestAdmissionCeilingAndSlotReuse(t *testing.T) {
 	defer session.Close()
 	players := make([]Admission, 0, maxPlayers)
 	for i := 0; i < maxPlayers; i++ {
-		admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, nil)
+		admission, err := session.Admit(session.Code(), "", "", "", nil, nil)
 		if err != nil {
 			t.Fatalf("admit player %d: %v", i, err)
 		}
@@ -184,13 +184,13 @@ func TestAdmissionCeilingAndSlotReuse(t *testing.T) {
 			t.Fatalf("slot = %d, want %d", admission.Player.Slot, i)
 		}
 	}
-	if _, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, nil); !errors.Is(err, ErrSessionFull) {
+	if _, err := session.Admit(session.Code(), "", "", "", nil, nil); !errors.Is(err, ErrSessionFull) {
 		t.Fatalf("17th admission error = %v", err)
 	}
 	if err := session.Kick(players[0].Player.ID); err != nil {
 		t.Fatal(err)
 	}
-	admission, err := session.Admit(session.Code(), "", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := session.Admit(session.Code(), "", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,14 +202,14 @@ func TestAdmissionCeilingAndSlotReuse(t *testing.T) {
 func TestReconnectInvalidatesOldGeneration(t *testing.T) {
 	session, factory := newTestSession(t)
 	defer session.Close()
-	admission, err := session.Admit(session.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := session.Admit(session.Code(), "Player", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := session.Disconnect(admission.Player.ID, admission.Player.Generation); err != nil {
 		t.Fatal(err)
 	}
-	reconnected, err := session.Admit(session.Code(), "", admission.Player.ReconnectID, "", protocol.Capabilities{}, nil, nil)
+	reconnected, err := session.Admit(session.Code(), "", admission.Player.ReconnectID, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestReconnectInvalidatesOldGeneration(t *testing.T) {
 func TestLastInputOnlyUpdatesOnNonNeutralFrames(t *testing.T) {
 	session, _ := newTestSession(t)
 	defer session.Close()
-	admission, err := session.Admit(session.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := session.Admit(session.Code(), "Player", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestLastInputOnlyUpdatesOnNonNeutralFrames(t *testing.T) {
 func TestMoveChangesOwnershipWithoutCreatingSeventeenthDevice(t *testing.T) {
 	session, factory := newTestSession(t)
 	defer session.Close()
-	admission, err := session.Admit(session.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := session.Admit(session.Code(), "Player", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,11 +294,11 @@ func TestMoveChangesOwnershipWithoutCreatingSeventeenthDevice(t *testing.T) {
 
 func TestAdmitHonorsCodeRequiredToggle(t *testing.T) {
 	session, _ := newTestSession(t)
-	if _, err := session.Admit("", "", "", "", protocol.Capabilities{}, func(any) error { return nil }, func() {}); !errors.Is(err, ErrInvalidCode) {
+	if _, err := session.Admit("", "", "", "", func(any) error { return nil }, func() {}); !errors.Is(err, ErrInvalidCode) {
 		t.Fatalf("expected ErrInvalidCode with empty code, got %v", err)
 	}
 	session.SetCodeRequired(false)
-	admission, err := session.Admit("", "", "", "", protocol.Capabilities{}, func(any) error { return nil }, func() {})
+	admission, err := session.Admit("", "", "", "", func(any) error { return nil }, func() {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestCustomGracePeriodFreesSlotAfterExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sess.Close()
-	admission, err := sess.Admit(sess.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := sess.Admit(sess.Code(), "Player", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

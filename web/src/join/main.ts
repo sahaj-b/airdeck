@@ -86,13 +86,19 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
 
   const panel = document.createElement('section');
   panel.className = 'join-screen';
+  const brand = document.createElement('div');
+  brand.className = 'join-brand';
+  const brandLogo = document.createElement('img');
+  brandLogo.src = '/airdeck.svg';
+  brandLogo.alt = 'Airdeck';
+  brandLogo.className = 'join-brand-logo';
+  brandLogo.width = 266;
+  brandLogo.height = 48;
+  brand.append(brandLogo);
   const content = document.createElement('div');
   content.className = 'join-panel';
-  panel.append(content);
+  panel.append(brand, content);
 
-  const kicker = document.createElement('p');
-  kicker.className = 'join-kicker';
-  kicker.textContent = 'Airdeck';
   const heading = document.createElement('h1');
   heading.textContent = 'Join a session';
   const intro = document.createElement('p');
@@ -187,14 +193,7 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   // right holds options + action so Join is always visible in landscape
   const left = document.createElement('div');
   left.className = 'join-left';
-  left.append(
-    kicker,
-    heading,
-    intro,
-    codeField.wrapper,
-    codeToggle,
-    nameField.wrapper,
-  );
+  left.append(heading, intro, codeField.wrapper, codeToggle, nameField.wrapper);
   const right = document.createElement('div');
   right.className = 'join-right';
   right.append(preferences, capabilityMessage, error, submit);

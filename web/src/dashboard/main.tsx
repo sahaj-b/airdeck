@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
-import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import {
   Card,
@@ -12,10 +11,9 @@ import {
 } from '../components/ui/card';
 import { AdminStore, useAdminSnapshot } from './admin-store';
 import type { SettingsUpdate } from './api';
+import { HostPanel } from './components/host-panel';
 import { QRCard } from './components/qr-card';
 import { Roster } from './components/roster';
-import { SessionControls } from './components/session-controls';
-import { Settings } from './components/settings';
 
 const store = new AdminStore();
 
@@ -72,26 +70,24 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <header className="mb-6 flex flex-wrap items-start justify-between gap-4 lg:mb-10">
-          <h1 className="text-[2.75rem] leading-none font-black tracking-[-0.05em] sm:text-[3.25rem] lg:text-[3.75rem]">
-            AIRDECK{' '}
-            <span className="font-light tracking-[-0.04em] text-muted-foreground/35">
-              Host
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 lg:mb-10">
+          <h1 className="flex items-center gap-5 leading-none">
+            <img
+              src="/airdeck.svg"
+              alt="Airdeck"
+              className="h-10 w-auto sm:h-12 lg:h-14"
+              width={266}
+              height={48}
+            />
+            <span className="text-[2.15rem] font-extralight tracking-[0.12em] text-muted-foreground/40 sm:text-[2.6rem] lg:text-[3.1rem] leading-none">
+              HOST
             </span>
           </h1>
-          <Badge
-            variant={snapshot.connected ? 'default' : 'secondary'}
-            className={
-              snapshot.connected
-                ? 'mt-2 bg-emerald-600 text-white hover:bg-emerald-600/90 dark:bg-emerald-500 dark:text-white'
-                : 'mt-2 bg-amber-500 text-white hover:bg-amber-500/90 dark:bg-amber-500'
-            }
-          >
-            <span
-              className={`size-1.5 rounded-full ${snapshot.connected ? 'bg-white animate-pulse' : 'bg-white/80'}`}
-            />
-            {snapshot.connected ? 'Live' : 'Reconnecting'}
-          </Badge>
+          {!snapshot.connected && (
+            <span className="text-sm font-medium tracking-[0.14em] text-amber-600 uppercase dark:text-amber-400">
+              Reconnecting
+            </span>
+          )}
         </header>
 
         {snapshot.error && (
@@ -103,35 +99,25 @@ function Dashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-          <QRCard state={state} />
-          <SessionControls
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="space-y-6">
+            <QRCard state={state} />
+            <Roster
+              players={state.players}
+              layouts={state.layouts}
+              now={now}
+              onKick={onKick}
+              onMove={onMove}
+              onLayout={onLayout}
+            />
+          </div>
+          <HostPanel
             state={state}
             onJoinsChange={onJoinsChange}
             onNewSession={onNewSession}
+            onSave={onSaveSettings}
           />
         </div>
-
-        <div className="mt-6">
-          <Roster
-            players={state.players}
-            layouts={state.layouts}
-            now={now}
-            onKick={onKick}
-            onMove={onMove}
-            onLayout={onLayout}
-          />
-        </div>
-
-        <div className="mt-6">
-          <Settings state={state} onSave={onSaveSettings} />
-        </div>
-
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Airdeck · local host dashboard ·{' '}
-          <span className="tabular-nums">{state.publicPort}</span> public /{' '}
-          <span className="tabular-nums">{state.adminPort}</span> admin
-        </p>
       </div>
     </div>
   );

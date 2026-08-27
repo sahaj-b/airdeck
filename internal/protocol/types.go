@@ -6,7 +6,6 @@ type LayoutSummary struct {
 }
 
 type Capabilities struct {
-	Haptics     bool `json:"haptics"`
 	Sound       bool `json:"sound"`
 	WakeLock    bool `json:"wakeLock"`
 	Fullscreen  bool `json:"fullscreen"`

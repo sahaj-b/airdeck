@@ -3,7 +3,7 @@ package protocol
 import "testing"
 
 func TestDecodeHelloValidatesAdmissionFields(t *testing.T) {
-	valid := []byte(`{"type":"hello","sessionCode":"0042","displayName":"Player","clientVersion":"test","capabilities":{"haptics":true}}`)
+	valid := []byte(`{"type":"hello","sessionCode":"0042","displayName":"Player","clientVersion":"test","capabilities":{}}`)
 	if _, err := DecodeHello(valid); err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +20,7 @@ func TestDecodeHelloValidatesAdmissionFields(t *testing.T) {
 }
 
 func TestDecodeHelloAllowsEmptySessionCode(t *testing.T) {
-	data := []byte(`{"type":"hello","sessionCode":"","displayName":"Player","clientVersion":"test","capabilities":{"haptics":true}}`)
+	data := []byte(`{"type":"hello","sessionCode":"","displayName":"Player","clientVersion":"test","capabilities":{}}`)
 	hello, err := DecodeHello(data)
 	if err != nil {
 		t.Fatal(err)

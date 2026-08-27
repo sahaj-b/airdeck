@@ -46,9 +46,6 @@ export function Roster({
         {players.length === 0 ? (
           <div className="grid gap-1 rounded-lg border border-dashed p-8 text-center">
             <div className="text-sm font-medium">No players connected.</div>
-            <div className="text-xs text-muted-foreground">
-              Keep this page open while phones scan the join code.
-            </div>
           </div>
         ) : (
           <Table>
@@ -61,7 +58,6 @@ export function Roster({
                 <TableHead>RTT</TableHead>
                 <TableHead>Layout</TableHead>
                 <TableHead>Device</TableHead>
-                <TableHead>Rumble</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>

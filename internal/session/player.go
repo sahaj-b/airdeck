@@ -28,7 +28,6 @@ type Player struct {
 	RTT           time.Duration
 	DeviceStatus  string
 	DeviceReason  string
-	RumbleCapable bool
 	Send          func(any) error
 	Close         func()
 	LastSequence  uint32
@@ -51,7 +50,6 @@ type PlayerSnapshot struct {
 	RTT           int64       `json:"rttNanos"`
 	DeviceStatus  string      `json:"deviceStatus"`
 	DeviceReason  string      `json:"deviceReason,omitempty"`
-	RumbleCapable bool        `json:"rumbleCapable"`
 	GraceDeadline time.Time   `json:"graceDeadline,omitempty"`
 }
 
@@ -61,6 +59,6 @@ func (p *Player) Snapshot() PlayerSnapshot {
 		State: p.State, LayoutID: p.LayoutID, Generation: p.Generation, ReconnectID: p.ReconnectID,
 		LastInput: p.LastInput,
 		LastPong:  p.LastPong, RTT: p.RTT.Nanoseconds(), DeviceStatus: p.DeviceStatus,
-		DeviceReason: p.DeviceReason, RumbleCapable: p.RumbleCapable, GraceDeadline: p.GraceDeadline,
+		DeviceReason: p.DeviceReason, GraceDeadline: p.GraceDeadline,
 	}
 }

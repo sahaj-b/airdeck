@@ -45,7 +45,7 @@ func TestWatchdogMarksPlayerStaleAndNeutralizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sess.Close()
-	admission, err := sess.Admit(sess.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := sess.Admit(sess.Code(), "Player", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestHandlerRejectsStaleSequence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sess.Close()
-	admission, err := sess.Admit(sess.Code(), "Player", "", "", protocol.Capabilities{}, nil, nil)
+	admission, err := sess.Admit(sess.Code(), "Player", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

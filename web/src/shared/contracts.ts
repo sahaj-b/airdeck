@@ -27,7 +27,6 @@ export type Command = keyof typeof ButtonBits | 'leftTrigger' | 'rightTrigger';
 export type Orientation = 'portrait' | 'landscape';
 
 export interface Capabilities {
-  haptics: boolean;
   sound: boolean;
   wakeLock: boolean;
   fullscreen: boolean;
@@ -112,7 +111,6 @@ export interface PlayerSnapshot {
   rttNanos: number;
   deviceStatus: string;
   deviceReason?: string;
-  rumbleCapable: boolean;
   graceDeadline?: string;
 }
 export interface AdminState {

@@ -38,7 +38,6 @@ describe('ControllerSocket', () => {
       sessionCode: '4821',
       displayName: 'Ada',
       capabilities: {
-        haptics: false,
         sound: false,
         wakeLock: false,
         fullscreen: false,
@@ -97,7 +96,6 @@ describe('ControllerSocket', () => {
     new ControllerSocket({
       sessionCode: '4821',
       capabilities: {
-        haptics: false,
         sound: false,
         wakeLock: false,
         fullscreen: false,
@@ -123,7 +121,6 @@ describe('ControllerSocket', () => {
     const socket = new ControllerSocket({
       sessionCode: '0000',
       capabilities: {
-        haptics: false,
         sound: false,
         wakeLock: false,
         fullscreen: false,
