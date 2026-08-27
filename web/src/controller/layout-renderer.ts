@@ -123,6 +123,66 @@ export function renderLayout(
 
   container.replaceChildren(root);
 
+  // Long-press / selection / haptic kill. Must be capture + non-passive
+  // or iOS and Android will still select and buzz before pointerdown fires.
+  const kill = (event: Event): void => {
+    event.preventDefault();
+  };
+  const touchOpts: AddEventListenerOptions = {
+    passive: false,
+    capture: true,
+  };
+  const captureOpts: AddEventListenerOptions = { capture: true };
+  const touchEvents = [
+    'touchstart',
+    'touchmove',
+    'touchend',
+    'touchcancel',
+  ] as const;
+  const menuEvents = [
+    'contextmenu',
+    'selectstart',
+    'dragstart',
+    'copy',
+    'cut',
+    'beforeinput',
+  ] as const;
+  for (const type of touchEvents) {
+    root.addEventListener(type, kill, touchOpts);
+    container.addEventListener(type, kill, touchOpts);
+  }
+  for (const type of menuEvents) {
+    root.addEventListener(type, kill, captureOpts);
+    container.addEventListener(type, kill, captureOpts);
+  }
+  const onSelectionChange = (): void => {
+    const selection = ownerDocument.getSelection?.();
+    if (!selection || selection.rangeCount === 0 || selection.type === 'None')
+      return;
+    const anchor = selection.anchorNode;
+    const focus = selection.focusNode;
+    const inside = (node: Node | null): boolean => {
+      if (!node) return false;
+      if (root.contains(node) || container.contains(node)) return true;
+      return (
+        node instanceof Element && node.closest('.controller-shell') !== null
+      );
+    };
+    if (inside(anchor) || inside(focus)) selection.removeAllRanges();
+  };
+  ownerDocument.addEventListener('selectionchange', onSelectionChange);
+  const onDocContextMenu = (event: Event): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (
+      target.closest('.controller-shell') ||
+      root.contains(target) ||
+      container.contains(target)
+    )
+      event.preventDefault();
+  };
+  ownerDocument.addEventListener('contextmenu', onDocContextMenu, captureOpts);
+
   const applyOrientation = (orientation: Orientation): void => {
     const geometry = resolveLayout(
       layout,
@@ -180,6 +240,20 @@ export function renderLayout(
       fallbackFullscreen.cleanup();
       view?.removeEventListener('resize', onViewportChange);
       view?.removeEventListener('orientationchange', onViewportChange);
+      for (const type of touchEvents) {
+        root.removeEventListener(type, kill as EventListener, touchOpts);
+        container.removeEventListener(type, kill as EventListener, touchOpts);
+      }
+      for (const type of menuEvents) {
+        root.removeEventListener(type, kill as EventListener, captureOpts);
+        container.removeEventListener(type, kill as EventListener, captureOpts);
+      }
+      ownerDocument.removeEventListener('selectionchange', onSelectionChange);
+      ownerDocument.removeEventListener(
+        'contextmenu',
+        onDocContextMenu as EventListener,
+        captureOpts,
+      );
       root.remove();
     },
   };
@@ -203,6 +277,8 @@ function renderControl(
     const image = document.createElement('img');
     image.className = 'controller-image';
     image.alt = control.label;
+    image.draggable = false;
+    image.addEventListener('dragstart', (event) => event.preventDefault());
     const asset = layout.assets.find(
       (candidate) => candidate.id === control.asset,
     );

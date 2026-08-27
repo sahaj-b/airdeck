@@ -2,7 +2,6 @@ import { Button } from '../../components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
@@ -24,13 +23,7 @@ export function SessionControls({
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
-          Session
-        </CardDescription>
-        <CardTitle className="text-lg">Admission controls</CardTitle>
-        <CardDescription>
-          Closing joins leaves active players connected.
-        </CardDescription>
+        <CardTitle className="text-lg">Admission Controls</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-6">
         <div className="flex items-center justify-between gap-4 rounded-lg border bg-card px-4 py-3">

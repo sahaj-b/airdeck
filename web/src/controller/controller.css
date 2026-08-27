@@ -19,11 +19,42 @@ body {
   min-height: 100%;
   margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 button,
 select {
   font: inherit;
+}
+
+/* Long-press kill: scoped to controller so join screen inputs stay selectable */
+.controller-shell,
+.controller-shell * {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  -khtml-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+.controller-shell {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.controller-shell ::selection,
+.controller-shell ::-moz-selection {
+  background: transparent;
+}
+
+.controller-shell img,
+.controller-shell a {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 /* Geometry: position, layout, touch behavior. Visual styling (color,
@@ -81,7 +112,9 @@ select {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -96,7 +129,9 @@ select {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
   cursor: pointer;
   transition:
     background-color 100ms ease,

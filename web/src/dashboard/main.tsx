@@ -72,34 +72,25 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        {/* header */}
-        <header className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="mb-2 text-[11px] font-bold tracking-[0.16em] text-primary uppercase">
-              Airdeck host
-            </div>
-            <h1 className="font-heading text-[2rem] leading-none font-semibold tracking-[-0.04em] sm:text-[2.5rem] lg:text-[3rem]">
-              Local gamepad dashboard
-            </h1>
-            <p className="mt-3 max-w-[620px] text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
-              Run the session from this host. Phones join through the displayed
-              LAN address.
-            </p>
-          </div>
+        <header className="mb-6 flex flex-wrap items-start justify-between gap-4 lg:mb-10">
+          <h1 className="text-[2.75rem] leading-none font-black tracking-[-0.05em] sm:text-[3.25rem] lg:text-[3.75rem]">
+            AIRDECK{' '}
+            <span className="font-light tracking-[-0.04em] text-muted-foreground/35">
+              Host
+            </span>
+          </h1>
           <Badge
             variant={snapshot.connected ? 'default' : 'secondary'}
             className={
               snapshot.connected
-                ? 'bg-emerald-600 text-white hover:bg-emerald-600/90 dark:bg-emerald-500 dark:text-white'
-                : 'bg-amber-500 text-white hover:bg-amber-500/90 dark:bg-amber-500'
+                ? 'mt-2 bg-emerald-600 text-white hover:bg-emerald-600/90 dark:bg-emerald-500 dark:text-white'
+                : 'mt-2 bg-amber-500 text-white hover:bg-amber-500/90 dark:bg-amber-500'
             }
           >
             <span
               className={`size-1.5 rounded-full ${snapshot.connected ? 'bg-white animate-pulse' : 'bg-white/80'}`}
             />
-            {snapshot.connected
-              ? 'Live updates connected'
-              : 'Reconnecting dashboard'}
+            {snapshot.connected ? 'Live' : 'Reconnecting'}
           </Badge>
         </header>
 

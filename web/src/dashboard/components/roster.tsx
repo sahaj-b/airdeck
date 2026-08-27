@@ -2,7 +2,6 @@ import { Badge } from '../../components/ui/badge';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
@@ -36,18 +35,10 @@ export function Roster({
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
-              Players
-            </CardDescription>
-            <CardTitle className="mt-1 text-lg">Connected roster</CardTitle>
-            <CardDescription className="mt-1">
-              Every occupied slot maps to one virtual Xbox-style controller.
-            </CardDescription>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-lg">Players</CardTitle>
           <Badge variant="secondary" className="tabular-nums">
-            {players.length} / 16 slots
+            {players.length} / 16
           </Badge>
         </div>
       </CardHeader>

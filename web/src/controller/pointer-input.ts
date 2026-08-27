@@ -151,6 +151,8 @@ export class PointerInput {
     const onLostPointerCapture = (event: PointerEvent) =>
       this.finishPointer(event.pointerId);
     const onContextMenu = (event: Event) => event.preventDefault();
+    const onSelectStart = (event: Event) => event.preventDefault();
+    const onDragStart = (event: Event) => event.preventDefault();
 
     target.addEventListener('pointerdown', onPointerDown);
     target.addEventListener('pointermove', onPointerMove);
@@ -158,6 +160,8 @@ export class PointerInput {
     target.addEventListener('pointercancel', onPointerCancel);
     target.addEventListener('lostpointercapture', onLostPointerCapture);
     target.addEventListener('contextmenu', onContextMenu);
+    target.addEventListener('selectstart', onSelectStart);
+    target.addEventListener('dragstart', onDragStart);
 
     const cleanup = () => {
       this.cancelElement(target);
@@ -167,6 +171,8 @@ export class PointerInput {
       target.removeEventListener('pointercancel', onPointerCancel);
       target.removeEventListener('lostpointercapture', onLostPointerCapture);
       target.removeEventListener('contextmenu', onContextMenu);
+      target.removeEventListener('selectstart', onSelectStart);
+      target.removeEventListener('dragstart', onDragStart);
     };
     this.cleanups.push(cleanup);
     return cleanup;

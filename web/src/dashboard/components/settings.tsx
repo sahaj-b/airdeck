@@ -3,7 +3,6 @@ import { Button } from '../../components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
@@ -72,14 +71,7 @@ export function Settings({ state, onSave }: SettingsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
-          Host settings
-        </CardDescription>
-        <CardTitle className="text-lg">Network and defaults</CardTitle>
-        <CardDescription>
-          Changes to bind address or port rebind the listener. Existing phone
-          sockets stay connected.
-        </CardDescription>
+        <CardTitle className="text-lg">Host Settings</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={save} className="grid grid-cols-1 gap-4 md:grid-cols-2">

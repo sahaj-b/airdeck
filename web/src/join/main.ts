@@ -374,6 +374,34 @@ function showController(options: {
   const fullscreen = buildFullscreenButton();
   chrome.append(fullscreen.button);
   shell.append(host);
+  // immediate long-press kill before layout even renders
+  {
+    const kill = (event: Event): void => event.preventDefault();
+    const touchOpts: AddEventListenerOptions = {
+      passive: false,
+      capture: true,
+    };
+    const captureOpts: AddEventListenerOptions = { capture: true };
+    for (const type of [
+      'touchstart',
+      'touchmove',
+      'touchend',
+      'touchcancel',
+    ] as const) {
+      shell.addEventListener(type, kill, touchOpts);
+      host.addEventListener(type, kill, touchOpts);
+    }
+    for (const type of [
+      'contextmenu',
+      'selectstart',
+      'dragstart',
+      'copy',
+      'cut',
+    ] as const) {
+      shell.addEventListener(type, kill, captureOpts);
+      host.addEventListener(type, kill, captureOpts);
+    }
+  }
   root.replaceChildren(shell);
 
   // lazy island host container (outside shell, fixed overlay)

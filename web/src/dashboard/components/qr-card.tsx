@@ -4,7 +4,6 @@ import { Button } from '../../components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
@@ -34,14 +33,7 @@ export function QRCard({ state }: QRCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
-          Phone join
-        </CardDescription>
         <CardTitle className="text-lg">Scan to join</CardTitle>
-        <CardDescription>
-          Use a phone on the same network. The code is a lightweight LAN room
-          guard.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid items-center gap-6 md:grid-cols-[256px_1fr]">
