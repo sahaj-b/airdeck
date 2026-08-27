@@ -1,8 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader } from '../../components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
-import { NativeSelect as Select } from '../../components/ui/native-select';
+import { Label } from '../../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+import { Separator } from '../../components/ui/separator';
+import { Slider } from '../../components/ui/slider';
 import type { AdminState } from '../../shared/contracts';
 import type { SettingsUpdate } from '../api';
 
@@ -24,7 +39,7 @@ export function Settings({ state, onSave }: SettingsProps) {
     state.config.defaultLayout,
   );
   const [gracePeriodSeconds, setGracePeriodSeconds] = useState(
-    String(state.config.gracePeriodSeconds),
+    state.config.gracePeriodSeconds,
   );
 
   useEffect(() => {
@@ -33,7 +48,7 @@ export function Settings({ state, onSave }: SettingsProps) {
     setAdvertisedHost(state.config.advertisedHost);
     setAdvertisedPort(String(state.config.advertisedPort));
     setDefaultLayout(state.config.defaultLayout);
-    setGracePeriodSeconds(String(state.config.gracePeriodSeconds));
+    setGracePeriodSeconds(state.config.gracePeriodSeconds);
   }, [
     state.config.advertisedHost,
     state.config.advertisedPort,
@@ -51,44 +66,49 @@ export function Settings({ state, onSave }: SettingsProps) {
       advertisedHost: advertisedHost.trim(),
       advertisedPort: numberValue(advertisedPort),
       defaultLayout,
-      gracePeriodSeconds: numberValue(gracePeriodSeconds),
+      gracePeriodSeconds,
     });
   }
 
   return (
     <Card>
       <CardHeader>
-        <div className="eyebrow">Host settings</div>
-        <h2>Network and defaults</h2>
-        <p>
+        <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
+          Host settings
+        </CardDescription>
+        <CardTitle className="text-lg">Network and defaults</CardTitle>
+        <CardDescription>
           Changes to bind address or port rebind the listener. Existing phone
           sockets stay connected.
-        </p>
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="settings-form" onSubmit={save}>
-          <label htmlFor="bind-address">
-            Bind address
+        <form onSubmit={save} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="bind-address">Bind address</Label>
             <Input
               id="bind-address"
               value={bind}
               onChange={(event) => setBind(event.target.value)}
               autoComplete="off"
+              placeholder="0.0.0.0"
             />
-          </label>
-          <label htmlFor="listen-port">
-            Listen port
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="listen-port">Listen port</Label>
             <Input
               id="listen-port"
               type="number"
-              min="0"
-              max="65535"
+              min={0}
+              max={65535}
               value={port}
               onChange={(event) => setPort(event.target.value)}
             />
-          </label>
-          <label htmlFor="advertised-host">
-            Advertised host
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="advertised-host">Advertised host</Label>
             <Input
               id="advertised-host"
               value={advertisedHost}
@@ -96,48 +116,74 @@ export function Settings({ state, onSave }: SettingsProps) {
               autoComplete="off"
               placeholder="LAN address or hostname"
             />
-          </label>
-          <label htmlFor="advertised-port">
-            Advertised port
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="advertised-port">Advertised port</Label>
             <Input
               id="advertised-port"
               type="number"
-              min="0"
-              max="65535"
+              min={0}
+              max={65535}
               value={advertisedPort}
               onChange={(event) => setAdvertisedPort(event.target.value)}
             />
-            <small>Use 0 to advertise the selected public port.</small>
-          </label>
-          <label htmlFor="default-layout">
-            Default layout
+            <p className="text-xs text-muted-foreground">
+              Use 0 to advertise the selected public port.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="default-layout">Default layout</Label>
             <Select
-              id="default-layout"
               value={defaultLayout}
-              onChange={(event) => setDefaultLayout(event.target.value)}
+              onValueChange={(v) => v && setDefaultLayout(v)}
             >
-              {state.layouts.map((layout) => (
-                <option key={layout.id} value={layout.id}>
-                  {layout.name}
-                </option>
-              ))}
+              <SelectTrigger id="default-layout" className="w-full">
+                <SelectValue placeholder="Select layout" />
+              </SelectTrigger>
+              <SelectContent>
+                {state.layouts.map((layout) => (
+                  <SelectItem key={layout.id} value={layout.id}>
+                    {layout.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </label>
-          <label htmlFor="grace-period">
-            Reconnect grace period
-            <Input
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="grace-period">Reconnect grace period</Label>
+              <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
+                {gracePeriodSeconds}s
+              </span>
+            </div>
+            <Slider
               id="grace-period"
-              type="number"
-              min="1"
-              max="300"
-              value={gracePeriodSeconds}
-              onChange={(event) => setGracePeriodSeconds(event.target.value)}
+              value={[gracePeriodSeconds]}
+              min={1}
+              max={60}
+              step={1}
+              onValueChange={(value) => {
+                const next = (value as number[])[0];
+                if (next != null) setGracePeriodSeconds(next);
+              }}
             />
-            <small>
-              How long to reserve a disconnected player's slot, in seconds.
-            </small>
-          </label>
-          <div className="settings-submit">
+            <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
+              <span>1s</span>
+              <span>60s</span>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              How long to reserve a disconnected player&apos;s slot.
+            </p>
+          </div>
+
+          <div className="md:col-span-2">
+            <Separator className="my-2" />
+          </div>
+
+          <div className="flex justify-end md:col-span-2">
             <Button type="submit">Save settings</Button>
           </div>
         </form>

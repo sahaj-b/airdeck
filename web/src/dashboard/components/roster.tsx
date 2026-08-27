@@ -1,5 +1,18 @@
-import { Card, CardContent, CardHeader } from '../../components/ui/card';
-import { Table, TableWrap } from '../../components/ui/table';
+import { Badge } from '../../components/ui/badge';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../components/ui/table';
 import type { LayoutSummary, PlayerSnapshot } from '../../shared/contracts';
 import { PlayerRow } from './player-row';
 
@@ -21,60 +34,63 @@ export function Roster({
   onLayout,
 }: RosterProps) {
   return (
-    <Card className="roster-card">
+    <Card>
       <CardHeader>
-        <div className="eyebrow">Players</div>
-        <div className="roster-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2>Connected roster</h2>
-            <p>
+            <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
+              Players
+            </CardDescription>
+            <CardTitle className="mt-1 text-lg">Connected roster</CardTitle>
+            <CardDescription className="mt-1">
               Every occupied slot maps to one virtual Xbox-style controller.
-            </p>
+            </CardDescription>
           </div>
-          <span className="capacity">{players.length} / 16 slots</span>
+          <Badge variant="secondary" className="tabular-nums">
+            {players.length} / 16 slots
+          </Badge>
         </div>
       </CardHeader>
       <CardContent>
         {players.length === 0 ? (
-          <div className="empty-state">
-            <strong>No players connected.</strong>
-            <span>Keep this page open while phones scan the join code.</span>
+          <div className="grid gap-1 rounded-lg border border-dashed p-8 text-center">
+            <div className="text-sm font-medium">No players connected.</div>
+            <div className="text-xs text-muted-foreground">
+              Keep this page open while phones scan the join code.
+            </div>
           </div>
         ) : (
-          <TableWrap>
-            <Table>
-              <caption className="sr-only">Connected Airdeck players</caption>
-              <thead>
-                <tr>
-                  <th>Slot</th>
-                  <th>Player</th>
-                  <th>State</th>
-                  <th>Last input</th>
-                  <th>RTT</th>
-                  <th>Layout</th>
-                  <th>Device</th>
-                  <th>Rumble</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {players.map((player) => (
-                  <PlayerRow
-                    key={player.id}
-                    player={player}
-                    players={players}
-                    layouts={layouts}
-                    now={now}
-                    onKick={onKick}
-                    onMove={onMove}
-                    onLayout={onLayout}
-                  />
-                ))}
-              </tbody>
-            </Table>
-          </TableWrap>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Slot</TableHead>
+                <TableHead>Player</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>Last input</TableHead>
+                <TableHead>RTT</TableHead>
+                <TableHead>Layout</TableHead>
+                <TableHead>Device</TableHead>
+                <TableHead>Rumble</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {players.map((player) => (
+                <PlayerRow
+                  key={player.id}
+                  player={player}
+                  players={players}
+                  layouts={layouts}
+                  now={now}
+                  onKick={onKick}
+                  onMove={onMove}
+                  onLayout={onLayout}
+                />
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

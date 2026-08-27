@@ -7,7 +7,6 @@ export interface SettingsState {
   sound: boolean;
   ignoreCutout: boolean;
   skin: string;
-  // gyro future - not exposed in UI yet, but persisted for later
   gyroEnabled: boolean;
   gyroTarget: 'leftStick' | 'rightStick';
   gyroMode: 'steer' | 'aim';
@@ -17,6 +16,8 @@ export interface SettingsState {
   deadzoneY: number;
   maxAngleY: number;
   invertY: boolean;
+  gyroCalibBeta: number | null;
+  gyroCalibGamma: number | null;
 }
 
 export interface SettingsActions {
@@ -28,6 +29,7 @@ export interface SettingsActions {
   setGyroEnabled: (v: boolean) => void;
   setGyroTarget: (v: SettingsState['gyroTarget']) => void;
   setGyroMode: (v: SettingsState['gyroMode']) => void;
+  setGyroCalib: (beta: number | null, gamma: number | null) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -39,14 +41,16 @@ const DEFAULTS: SettingsState = {
   ignoreCutout: true,
   skin: 'airdeck',
   gyroEnabled: false,
-  gyroTarget: 'rightStick',
-  gyroMode: 'aim',
-  deadzoneX: 5,
-  maxAngleX: 30,
+  gyroTarget: 'leftStick',
+  gyroMode: 'steer',
+  deadzoneX: 0.08,
+  maxAngleX: 35,
   invertX: false,
-  deadzoneY: 5,
-  maxAngleY: 30,
+  deadzoneY: 0.08,
+  maxAngleY: 35,
   invertY: false,
+  gyroCalibBeta: null,
+  gyroCalibGamma: null,
 };
 
 export const settingsStore = createStore<SettingsStore>()(
@@ -61,6 +65,8 @@ export const settingsStore = createStore<SettingsStore>()(
       setGyroEnabled: (gyroEnabled) => set({ gyroEnabled }),
       setGyroTarget: (gyroTarget) => set({ gyroTarget }),
       setGyroMode: (gyroMode) => set({ gyroMode }),
+      setGyroCalib: (gyroCalibBeta, gyroCalibGamma) =>
+        set({ gyroCalibBeta, gyroCalibGamma }),
     }),
     {
       name: 'airdeck.settings.v1',
