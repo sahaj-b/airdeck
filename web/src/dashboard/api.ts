@@ -1,37 +1,5 @@
 import type { AdminState, PlayerSnapshot } from '../shared/contracts';
 
-export interface ResourceSample {
-  at: string;
-  players: number;
-  goroutines: number;
-  memoryBytes: number;
-  fileDescriptors: number;
-  userCpuTime: number;
-  systemCpuTime: number;
-}
-
-// DiagnosticsResponse is the shape served by /api/admin/diagnostics: the
-// metrics summary plus the sampled frame trace used by lanbench.
-export interface DiagnosticsResponse {
-  summary: DiagnosticsSummary;
-  trace: unknown[];
-}
-
-export interface DiagnosticsSummary {
-  acceptedFrames: number;
-  rejectedFrames: number;
-  staleFrames: number;
-  watchdogCount: number;
-  p50: number;
-  p95: number;
-  p99: number;
-  max: number;
-  watchdogP50: number;
-  watchdogP95: number;
-  watchdogMax: number;
-  resources: ResourceSample[];
-}
-
 export interface SettingsUpdate {
   bind?: string;
   port?: number;
@@ -70,11 +38,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getAdminState(): Promise<AdminState> {
   return request<AdminState>('/api/admin/state');
-}
-
-export async function getDiagnostics(): Promise<DiagnosticsSummary> {
-  const response = await request<DiagnosticsResponse>('/api/admin/diagnostics');
-  return response.summary;
 }
 
 export function newSession(): Promise<AdminState> {

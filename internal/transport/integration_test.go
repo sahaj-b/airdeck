@@ -11,7 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/sahaj-b/airdeck/internal/device"
-	"github.com/sahaj-b/airdeck/internal/diagnostics"
+
 	"github.com/sahaj-b/airdeck/internal/input"
 	"github.com/sahaj-b/airdeck/internal/layout"
 	"github.com/sahaj-b/airdeck/internal/protocol"
@@ -67,7 +67,7 @@ func TestTwoWebSocketClientsStayBoundToSeparateDevices(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sess.Close()
-	handler := input.NewHandler(sess, diagnostics.NewTrace(64), &diagnostics.Metrics{})
+	handler := input.NewHandler(sess)
 	defer handler.Close()
 	server := NewServer(sess, handler, library, 60)
 	httpServer := httptest.NewServer(server)
@@ -128,7 +128,7 @@ func TestDeviceErrorAdmissionFreesTheSlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sess.Close()
-	handler := input.NewHandler(sess, diagnostics.NewTrace(16), &diagnostics.Metrics{})
+	handler := input.NewHandler(sess)
 	defer handler.Close()
 	server := NewServer(sess, handler, library, 60)
 	httpServer := httptest.NewServer(server)
@@ -222,7 +222,7 @@ func newTransportServer(t *testing.T) (*Server, *session.Session, *transportFake
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := input.NewHandler(sess, diagnostics.NewTrace(64), &diagnostics.Metrics{})
+	handler := input.NewHandler(sess)
 	server := NewServer(sess, handler, library, 60)
 	t.Cleanup(func() {
 		handler.Close()

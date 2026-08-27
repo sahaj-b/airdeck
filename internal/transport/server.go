@@ -138,12 +138,6 @@ func (s *Server) handleText(client *Client, playerID string, generation uint64, 
 		if sent, ok := client.takePing(pong.ID); ok {
 			_ = s.Session.SetPong(playerID, generation, time.Since(sent))
 		}
-	case protocol.MessageDebugTrace:
-		var trace protocol.DebugInputTrace
-		if json.Unmarshal(data, &trace) != nil {
-			return
-		}
-		s.Input.NoteClientTime(playerID, trace.Sequence, trace.ClientTime)
 	case protocol.MessageLayoutSelect:
 		var selectMessage protocol.LayoutSelect
 		if err := json.Unmarshal(data, &selectMessage); err != nil {

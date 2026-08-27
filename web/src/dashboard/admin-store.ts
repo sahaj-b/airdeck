@@ -2,9 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { AdminState } from '../shared/contracts';
 import {
   type AdminEvent,
-  type DiagnosticsSummary,
   getAdminState,
-  getDiagnostics,
   kickPlayer,
   movePlayer,
   newSession,
@@ -16,7 +14,6 @@ import {
 
 export interface AdminSnapshot {
   state: AdminState | null;
-  diagnostics: DiagnosticsSummary | null;
   loading: boolean;
   connected: boolean;
   error: string | null;
@@ -25,7 +22,6 @@ export interface AdminSnapshot {
 export class AdminStore {
   private snapshot: AdminSnapshot = {
     state: null,
-    diagnostics: null,
     loading: true,
     connected: false,
     error: null,
@@ -44,23 +40,16 @@ export class AdminStore {
 
   async load(): Promise<void> {
     this.setSnapshot({ loading: true, error: null });
-    const [state, diagnostics] = await Promise.allSettled([
-      getAdminState(),
-      getDiagnostics(),
-    ]);
-    if (state.status === 'fulfilled') this.setSnapshot({ state: state.value });
-    if (diagnostics.status === 'fulfilled')
-      this.setSnapshot({ diagnostics: diagnostics.value });
-    const failure =
-      state.status === 'rejected'
-        ? state.reason
-        : diagnostics.status === 'rejected'
-          ? diagnostics.reason
-          : null;
-    this.setSnapshot({
-      loading: false,
-      error: failure instanceof Error ? failure.message : null,
-    });
+    try {
+      const state = await getAdminState();
+      this.setSnapshot({ state, loading: false, error: null });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to load dashboard state.';
+      this.setSnapshot({ loading: false, error: message });
+    }
   }
 
   connect(): void {
@@ -113,8 +102,6 @@ export class AdminStore {
       this.setSnapshot({ error: message });
       throw error;
     }
-    // A bind/port change rebinds the listener, which kills the old admin
-    // WebSocket and HTTP server. The dashboard redirects to the new port.
     const state = this.snapshot.state;
     if (state) {
       const currentPort = window.location.port;

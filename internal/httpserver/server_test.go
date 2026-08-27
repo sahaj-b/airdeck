@@ -14,7 +14,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sahaj-b/airdeck/internal/config"
 	"github.com/sahaj-b/airdeck/internal/device"
-	"github.com/sahaj-b/airdeck/internal/diagnostics"
 	"github.com/sahaj-b/airdeck/internal/input"
 	"github.com/sahaj-b/airdeck/internal/layout"
 	"github.com/sahaj-b/airdeck/internal/session"
@@ -46,7 +45,7 @@ func newTestHTTPServer(t *testing.T, bind string) (*Server, config.Config, *sess
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := input.NewHandler(sess, diagnostics.NewTrace(16), &diagnostics.Metrics{})
+	handler := input.NewHandler(sess)
 	transportServer := transport.NewServer(sess, handler, library, 60)
 	cfg := config.Defaults()
 	cfg.Bind = bind

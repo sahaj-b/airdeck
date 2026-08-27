@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/sahaj-b/airdeck/internal/device"
-	"github.com/sahaj-b/airdeck/internal/diagnostics"
 	"github.com/sahaj-b/airdeck/internal/layout"
 	"github.com/sahaj-b/airdeck/internal/protocol"
 	"github.com/sahaj-b/airdeck/internal/session"
@@ -50,9 +49,7 @@ func TestWatchdogMarksPlayerStaleAndNeutralizes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trace := diagnostics.NewTrace(32)
-	metrics := &diagnostics.Metrics{}
-	handler := NewHandler(sess, trace, metrics)
+	handler := NewHandler(sess)
 	defer handler.Close()
 	if err := handler.Handle(admission.Player.ID, admission.Player.Generation, protocol.Frame{Seq: 1}); err != nil {
 		t.Fatal(err)
@@ -75,9 +72,6 @@ func TestWatchdogMarksPlayerStaleAndNeutralizes(t *testing.T) {
 	if neutral == 0 {
 		t.Fatal("watchdog did not neutralize device")
 	}
-	if metrics.Summary().Watchdogs == 0 {
-		t.Fatal("watchdog was not recorded")
-	}
 }
 
 func TestHandlerRejectsStaleSequence(t *testing.T) {
@@ -95,15 +89,18 @@ func TestHandlerRejectsStaleSequence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(sess, diagnostics.NewTrace(8), &diagnostics.Metrics{})
+	handler := NewHandler(sess)
 	defer handler.Close()
 	if err := handler.Handle(admission.Player.ID, admission.Player.Generation, protocol.Frame{Seq: 4}); err != nil {
 		t.Fatal(err)
 	}
+	// second call with older sequence should be silently dropped (stale)
 	if err := handler.Handle(admission.Player.ID, admission.Player.Generation, protocol.Frame{Seq: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if handler.Metrics().Stale != 1 {
-		t.Fatalf("stale count = %d, want 1", handler.Metrics().Stale)
+	// still active, stale frame did not move state
+	player, _ := sess.Player(admission.Player.ID)
+	if player.State != session.StateActive {
+		t.Fatalf("player state = %v, want active after stale frame", player.State)
 	}
 }

@@ -89,11 +89,6 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "/state" && r.Method == http.MethodGet:
 		writeJSON(w, http.StatusOK, s.currentState())
-	case path == "/diagnostics" && r.Method == http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{
-			"summary": s.options.Input.Metrics(),
-			"trace":   s.options.Input.TraceSnapshot(),
-		})
 	case path == "/session/new" && r.Method == http.MethodPost:
 		if err := s.options.Session.NewSession(); err != nil {
 			writeError(w, err)

@@ -4,7 +4,6 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { AdminStore, useAdminSnapshot } from './admin-store';
 import type { SettingsUpdate } from './api';
-import { Diagnostics } from './components/diagnostics';
 import { QRCard } from './components/qr-card';
 import { Roster } from './components/roster';
 import { SessionControls } from './components/session-controls';
@@ -105,10 +104,7 @@ function Dashboard() {
         onLayout={onLayout}
       />
 
-      <div className="dashboard-bottom-grid">
-        <Settings state={state} onSave={onSaveSettings} />
-        <Diagnostics diagnostics={snapshot.diagnostics} />
-      </div>
+      <Settings state={state} onSave={onSaveSettings} />
     </main>
   );
 }

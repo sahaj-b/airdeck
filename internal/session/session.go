@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -164,6 +165,7 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 				slot := player.Slot
 				s.mu.Unlock()
 				_ = s.devices.Neutralize(slot)
+				log.Printf("player %s slot %d reconnected", player.ID, slot)
 				s.emit(Event{Type: "player.reconnected", Player: &snapshot})
 				return Admission{Player: snapshot, Reconnected: true}, nil
 			}
@@ -218,6 +220,7 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	s.slots[slot] = player
 	snapshot := player.Snapshot()
 	s.mu.Unlock()
+	log.Printf("player %s slot %d joined display=%q", player.ID, slot, name)
 	s.emit(Event{Type: "player.joined", Player: &snapshot})
 	return Admission{Player: snapshot}, nil
 }
@@ -332,6 +335,7 @@ func (s *Session) MarkStale(id string, generation uint64) error {
 	if err := s.devices.Neutralize(slot); err != nil {
 		return err
 	}
+	log.Printf("player %s slot %d marked stale", id, slot)
 	s.emit(Event{Type: "player.stale", Player: s.snapshotByID(id)})
 	return nil
 }
@@ -358,6 +362,7 @@ func (s *Session) Disconnect(id string, generation uint64) error {
 	slot := player.Slot
 	s.mu.Unlock()
 	_ = s.devices.Neutralize(slot)
+	log.Printf("player %s slot %d disconnected grace=%s", id, slot, s.gracePeriod)
 	s.emit(Event{Type: "player.disconnected", Player: s.snapshotByID(id)})
 	time.AfterFunc(s.gracePeriod, func() { s.expireGrace(id, generation) })
 	return nil
@@ -378,6 +383,7 @@ func (s *Session) expireGrace(id string, generation uint64) {
 	s.slots[slot] = nil
 	s.mu.Unlock()
 	_ = s.devices.Destroy(slot)
+	log.Printf("player %s slot %d expired", id, slot)
 	s.emit(Event{Type: "player.expired", Message: id})
 }
 
@@ -434,6 +440,7 @@ func (s *Session) closePlayer(id string, generation uint64, reason string) error
 	if err := s.devices.Destroy(slot); err != nil {
 		return err
 	}
+	log.Printf("player %s slot %d %s", id, slot, reason)
 	s.emit(Event{Type: "player.closed", Message: reason})
 	return nil
 }
@@ -489,6 +496,7 @@ func (s *Session) Move(id string, target int) error {
 	current.DeviceStatus = "ready"
 	current.State = StateActive
 	s.mu.Unlock()
+	log.Printf("player %s moved %d -> %d", id, old, target)
 	s.emit(Event{Type: "player.moved", Player: s.snapshotByID(id)})
 	return nil
 }
@@ -593,6 +601,7 @@ func (s *Session) NewSession() error {
 	s.players = make(map[string]*Player)
 	s.slots = [maxPlayers]*Player{}
 	s.mu.Unlock()
+	log.Printf("new session code %s", code)
 	// Notify connected clients before their close callbacks run. The transport
 	// can flush the reset message and then close each socket without leaving
 	// phones stuck on the previous session.
