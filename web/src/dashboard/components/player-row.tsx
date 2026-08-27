@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import { Badge, type BadgeProps } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Select } from '../../components/ui/select';
+import { NativeSelect as Select } from '../../components/ui/native-select';
 import type { LayoutSummary, PlayerSnapshot } from '../../shared/contracts';
 
 interface PlayerRowProps {
@@ -115,8 +115,8 @@ export const PlayerRow = memo(function PlayerRow({
           </Select>
           <Button
             type="button"
-            size="small"
-            variant="danger"
+            size="sm"
+            variant="destructive"
             disabled={busy}
             onClick={() => void run(() => onKick(player.id))}
           >

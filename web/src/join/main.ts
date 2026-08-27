@@ -1,3 +1,4 @@
+import '@/index.css';
 import '../controller/controller.css';
 import { CapabilityManager } from '../controller/capabilities';
 import { FeedbackController } from '../controller/feedback';
@@ -10,20 +11,15 @@ import {
 import { ControllerSocket, SELECTED_LAYOUT_KEY } from '../controller/socket';
 import { InputStateStore } from '../controller/state';
 import type { Welcome } from '../shared/contracts';
-import { initSkin } from '../skins/loader';
+import { getSkin, initSkin, setSkin } from '../skins/loader';
 import './join.css';
 import {
   CONNECTION_LABELS,
-  CUTOUT_KEY,
   DEFAULT_NAME_PATTERN,
-  DEFAULT_VIBRATION_MS,
   DISPLAY_NAME_KEY,
   GEAR_ICON,
   PILL_LABELS,
-  RUMBLE_KEY,
-  SOUND_KEY,
   shortStatus,
-  VIBRATION_KEY,
   WAKE_LOCK_KEY,
 } from './constants';
 import {
@@ -32,11 +28,10 @@ import {
   textField,
   updateCapabilityMessage,
 } from './dom-helpers';
-import { buildSettingsSheet } from './settings-sheet';
+import { settingsStore } from './settings-store';
 import {
   getSessionCode,
   readBoolean,
-  readNumber,
   readStorage,
   writeStorage,
 } from './storage';
@@ -56,6 +51,12 @@ let removeJoinFullscreenHandler: (() => void) | undefined;
 
 renderJoinScreen();
 initSkin();
+
+// sync skin from zustand store (keeps loader + store aligned)
+{
+  const s = settingsStore.getState().skin;
+  if (s && s !== getSkin()) setSkin(s);
+}
 
 function renderJoinScreen(errorMessage = ''): void {
   activeSocket?.close();
@@ -118,22 +119,14 @@ function renderJoinScreen(errorMessage = ''): void {
   nameField.input.maxLength = 40;
   form.append(codeField.wrapper, nameField.wrapper);
 
+  const storeState = settingsStore.getState();
   const preferences = document.createElement('fieldset');
   preferences.className = 'join-preferences';
   const legend = document.createElement('legend');
   legend.textContent = 'Local feedback';
   preferences.append(legend);
-  const vibrationMs = readNumber(VIBRATION_KEY, DEFAULT_VIBRATION_MS);
-  const rumble = checkboxField(
-    'rumble',
-    'Game rumble',
-    readBoolean(RUMBLE_KEY, true),
-  );
-  const sound = checkboxField(
-    'sound',
-    'Button sounds',
-    readBoolean(SOUND_KEY, false),
-  );
+  const rumble = checkboxField('rumble', 'Game rumble', storeState.rumble);
+  const sound = checkboxField('sound', 'Button sounds', storeState.sound);
   const wakeLock = checkboxField(
     'wakeLock',
     'Keep the screen awake',
@@ -142,7 +135,7 @@ function renderJoinScreen(errorMessage = ''): void {
   const cutout = checkboxField(
     'ignoreCutout',
     'Ignore display cutout',
-    readBoolean(CUTOUT_KEY, true),
+    storeState.ignoreCutout,
   );
   preferences.append(
     rumble.wrapper,
@@ -192,10 +185,11 @@ function renderJoinScreen(errorMessage = ''): void {
     }
 
     writeStorage(DISPLAY_NAME_KEY, displayName);
-    writeStorage(RUMBLE_KEY, String(rumble.input.checked));
-    writeStorage(SOUND_KEY, String(sound.input.checked));
+    // sync to zustand store (single source of truth)
+    settingsStore.getState().setRumble(rumble.input.checked);
+    settingsStore.getState().setSound(sound.input.checked);
+    settingsStore.getState().setIgnoreCutout(cutout.input.checked);
     writeStorage(WAKE_LOCK_KEY, String(wakeLock.input.checked));
-    writeStorage(CUTOUT_KEY, String(cutout.input.checked));
     capabilities.setWakeLockPreference(wakeLock.input.checked);
     void capabilities.requestJoinCapabilities(wakeLock.input.checked);
 
@@ -203,9 +197,6 @@ function renderJoinScreen(errorMessage = ''): void {
     showController({
       sessionCode: code,
       displayName,
-      vibrationMs,
-      rumble: rumble.input.checked,
-      sound: sound.input.checked,
       capabilities,
     });
   });
@@ -218,18 +209,34 @@ function renderJoinScreen(errorMessage = ''): void {
 function showController(options: {
   sessionCode: string;
   displayName: string;
-  vibrationMs: number;
-  rumble: boolean;
-  sound: boolean;
   capabilities: CapabilityManager;
 }): void {
+  const storeState = settingsStore.getState();
   const state = new InputStateStore();
   const feedback = new FeedbackController({
-    pressVibrationMs: options.vibrationMs,
-    rumble: options.rumble,
-    sound: options.sound,
+    pressVibrationMs: storeState.vibrationMs,
+    rumble: storeState.rumble,
+    sound: storeState.sound,
   });
   activeFeedback = feedback;
+
+  // keep feedback in sync if store changes before island mounts (vibration via slider is handled inside island)
+  const unsubFeedback = settingsStore.subscribe((s, prev) => {
+    if (
+      s.rumble !== prev.rumble ||
+      s.sound !== prev.sound ||
+      s.vibrationMs !== prev.vibrationMs
+    ) {
+      feedback.setPreferences({
+        pressVibrationMs: s.vibrationMs,
+        rumble: s.rumble,
+        sound: s.sound,
+      });
+    }
+    if (s.ignoreCutout !== prev.ignoreCutout) {
+      host.classList.toggle('ignore-cutout', s.ignoreCutout);
+    }
+  });
 
   const shell = document.createElement('main');
   shell.className = 'controller-shell';
@@ -267,76 +274,116 @@ function showController(options: {
 
   const host = document.createElement('div');
   host.className = 'controller-host';
-  if (readBoolean(CUTOUT_KEY, true)) host.classList.add('ignore-cutout');
+  if (storeState.ignoreCutout) host.classList.add('ignore-cutout');
 
-  const layoutSelect = document.createElement('select');
-  layoutSelect.className = 'controller-layout-picker';
-  layoutSelect.setAttribute('aria-label', 'Controller layout');
-  layoutSelect.disabled = true;
-  const waitingOption = document.createElement('option');
-  waitingOption.textContent = 'Loading layout';
-  waitingOption.value = '';
-  layoutSelect.append(waitingOption);
-
-  const connectionValue = document.createElement('span');
-  connectionValue.className = 'settings-value';
-  connectionValue.textContent = CONNECTION_LABELS.connecting;
-
-  const pingValue = document.createElement('span');
-  pingValue.className = 'settings-value';
-  pingValue.textContent = '—';
-
-  const capabilityMessages = options.capabilities.currentStatus.messages;
-  const settings = buildSettingsSheet({
-    layoutSelect,
-    connectionValue,
-    pingValue,
-    vibrationMs: options.vibrationMs,
-    rumble: options.rumble,
-    sound: options.sound,
-    ignoreCutout: readBoolean(CUTOUT_KEY, true),
-    onCutoutChange: (ignored) => {
-      host.classList.toggle('ignore-cutout', ignored);
-    },
-    feedback,
-    capabilityNotes: capabilityMessages.length
-      ? capabilityMessages.join(' ')
-      : 'All local feedback capabilities are available.',
-  });
   const fullscreen = buildFullscreenButton();
   chrome.append(fullscreen.button);
-  shell.append(host, settings.backdrop, settings.root);
+  shell.append(host);
   root.replaceChildren(shell);
 
-  let transientStatus: string | null = null;
+  // lazy island host container (outside shell, fixed overlay)
+  const islandHost = document.createElement('div');
+  islandHost.id = 'settings-island-host';
+  root.append(islandHost);
+
+  let availableLayouts: { id: string; name: string }[] = [];
+  let currentLayoutId = '';
+  let connectionText = CONNECTION_LABELS.connecting;
+  let pingText = '—';
+  let island: import('./settings-island').SettingsIsland | undefined;
+  let islandLoading = false;
+
+  const capabilityMessages = options.capabilities.currentStatus.messages;
+  const capabilityNotes = capabilityMessages.length
+    ? capabilityMessages.join(' ')
+    : 'All local feedback capabilities are available.';
+
   const updateStatus = (transient: string | null): void => {
-    transientStatus = transient;
     const full = transient ?? CONNECTION_LABELS[socket.state];
     status.textContent = transient
       ? shortStatus(transient)
       : PILL_LABELS[socket.state];
-    connectionValue.textContent = full;
+    connectionText = full;
+    island?.update({ connectionText });
   };
 
-  const openSettings = (open: boolean): void => {
-    settings.backdrop.hidden = !open;
-    settings.root.hidden = !open;
-    gearButton.setAttribute('aria-expanded', String(open));
-    if (open) settings.closeButton.focus();
-    else gearButton.focus();
+  const updatePing = (text: string) => {
+    pingText = text;
+    island?.update({ pingText });
   };
-  gearButton.addEventListener('click', () =>
-    openSettings(settings.root.hidden),
-  );
-  settings.backdrop.addEventListener('click', () => openSettings(false));
-  settings.closeButton.addEventListener('click', () => openSettings(false));
+
+  const openSettings = async (): Promise<void> => {
+    if (islandLoading) return;
+    if (island) {
+      // already mounted, reopen
+      island.update({
+        layouts: availableLayouts,
+        selectedLayout: currentLayoutId,
+        connectionText,
+        pingText,
+      });
+      // re-mount by re-creating if previously closed via Drawer
+      // if container removed, recreate
+      if (
+        !document.body.contains(island.container) &&
+        !islandHost.contains(island.container)
+      ) {
+        island = undefined;
+      } else {
+        return;
+      }
+    }
+    islandLoading = true;
+    gearButton.setAttribute('aria-expanded', 'true');
+    try {
+      const { mountSettingsIsland } = await import('./settings-island');
+      island = mountSettingsIsland(islandHost, {
+        store: settingsStore,
+        feedback,
+        capabilityNotes,
+        layouts: availableLayouts,
+        selectedLayout: currentLayoutId,
+        onSelectLayout: (id) => {
+          if (!id || id === currentLayoutId) return;
+          if (socket.selectLayout(id)) updateStatus('Loading layout...');
+        },
+        connectionText,
+        pingText,
+      });
+      const originalUnmount = island.unmount.bind(island);
+      island.unmount = () => {
+        gearButton.setAttribute('aria-expanded', 'false');
+        gearButton.focus();
+        originalUnmount();
+        island = undefined;
+        islandLoading = false;
+      };
+      // patch onOpenChange to track gear state
+      const originalUpdate = island.update.bind(island);
+      island.update = (next) => originalUpdate(next);
+    } catch (err) {
+      console.error('Failed to load settings island', err);
+      gearButton.setAttribute('aria-expanded', 'false');
+    } finally {
+      islandLoading = false;
+    }
+  };
+
+  gearButton.addEventListener('click', () => {
+    void openSettings();
+  });
+
   const onShellKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && !settings.root.hidden) openSettings(false);
+    if (event.key === 'Escape' && island) {
+      island.unmount();
+    }
   };
   document.addEventListener('keydown', onShellKeyDown);
   removeControllerDocumentHandlers = () => {
     document.removeEventListener('keydown', onShellKeyDown);
     fullscreen.cleanup();
+    unsubFeedback();
+    island?.unmount();
   };
 
   activeSender = new FrameSender(
@@ -346,14 +393,13 @@ function showController(options: {
     state,
   );
 
-  let currentLayoutId = '';
   const socket = new ControllerSocket({
     sessionCode: options.sessionCode,
     displayName: options.displayName,
     selectedLayout: readStorage(SELECTED_LAYOUT_KEY) ?? undefined,
     capabilities: () => options.capabilities.capabilities,
     onStateChange: (nextState) => {
-      updateStatus(nextState === 'active' ? transientStatus : null);
+      updateStatus(nextState === 'active' ? null : null);
       if (nextState === 'active') activeSender?.start();
       if (
         nextState === 'closed' ||
@@ -370,10 +416,13 @@ function showController(options: {
     },
     onWelcome: (welcome) => {
       activeSender?.setInputRate(welcome.targetInputRate);
-      applyWelcome(welcome, slot, name, shell, layoutSelect);
+      applyWelcome(welcome, slot, name, shell);
+      availableLayouts = welcome.availableLayouts;
       currentLayoutId = welcome.selectedLayout;
-      layoutSelect.value = welcome.selectedLayout;
-      layoutSelect.disabled = false;
+      island?.update({
+        layouts: availableLayouts,
+        selectedLayout: currentLayoutId,
+      });
     },
     onLayout: (layout, diagnostic) => {
       activeRenderer?.destroy();
@@ -384,7 +433,7 @@ function showController(options: {
       });
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
-      layoutSelect.value = layout.id;
+      island?.update({ selectedLayout: currentLayoutId });
       updateStatus(diagnostic ?? 'Controller ready.');
     },
     onError: (message) => {
@@ -398,13 +447,14 @@ function showController(options: {
         renderJoinScreen(message.message);
         return;
       }
-      if (message.code === 'invalid_layout')
-        layoutSelect.value = currentLayoutId;
+      if (message.code === 'invalid_layout') {
+        island?.update({ selectedLayout: currentLayoutId });
+      }
       updateStatus(message.message);
     },
     onRumble: (message) => feedback.rumble(message),
     onPing: (rttMs) => {
-      pingValue.textContent = `${Math.round(rttMs)} ms`;
+      updatePing(`${Math.round(rttMs)} ms`);
     },
     onReconnect: () => {
       activeRenderer?.cancelPointers();
@@ -415,13 +465,6 @@ function showController(options: {
     },
   });
   activeSocket = socket;
-
-  layoutSelect.addEventListener('change', () => {
-    const requested = layoutSelect.value;
-    if (!requested || requested === currentLayoutId) return;
-    if (socket.selectLayout(requested)) updateStatus('Loading layout...');
-    else layoutSelect.value = currentLayoutId;
-  });
 
   const neutralize = (): void => {
     const wasRunning = activeSender?.isRunning ?? false;
@@ -448,7 +491,6 @@ function applyWelcome(
   slot: HTMLElement,
   name: HTMLElement,
   shell: HTMLElement,
-  layoutSelect: HTMLSelectElement,
 ): void {
   slot.textContent = `Player ${welcome.slot + 1}`;
   const isDefaultName = DEFAULT_NAME_PATTERN.test(welcome.displayName);
@@ -456,11 +498,4 @@ function applyWelcome(
   name.hidden = isDefaultName;
   name.style.display = isDefaultName ? 'none' : '';
   shell.style.setProperty('--slot-accent', welcome.accent);
-  layoutSelect.replaceChildren();
-  for (const layout of welcome.availableLayouts) {
-    const option = document.createElement('option');
-    option.value = layout.id;
-    option.textContent = layout.name;
-    layoutSelect.append(option);
-  }
 }

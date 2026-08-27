@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@/index.css';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { AdminStore, useAdminSnapshot } from './admin-store';

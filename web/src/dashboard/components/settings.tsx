@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
-import { Select } from '../../components/ui/select';
+import { NativeSelect as Select } from '../../components/ui/native-select';
 import type { AdminState } from '../../shared/contracts';
 import type { SettingsUpdate } from '../api';
 

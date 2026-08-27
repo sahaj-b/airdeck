@@ -27,7 +27,7 @@ export function SessionControls({
             <Switch
               id="accepting-joins"
               checked={state.acceptingJoins}
-              onChange={(event) => onJoinsChange(event.currentTarget.checked)}
+              onCheckedChange={(checked) => onJoinsChange(checked)}
             />
             <span>
               <strong>
@@ -40,7 +40,7 @@ export function SessionControls({
               </small>
             </span>
           </label>
-          <Button type="button" variant="danger" onClick={onNewSession}>
+          <Button type="button" variant="destructive" onClick={onNewSession}>
             Start new session
           </Button>
         </div>
