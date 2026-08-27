@@ -1,0 +1,175 @@
+var e=`/* Neumorphic dark — same dual-shadow soft UI, dark surface.
+   Shadows flip roles: dark shadow #1c2026, light edge #3a414c. */
+
+html[data-skin="neumorph"] {
+  --accent: #7aa2f7;
+  --surface: #2b3038;
+  --shade: #1b1f25;
+  --light: #3b424d;
+  --text: #9aa7b8;
+}
+
+html[data-skin="neumorph"] body,
+html[data-skin="neumorph"] .controller-shell {
+  background: #16191e;
+}
+
+html[data-skin="neumorph"] .controller-frame {
+  border-radius: clamp(0.8rem, 3vw, 1.8rem);
+  background: var(--surface);
+}
+
+html[data-skin="neumorph"] .controller-name,
+html[data-skin="neumorph"] .dpad-direction {
+  color: var(--text);
+}
+
+html[data-skin="neumorph"] .controller-control {
+  border: 0;
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow:
+    6px 6px 12px var(--shade),
+    -6px -6px 12px var(--light);
+  transition: box-shadow 120ms ease;
+}
+
+html[data-skin="neumorph"] [data-shape="circle"],
+html[data-skin="neumorph"] [data-shape="pill"] {
+  box-shadow:
+    5px 5px 10px var(--shade),
+    -5px -5px 10px var(--light);
+}
+
+html[data-skin="neumorph"] .controller-control.is-pressed {
+  box-shadow:
+    inset 4px 4px 8px var(--shade),
+    inset -4px -4px 8px var(--light);
+}
+
+html[data-skin="neumorph"] .control-trigger.is-pressed {
+  color: var(--accent);
+}
+
+html[data-skin="neumorph"] .control-joystick {
+  box-shadow:
+    inset 5px 5px 10px var(--shade),
+    inset -5px -5px 10px var(--light);
+  transition: box-shadow 120ms ease;
+}
+
+html[data-skin="neumorph"] .control-joystick.is-active {
+  box-shadow:
+    inset 5px 5px 10px var(--shade),
+    inset -5px -5px 10px var(--light),
+    0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+html[data-skin="neumorph"] .control-joystick::after {
+  background: var(--surface);
+  box-shadow:
+    4px 4px 8px var(--shade),
+    -4px -4px 8px var(--light),
+    inset 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+html[data-skin="neumorph"] .dpad-direction {
+  border: 0;
+  border-radius: 22%;
+  background: var(--surface);
+  box-shadow:
+    4px 4px 8px var(--shade),
+    -4px -4px 8px var(--light);
+  transition: box-shadow 100ms ease;
+}
+
+/* Active dpad arm: shadow only on the outer edges, inner edge (facing the
+   center gap) has no shadow so the four arms read as one cross. */
+html[data-skin="neumorph"] .controller-dpad[data-direction="up"] .dpad-up {
+  background: var(--surface);
+  box-shadow:
+    inset 0 -3px 6px var(--shade),
+    inset 3px 0 6px var(--shade),
+    inset -3px 0 6px var(--light);
+}
+
+html[data-skin="neumorph"] .controller-dpad[data-direction="down"] .dpad-down {
+  background: var(--surface);
+  box-shadow:
+    inset 3px 0 6px var(--shade),
+    inset -3px 0 6px var(--light),
+    inset 0 3px 6px var(--light);
+}
+
+html[data-skin="neumorph"] .controller-dpad[data-direction="left"] .dpad-left {
+  background: var(--surface);
+  box-shadow:
+    inset 3px 0 6px var(--shade),
+    inset 0 -3px 6px var(--shade),
+    inset 0 3px 6px var(--light);
+}
+
+html[data-skin="neumorph"]
+  .controller-dpad[data-direction="right"]
+  .dpad-right {
+  background: var(--surface);
+  box-shadow:
+    inset -3px 0 6px var(--light),
+    inset 0 -3px 6px var(--shade),
+    inset 0 3px 6px var(--light);
+}
+
+html[data-skin="neumorph"] .controller-status {
+  border: 1px solid var(--shade);
+  background: var(--surface);
+  color: var(--text);
+}
+
+html[data-skin="neumorph"] .icon-button {
+  border: 1px solid var(--shade);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow:
+    3px 3px 6px var(--shade),
+    -3px -3px 6px var(--light);
+}
+
+html[data-skin="neumorph"] .icon-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+html[data-skin="neumorph"] .settings-backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+html[data-skin="neumorph"] .settings-sheet {
+  border: 1px solid var(--shade);
+  background: #262b32;
+}
+
+html[data-skin="neumorph"] .settings-row {
+  color: var(--text);
+}
+
+html[data-skin="neumorph"] .controller-layout-picker {
+  border: 1px solid var(--shade);
+  background: var(--surface);
+  color: var(--text);
+}
+
+html[data-skin="neumorph"] .settings-value {
+  color: var(--accent);
+}
+
+html[data-skin="neumorph"] .settings-capabilities {
+  color: #6c7686;
+}
+
+html[data-skin="neumorph"] .orientation-message {
+  border: 1px solid var(--shade);
+  background: var(--surface);
+  color: var(--text);
+}
+`;export{e as default};

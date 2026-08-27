@@ -1,0 +1,145 @@
+var e=`/* Swiss minimal, dark — near-black warm ink surface, hairline off-white
+   strokes, inversion as feedback. Same structure as the light version,
+   values flipped and brightened for dark. */
+
+html[data-skin="minimal"] {
+  --accent: #ff922b;
+  --ink: #e9e4d6;
+  --bg: #14130e;
+}
+
+html[data-skin="minimal"] body,
+html[data-skin="minimal"] .controller-shell {
+  background: #0a0a07;
+}
+
+html[data-skin="minimal"] .controller-frame {
+  background: var(--bg);
+  border: 1px solid #26241c;
+}
+
+html[data-skin="minimal"] .controller-name {
+  color: var(--ink);
+}
+
+html[data-skin="minimal"] .controller-control {
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  letter-spacing: 0.12em;
+  transition:
+    background-color 90ms ease,
+    color 90ms ease;
+}
+
+html[data-skin="minimal"] .controller-control.is-pressed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+html[data-skin="minimal"] .control-trigger.is-pressed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+html[data-skin="minimal"] .control-joystick {
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  transition:
+    border-color 90ms ease,
+    background-color 90ms ease;
+}
+
+html[data-skin="minimal"] .control-joystick.is-active {
+  border-color: var(--accent);
+  background: #2e2e2e;
+}
+
+html[data-skin="minimal"] .control-joystick::after {
+  width: 34%;
+  height: 34%;
+  background: var(--accent);
+  transition: background-color 90ms ease;
+}
+
+html[data-skin="minimal"] .control-joystick.is-dragging::after {
+  background: var(--accent);
+}
+
+html[data-skin="minimal"] .dpad-direction {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-skin="minimal"] .dpad-direction svg {
+  width: 60%;
+  height: 60%;
+}
+
+html[data-skin="minimal"] .controller-dpad[data-direction] .dpad-direction {
+  color: #55503f;
+}
+
+html[data-skin="minimal"] .controller-dpad[data-direction="up"] .dpad-up,
+html[data-skin="minimal"] .controller-dpad[data-direction="right"] .dpad-right,
+html[data-skin="minimal"] .controller-dpad[data-direction="down"] .dpad-down,
+html[data-skin="minimal"] .controller-dpad[data-direction="left"] .dpad-left {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--ink);
+}
+
+html[data-skin="minimal"] .controller-status {
+  border: 1px solid #35322a;
+  background: transparent;
+  color: #8d8776;
+}
+
+html[data-skin="minimal"] .icon-button {
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-skin="minimal"] .icon-button:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+html[data-skin="minimal"] .settings-backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+html[data-skin="minimal"] .settings-sheet {
+  border: 1px solid #26241c;
+  background: var(--bg);
+}
+
+html[data-skin="minimal"] .settings-row {
+  color: var(--ink);
+}
+
+html[data-skin="minimal"] .controller-layout-picker {
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-skin="minimal"] .settings-value {
+  color: var(--accent);
+}
+
+html[data-skin="minimal"] .settings-capabilities {
+  color: #8d8776;
+}
+
+html[data-skin="minimal"] .orientation-message {
+  border: 1px solid #26241c;
+  background: var(--bg);
+  color: var(--ink);
+}
+`;export{e as default};

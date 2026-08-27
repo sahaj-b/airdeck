@@ -52,7 +52,6 @@ export function resolveLayout(
   document: LayoutDocument,
   viewport: Viewport,
   orientation: Orientation = 'landscape',
-  minimumHitSize = 44,
 ): ResolvedLayout {
   const safeViewport = {
     width: Math.max(0, viewport.width),
@@ -88,20 +87,11 @@ export function resolveLayout(
     const controls = section.controls
       .filter((control) => control.visible || control.hitOnly)
       .map((control) =>
-        resolveControl(
-          control,
-          section,
-          content,
-          reference,
-          orientation,
-          minimumHitSize,
-        ),
+        resolveControl(control, section, content, reference, orientation),
       );
     sections.push({ section, rect, content, reference, controls });
     left += width + allocation.gap * reference;
   }
-
-  limitHitTargets(sections);
 
   return {
     orientation,
@@ -202,7 +192,6 @@ function resolveControl(
   content: PixelRect,
   reference: number,
   orientation: Orientation,
-  minimumHitSize: number,
 ): ResolvedControl {
   const geometry = orientationGeometry(control, orientation);
   const width = geometry.size.width * reference;
@@ -215,131 +204,7 @@ function resolveControl(
     width,
     height,
   };
-  return {
-    control,
-    sectionId: section.id,
-    visual,
-    hit: isInteractive(control)
-      ? expandedHitRect(visual, minimumHitSize, content, reference)
-      : visual,
-  };
-}
-
-function isInteractive(control: Control): boolean {
-  return (
-    control.type === 'button' ||
-    control.type === 'dpad' ||
-    control.type === 'joystick' ||
-    control.type === 'trigger'
-  );
-}
-
-function expandedHitRect(
-  visual: PixelRect,
-  minimumHitSize: number,
-  section: PixelRect,
-  reference: number,
-): PixelRect {
-  const target = Math.max(0, minimumHitSize);
-  const expansionLimit = Math.max(8, Math.min(reference * 0.2, target));
-  const extraWidth = Math.min(
-    expansionLimit,
-    Math.max(0, (target - visual.width) / 2),
-  );
-  const extraHeight = Math.min(
-    expansionLimit,
-    Math.max(0, (target - visual.height) / 2),
-  );
-  const left = Math.max(section.left, visual.left - extraWidth / 2);
-  const top = Math.max(section.top, visual.top - extraHeight / 2);
-  const right = Math.min(
-    section.left + section.width,
-    visual.left + visual.width + extraWidth / 2,
-  );
-  const bottom = Math.min(
-    section.top + section.height,
-    visual.top + visual.height + extraHeight / 2,
-  );
-  return {
-    left,
-    top,
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top),
-  };
-}
-
-function limitHitTargets(sections: ResolvedSection[]): void {
-  for (const section of sections) {
-    const interactive = section.controls.filter(
-      (control) => isInteractive(control.control) && !control.control.hitOnly,
-    );
-    for (const current of interactive) {
-      for (const neighbor of interactive) {
-        if (current === neighbor) continue;
-        limitAgainstNeighbor(current.hit, current.visual, neighbor.visual);
-      }
-    }
-  }
-}
-
-function limitAgainstNeighbor(
-  hit: PixelRect,
-  visual: PixelRect,
-  neighbor: PixelRect,
-): void {
-  const verticalOverlap = overlaps(
-    visual.top,
-    visual.top + visual.height,
-    neighbor.top,
-    neighbor.top + neighbor.height,
-  );
-  const horizontalOverlap = overlaps(
-    visual.left,
-    visual.left + visual.width,
-    neighbor.left,
-    neighbor.left + neighbor.width,
-  );
-  if (verticalOverlap) {
-    if (neighbor.left + neighbor.width <= visual.left)
-      clampLeft(hit, (neighbor.left + neighbor.width + visual.left) / 2);
-    if (neighbor.left >= visual.left + visual.width)
-      clampRight(hit, (neighbor.left + visual.left + visual.width) / 2);
-  }
-  if (horizontalOverlap) {
-    if (neighbor.top + neighbor.height <= visual.top)
-      clampTop(hit, (neighbor.top + neighbor.height + visual.top) / 2);
-    if (neighbor.top >= visual.top + visual.height)
-      clampBottom(hit, (neighbor.top + visual.top + visual.height) / 2);
-  }
-}
-
-function clampLeft(hit: PixelRect, limit: number): void {
-  const right = hit.left + hit.width;
-  hit.left = Math.max(hit.left, limit);
-  hit.width = Math.max(0, right - hit.left);
-}
-
-function clampRight(hit: PixelRect, limit: number): void {
-  hit.width = Math.max(0, Math.min(hit.width, limit - hit.left));
-}
-
-function clampTop(hit: PixelRect, limit: number): void {
-  const bottom = hit.top + hit.height;
-  hit.top = Math.max(hit.top, limit);
-  hit.height = Math.max(0, bottom - hit.top);
-}
-
-function clampBottom(hit: PixelRect, limit: number): void {
-  hit.height = Math.max(0, Math.min(hit.height, limit - hit.top));
-}
-
-function overlaps(
-  firstStart: number,
-  firstEnd: number,
-  secondStart: number,
-  secondEnd: number,
-): boolean {
-  return firstStart < secondEnd && secondStart < firstEnd;
+  return { control, sectionId: section.id, visual, hit: visual };
 }
 
 function shrinkToFloor(

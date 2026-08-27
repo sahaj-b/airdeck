@@ -74,7 +74,7 @@ describe('responsive layout resolver', () => {
     });
   });
 
-  it('expands touch bounds without changing visual bounds or stealing a neighbor', () => {
+  it('keeps hit bounds equal to visual bounds (WYSIWYG, use hitOnly fillers to expand)', () => {
     const simple: LayoutDocument = {
       id: 'touch',
       name: 'Touch',
@@ -112,10 +112,8 @@ describe('responsive layout resolver', () => {
     const controls = resolveLayout(simple, { width: 100, height: 100 })
       .sections[0].controls;
     expect(controls[0].visual.width).toBe(10);
-    expect(controls[0].hit.width).toBeGreaterThan(controls[0].visual.width);
-    expect(controls[0].hit.left + controls[0].hit.width).toBeLessThanOrEqual(
-      controls[1].hit.left,
-    );
+    expect(controls[0].hit).toEqual(controls[0].visual);
+    expect(controls[1].hit).toEqual(controls[1].visual);
   });
 
   it('reports the existing portrait fallback when no portrait geometry exists', () => {

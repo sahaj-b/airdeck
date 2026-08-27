@@ -16,7 +16,7 @@ type Handler struct {
 	trace       *diagnostics.Trace
 	metrics     *diagnostics.Metrics
 	mu          sync.Mutex
-	timers      map[string]*time.Timer
+	timers      map[string]*watchdogEntry
 	clientTimes map[string]clientSample
 }
 
@@ -27,7 +27,7 @@ type clientSample struct {
 }
 
 func NewHandler(s *session.Session, trace *diagnostics.Trace, metrics *diagnostics.Metrics) *Handler {
-	return &Handler{session: s, trace: trace, metrics: metrics, timers: make(map[string]*time.Timer), clientTimes: make(map[string]clientSample)}
+	return &Handler{session: s, trace: trace, metrics: metrics, timers: make(map[string]*watchdogEntry), clientTimes: make(map[string]clientSample)}
 }
 
 func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) error {
@@ -58,37 +58,48 @@ func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) err
 	return nil
 }
 
+type watchdogEntry struct {
+	timer      *time.Timer
+	generation uint64
+	received   time.Time
+}
+
 func (h *Handler) resetWatchdog(id string, generation uint64, received time.Time) {
 	h.mu.Lock()
-	if timer := h.timers[id]; timer != nil {
-		timer.Stop()
+	entry, exists := h.timers[id]
+	if exists {
+		entry.generation = generation
+		entry.received = received
+		entry.timer.Reset(WatchdogTimeout)
+		h.mu.Unlock()
+		return
 	}
-	var timer *time.Timer
-	timer = time.AfterFunc(WatchdogTimeout, func() {
+	entry = &watchdogEntry{generation: generation, received: received}
+	entry.timer = time.AfterFunc(WatchdogTimeout, func() {
 		fired := time.Now()
 		h.mu.Lock()
-		current := h.timers[id] == timer
-		if current {
-			delete(h.timers, id)
-		}
-		h.mu.Unlock()
-		if !current {
+		current := h.timers[id]
+		if current != entry {
+			h.mu.Unlock()
 			return
 		}
-		if err := h.session.MarkStale(id, generation); err == nil {
-			delay := fired.Sub(received)
-			h.metrics.Watchdog(delay)
-			h.trace.Add(diagnostics.FrameTrace{PlayerID: id, ReceivedAt: received, Watchdog: true})
+		delete(h.timers, id)
+		gen := entry.generation
+		recv := entry.received
+		h.mu.Unlock()
+		if err := h.session.MarkStale(id, gen); err == nil {
+			h.metrics.Watchdog(fired.Sub(recv))
+			h.trace.Add(diagnostics.FrameTrace{PlayerID: id, ReceivedAt: recv, Watchdog: true})
 		}
 	})
-	h.timers[id] = timer
+	h.timers[id] = entry
 	h.mu.Unlock()
 }
 
 func (h *Handler) Disconnect(id string, generation uint64) error {
 	h.mu.Lock()
-	if timer := h.timers[id]; timer != nil {
-		timer.Stop()
+	if entry := h.timers[id]; entry != nil {
+		entry.timer.Stop()
 		delete(h.timers, id)
 	}
 	delete(h.clientTimes, id)
@@ -98,8 +109,8 @@ func (h *Handler) Disconnect(id string, generation uint64) error {
 
 func (h *Handler) Close() {
 	h.mu.Lock()
-	for id, timer := range h.timers {
-		timer.Stop()
+	for id, entry := range h.timers {
+		entry.timer.Stop()
 		delete(h.timers, id)
 	}
 	h.mu.Unlock()

@@ -1,4 +1,4 @@
-import { DEFAULT_SKIN_ID, SKINS } from './index';
+import { DEFAULT_SKIN_ID, loadSkinCSS, SKINS } from './index';
 
 export { DEFAULT_SKIN_ID, SKINS } from './index';
 
@@ -6,22 +6,28 @@ const STORAGE_KEY = 'airdeck.skin';
 
 let skinEl: HTMLStyleElement | undefined;
 
-function applySkin(id: string): void {
+function ensureStyleEl(): HTMLStyleElement {
+  if (!skinEl) {
+    skinEl = document.createElement('style');
+    skinEl.id = 'airdeck-skin';
+    document.head.append(skinEl);
+  }
+  return skinEl;
+}
+
+async function applySkin(id: string): Promise<void> {
   const skin =
     SKINS.find((candidate) => candidate.id === id) ??
     SKINS.find((candidate) => candidate.id === DEFAULT_SKIN_ID);
   if (!skin) return;
-  if (!skinEl) {
-    skinEl = document.createElement('style');
-    skinEl.id = 'airdeck-skin';
-  }
+  const css = await loadSkinCSS(skin.id);
+  const el = ensureStyleEl();
   document.documentElement.setAttribute('data-skin', skin.id);
-  skinEl.textContent = skin.css;
-  if (!skinEl.parentNode) document.head.append(skinEl);
+  el.textContent = css;
 }
 
 export function initSkin(): void {
-  applySkin(getSkin());
+  void applySkin(getSkin());
 }
 
 export function setSkin(id: string): void {
@@ -31,7 +37,7 @@ export function setSkin(id: string): void {
   } catch {
     // Skin selection is convenience state; ignore storage failures.
   }
-  applySkin(id);
+  void applySkin(id);
 }
 
 export function getSkin(): string {

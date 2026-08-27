@@ -1,29 +1,44 @@
-import clay from './clay.css?raw';
-import console from './console.css?raw';
-import minimal from './minimal.css?raw';
-import moonlight from './moonlight.css?raw';
-import neumorph from './neumorph.css?raw';
-import neumorphLight from './neumorph-light.css?raw';
-import oled from './oled.css?raw';
-import airdeck from './airdeck.css?raw';
-import retro from './retro.css?raw';
-
 export interface Skin {
   id: string;
   name: string;
-  css: string;
 }
 
 export const SKINS: Skin[] = [
-  { id: 'airdeck', name: 'Airdeck', css: airdeck },
-  { id: 'clay', name: 'Clay', css: clay },
-  { id: 'console', name: 'Console', css: console },
-  { id: 'minimal', name: 'Minimal', css: minimal },
-  { id: 'moonlight', name: 'Moonlight', css: moonlight },
-  { id: 'neumorph-light', name: 'Neumorph Light', css: neumorphLight },
-  { id: 'neumorph', name: 'Neumorph', css: neumorph },
-  { id: 'oled', name: 'OLED', css: oled },
-  { id: 'retro', name: 'Retro', css: retro },
+  { id: 'airdeck', name: 'Airdeck' },
+  { id: 'clay', name: 'Clay' },
+  { id: 'console', name: 'Console' },
+  { id: 'minimal', name: 'Minimal' },
+  { id: 'moonlight', name: 'Moonlight' },
+  { id: 'neumorph-light', name: 'Neumorph Light' },
+  { id: 'neumorph', name: 'Neumorph' },
+  { id: 'oled', name: 'OLED' },
+  { id: 'retro', name: 'Retro' },
 ];
 
 export const DEFAULT_SKIN_ID = 'airdeck';
+
+const loaders: Record<string, () => Promise<string>> = {
+  airdeck: () => import('./airdeck.css?raw').then((m) => m.default),
+  clay: () => import('./clay.css?raw').then((m) => m.default),
+  console: () => import('./console.css?raw').then((m) => m.default),
+  minimal: () => import('./minimal.css?raw').then((m) => m.default),
+  moonlight: () => import('./moonlight.css?raw').then((m) => m.default),
+  'neumorph-light': () =>
+    import('./neumorph-light.css?raw').then((m) => m.default),
+  neumorph: () => import('./neumorph.css?raw').then((m) => m.default),
+  oled: () => import('./oled.css?raw').then((m) => m.default),
+  retro: () => import('./retro.css?raw').then((m) => m.default),
+};
+
+const cache = new Map<string, string>();
+
+export function loadSkinCSS(id: string): Promise<string> {
+  const cached = cache.get(id);
+  if (cached !== undefined) return Promise.resolve(cached);
+  const loader = loaders[id];
+  if (!loader) return Promise.reject(new Error(`unknown skin ${id}`));
+  return loader().then((css) => {
+    cache.set(id, css);
+    return css;
+  });
+}

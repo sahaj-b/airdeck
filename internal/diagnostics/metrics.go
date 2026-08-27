@@ -44,6 +44,38 @@ func (d *durations) all() []time.Duration {
 	return d.values
 }
 
+type resourceRing struct {
+	values []ResourceSample
+	next   int
+	full   bool
+}
+
+func (r *resourceRing) add(value ResourceSample) {
+	if r.values == nil {
+		r.values = make([]ResourceSample, 3600)
+	}
+	r.values[r.next] = value
+	r.next = (r.next + 1) % len(r.values)
+	if r.next == 0 {
+		r.full = true
+	}
+}
+
+func (r *resourceRing) all() []ResourceSample {
+	if r.values == nil {
+		return nil
+	}
+	if !r.full {
+		out := make([]ResourceSample, r.next)
+		copy(out, r.values[:r.next])
+		return out
+	}
+	out := make([]ResourceSample, len(r.values))
+	n := copy(out, r.values[r.next:])
+	copy(out[n:], r.values[:r.next])
+	return out
+}
+
 type Metrics struct {
 	mu             sync.Mutex
 	accepted       uint64
@@ -52,7 +84,7 @@ type Metrics struct {
 	watchdogs      uint64
 	watchdogDelay  durations
 	applyDurations durations
-	samples        []ResourceSample
+	samples        resourceRing
 }
 
 type Summary struct {
@@ -88,18 +120,14 @@ func (m *Metrics) Apply(duration time.Duration) {
 
 func (m *Metrics) Resource(sample ResourceSample) {
 	m.mu.Lock()
-	// Resource samples arrive at 1 Hz; keep roughly the last hour.
-	if len(m.samples) >= 3600 {
-		m.samples = m.samples[1:]
-	}
-	m.samples = append(m.samples, sample)
+	m.samples.add(sample)
 	m.mu.Unlock()
 }
 
 func (m *Metrics) Summary() Summary {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Summary{Accepted: m.accepted, Rejected: m.rejected, Stale: m.stale, Watchdogs: m.watchdogs, P50: percentile(m.applyDurations.all(), .50), P95: percentile(m.applyDurations.all(), .95), P99: percentile(m.applyDurations.all(), .99), Max: maximum(m.applyDurations.all()), WatchdogP50: percentile(m.watchdogDelay.all(), .50), WatchdogP95: percentile(m.watchdogDelay.all(), .95), WatchdogMax: maximum(m.watchdogDelay.all()), Resources: append([]ResourceSample(nil), m.samples...)}
+	return Summary{Accepted: m.accepted, Rejected: m.rejected, Stale: m.stale, Watchdogs: m.watchdogs, P50: percentile(m.applyDurations.all(), .50), P95: percentile(m.applyDurations.all(), .95), P99: percentile(m.applyDurations.all(), .99), Max: maximum(m.applyDurations.all()), WatchdogP50: percentile(m.watchdogDelay.all(), .50), WatchdogP95: percentile(m.watchdogDelay.all(), .95), WatchdogMax: maximum(m.watchdogDelay.all()), Resources: m.samples.all()}
 }
 
 func percentile(values []time.Duration, fraction float64) time.Duration {

@@ -125,8 +125,13 @@ func (s *Session) Subscribe(listener func(Event)) func() {
 	s.mu.Unlock()
 	return func() {
 		s.mu.Lock()
-		if index >= 0 && index < len(s.listeners) {
+		if index < len(s.listeners) {
 			s.listeners[index] = nil
+			// Compact trailing nils so the slice does not grow without bound
+			// across many dashboard reconnects.
+			for len(s.listeners) > 0 && s.listeners[len(s.listeners)-1] == nil {
+				s.listeners = s.listeners[:len(s.listeners)-1]
+			}
 		}
 		s.mu.Unlock()
 	}
