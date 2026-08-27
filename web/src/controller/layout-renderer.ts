@@ -306,8 +306,27 @@ function applyResolvedGeometry(
           resolvedControl.visual,
           resolved.rect,
         );
+      applyDynamicSizing(renderedControl, resolvedControl.visual);
     }
   }
+}
+
+function applyDynamicSizing(rendered: RenderedControl, rect: PixelRect): void {
+  const { control, visual } = rendered;
+  // Joystick hides its label, dpad uses SVG, images have no text, hitOnly fillers are invisible
+  if (
+    control.hitOnly ||
+    control.type === 'joystick' ||
+    control.type === 'dpad' ||
+    control.type === 'image'
+  )
+    return;
+  const min = Math.min(rect.width, rect.height);
+  const max = Math.max(rect.width, rect.height);
+  visual.style.setProperty('--control-w', `${rect.width}px`);
+  visual.style.setProperty('--control-h', `${rect.height}px`);
+  visual.style.setProperty('--control-min', `${min}px`);
+  visual.style.setProperty('--control-max', `${max}px`);
 }
 
 function setLocalRect(

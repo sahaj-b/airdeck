@@ -82,7 +82,7 @@ html[data-skin="airdeck"] .controller-dpad[data-direction="left"] .dpad-left {
 
 html[data-skin="airdeck"] .controller-label {
   color: #aeb9c9;
-  font-size: clamp(0.65rem, 1.4vw, 0.85rem);
+  font-size: clamp(0.55rem, calc(var(--control-min, 32px) * 0.32), 0.95rem);
 }
 
 html[data-skin="airdeck"] .controller-slot {

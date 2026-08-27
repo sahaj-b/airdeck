@@ -113,12 +113,13 @@ select {
 .controller-control {
   display: grid;
   place-items: center;
-  font-size: clamp(0.51rem, 1.92vw, 0.87rem);
+  /* JS pumps --control-min from the resolved pixel rect; fallback 44px covers first paint */
+  font-size: clamp(0.58rem, calc(var(--control-min, 44px) * 0.33), 1.02rem);
 }
 
 .controller-control[data-command="leftShoulder"],
 .controller-control[data-command="rightShoulder"] {
-  font-size: clamp(0.68rem, 2.56vw, 1.16rem);
+  font-size: clamp(0.68rem, calc(var(--control-min, 36px) * 0.38), 1.18rem);
 }
 
 .controller-control.control-trigger,
@@ -126,7 +127,7 @@ select {
 .controller-control[data-command="south"],
 .controller-control[data-command="east"],
 .controller-control[data-command="west"] {
-  font-size: clamp(0.85rem, 3.2vw, 1.45rem);
+  font-size: clamp(0.72rem, calc(var(--control-min, 48px) * 0.38), 1.42rem);
 }
 
 .controller-control:focus-visible {
@@ -310,6 +311,10 @@ html[data-skin] .dpad-direction.dpad-right {
 .controller-label {
   display: grid;
   place-items: center;
+  font-size: clamp(0.55rem, calc(var(--control-min, 32px) * 0.32), 0.95rem);
+  line-height: 1.1;
+  text-align: center;
+  overflow: hidden;
 }
 
 .controller-image {
