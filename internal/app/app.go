@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/mdp/qrterminal/v3"
 	"github.com/sahaj-b/airdeck/internal/config"
 	"github.com/sahaj-b/airdeck/internal/device"
 	"github.com/sahaj-b/airdeck/internal/httpserver"
@@ -54,10 +57,28 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.HTTP.Start(); err != nil {
 		return err
 	}
+	joinURL := a.HTTP.AdvertisedJoinURL()
 	log.Printf("dashboard URL %s", a.HTTP.DashboardURL())
-	log.Printf("session %s, join URL %s", a.Session.Code(), a.HTTP.AdvertisedJoinURL())
+	log.Printf("session %s, join URL %s", a.Session.Code(), joinURL)
+	printJoinQR(joinURL)
 	<-ctx.Done()
 	return a.Shutdown(context.Background())
+}
+
+func printJoinQR(joinURL string) {
+	info, err := os.Stdout.Stat()
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return
+	}
+	fmt.Fprintln(os.Stdout, "")
+	fmt.Fprintln(os.Stdout, "scan to join:")
+	cfg := qrterminal.Config{
+		Level:      qrterminal.L,
+		Writer:     os.Stdout,
+		HalfBlocks: true,
+		QuietZone:  1,
+	}
+	qrterminal.GenerateWithConfig(joinURL, cfg)
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
