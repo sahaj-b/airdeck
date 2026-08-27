@@ -1,3 +1,5 @@
+import { bindTap } from './tap';
+
 const EXPAND_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
 const COMPRESS_ICON =
@@ -23,15 +25,20 @@ export function buildFullscreenButton(): {
       active ? 'Exit fullscreen' : 'Enter fullscreen',
     );
   };
-  button.addEventListener('click', () => {
+  const toggleFullscreen = (): void => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else
       void document.documentElement.requestFullscreen().catch(() => undefined);
-  });
+  };
+  // click is suppressed inside the controller shell (touchstart preventDefault
+  // kills the long-press buzz), so bind via pointer events like the controls.
+  const unbindTap = bindTap(button, toggleFullscreen);
   document.addEventListener('fullscreenchange', onFullscreenChange);
   return {
     button,
-    cleanup: () =>
-      document.removeEventListener('fullscreenchange', onFullscreenChange),
+    cleanup: () => {
+      unbindTap();
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    },
   };
 }

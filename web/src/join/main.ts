@@ -3,6 +3,7 @@ import '../controller/controller.css';
 import { CapabilityManager } from '../controller/capabilities';
 import { FeedbackController } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
+import { bindTap } from '../controller/tap';
 import { buildFullscreenButton } from '../controller/fullscreen-button';
 import { GyroController } from '../controller/gyro/controller';
 import {
@@ -373,7 +374,11 @@ function showController(options: {
   const fullscreen = buildFullscreenButton();
   chrome.append(fullscreen.button);
   shell.append(host);
-  // immediate long-press kill before layout even renders
+  // immediate long-press kill before layout even renders. preventDefault on
+  // touchstart/touchend is what stops Android from even starting long-press
+  // detection (the contextmenu buzz). Downside: it also suppresses the
+  // synthetic click on touch, so the settings/fullscreen buttons bind via
+  // pointer events (see bindTap) instead of click.
   {
     const kill = (event: Event): void => event.preventDefault();
     const touchOpts: AddEventListenerOptions = {
@@ -493,7 +498,7 @@ function showController(options: {
     }
   };
 
-  gearButton.addEventListener('click', () => {
+  const unbindGearTap = bindTap(gearButton, () => {
     void openSettings();
   });
 
@@ -505,6 +510,7 @@ function showController(options: {
   document.addEventListener('keydown', onShellKeyDown);
   removeControllerDocumentHandlers = () => {
     document.removeEventListener('keydown', onShellKeyDown);
+    unbindGearTap();
     fullscreen.cleanup();
     unsubFeedback();
     unsubGyroLock();

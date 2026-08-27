@@ -125,6 +125,9 @@ export function renderLayout(
 
   // Long-press / selection / haptic kill. Must be capture + non-passive
   // or iOS and Android will still select and buzz before pointerdown fires.
+  // preventDefault on touchstart/touchend suppresses the synthetic click on
+  // touch, so the settings/fullscreen buttons bind via pointer events
+  // (bindTap in tap.ts) instead of click.
   const kill = (event: Event): void => {
     event.preventDefault();
   };

@@ -99,7 +99,7 @@ export function HostPanel({
                 className="flex cursor-pointer flex-col items-start gap-0.5"
               >
                 <span className="text-sm font-medium leading-none">
-                    Accept new joins
+                  Accept new joins
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
                   {state.acceptingJoins

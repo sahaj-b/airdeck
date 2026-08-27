@@ -200,6 +200,6 @@ function formatAge(value: string, now: number): string {
 
 function formatRTT(nanos: number): string {
   if (!Number.isFinite(nanos) || nanos <= 0) return '—';
-  const milliseconds = nanos / 1_000_000;
-  return `${milliseconds < 10 ? milliseconds.toFixed(1) : Math.round(milliseconds)}ms`;
+  const milliseconds = Math.round(nanos / 1_000_000);
+  return `${String(milliseconds).padStart(2)}ms`;
 }
