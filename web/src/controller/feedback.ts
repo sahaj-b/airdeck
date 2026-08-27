@@ -29,6 +29,8 @@ export type NavigatorWithVibration = Navigator & {
 
 export interface FeedbackPreferences {
   pressVibrationMs: number;
+  joystickPressMs?: number;
+  joystickEdgeMs?: number;
   rumble: boolean;
   sound: boolean;
 }
@@ -44,6 +46,7 @@ export interface FeedbackOptions {
 // Browsers clamp a single vibration well below a game-length rumble, so hold
 // the pattern for the whole START..STOP span instead of timing out locally.
 const RUMBLE_ON_PATTERN = 999999;
+export const JOYSTICK_EDGE_VIBRATION_MS = 35;
 
 export class FeedbackController {
   private readonly currentNavigator: NavigatorWithVibration;
@@ -56,11 +59,24 @@ export class FeedbackController {
     this.currentNavigator = options.navigator ?? navigator;
     this.currentWindow =
       options.window ?? (typeof window === 'undefined' ? undefined : window);
-    this.preferences = { ...preferences };
+    this.preferences = {
+      joystickPressMs: JOYSTICK_EDGE_VIBRATION_MS,
+      joystickEdgeMs: JOYSTICK_EDGE_VIBRATION_MS,
+      ...preferences,
+    };
   }
 
   get hapticsAvailable(): boolean {
-    return typeof this.currentNavigator.vibrate === 'function';
+    if (typeof this.currentNavigator.vibrate !== 'function') return false;
+    const coarse =
+      this.currentWindow?.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+    const touchPoints =
+      (this.currentNavigator as unknown as { maxTouchPoints?: number })
+        .maxTouchPoints ?? 0;
+    const hasTouch =
+      touchPoints > 0 ||
+      (this.currentWindow != null && 'ontouchstart' in this.currentWindow);
+    return hasTouch || coarse;
   }
 
   setPreferences(preferences: Partial<FeedbackPreferences>): void {
@@ -74,6 +90,24 @@ export class FeedbackController {
     if (!this.rumbleActive && this.preferences.pressVibrationMs > 0)
       this.vibrate(this.preferences.pressVibrationMs);
     void this.playClick();
+  }
+
+  joystickPress(): void {
+    if (this.rumbleActive) return;
+    const ms = this.preferences.joystickPressMs ?? 0;
+    if (ms <= 0) return;
+    this.vibrate(ms);
+    void this.playClick();
+  }
+
+  joystickEdge(): void {
+    // tap when the stick hits the rim. Hysteresis is handled by the caller,
+    // this just respects the same guards as press: no buzz during a held
+    // game rumble.
+    if (this.rumbleActive) return;
+    const ms = this.preferences.joystickEdgeMs ?? 0;
+    if (ms <= 0) return;
+    this.vibrate(ms);
   }
 
   rumble(message: Rumble): void {

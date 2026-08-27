@@ -28,10 +28,14 @@ export function InlineSettingsPanel({
   const store = opts.store;
   const feedback = opts.feedback;
   const vibrationMs = useStore(store, (s) => s.vibrationMs);
+  const joystickPressMs = useStore(store, (s) => s.joystickPressMs);
+  const joystickEdgeMs = useStore(store, (s) => s.joystickEdgeMs);
   const rumble = useStore(store, (s) => s.rumble);
   const sound = useStore(store, (s) => s.sound);
   const ignoreCutout = useStore(store, (s) => s.ignoreCutout);
   const setVibrationMs = useStore(store, (s) => s.setVibrationMs);
+  const setJoystickPressMs = useStore(store, (s) => s.setJoystickPressMs);
+  const setJoystickEdgeMs = useStore(store, (s) => s.setJoystickEdgeMs);
   const setRumble = useStore(store, (s) => s.setRumble);
   const setSound = useStore(store, (s) => s.setSound);
   const setIgnoreCutout = useStore(store, (s) => s.setIgnoreCutout);
@@ -61,8 +65,10 @@ export function InlineSettingsPanel({
     return ms > 0 ? `${ms} ms` : 'Off';
   }
 
+  const hapticsAvailable = feedback.hapticsAvailable;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 min-w-0 max-w-full overflow-x-hidden">
       <div>
         <h2 className="text-base font-medium">Settings</h2>
       </div>
@@ -100,24 +106,93 @@ export function InlineSettingsPanel({
         </Select>
       </div>
       <Separator />
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>Button vibration</Label>
-          <span className="text-sm font-semibold tabular-nums">
+      <div
+        className="space-y-3"
+        data-base-ui-swipe-ignore
+        aria-disabled={!hapticsAvailable}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Vibration
+          </p>
+          {!hapticsAvailable && (
+            <span className="text-xs text-muted-foreground">
+              Unavailable on this device
+            </span>
+          )}
+        </div>
+        <div
+          className={`grid grid-cols-[1fr_auto_120px] sm:grid-cols-[1fr_auto_150px] items-center gap-2 ${!hapticsAvailable ? 'opacity-50' : ''}`}
+        >
+          <span className="text-sm font-medium">Button press</span>
+          <span className="w-11 text-right text-sm font-semibold tabular-nums whitespace-nowrap">
             {formatVibration(vibrationMs)}
           </span>
+          <Slider
+            className="w-full"
+            value={[vibrationMs]}
+            min={0}
+            max={100}
+            step={5}
+            disabled={!hapticsAvailable}
+            onValueChange={(value) => {
+              if (!hapticsAvailable) return;
+              const next = Array.isArray(value)
+                ? (value[0] ?? 0)
+                : ((value as number) ?? 0);
+              setVibrationMs(next);
+              feedback.setPreferences({ pressVibrationMs: next });
+            }}
+          />
         </div>
-        <Slider
-          value={[vibrationMs]}
-          min={0}
-          max={100}
-          step={10}
-          onValueChange={(value) => {
-            const next = (value as number[])[0] ?? 0;
-            setVibrationMs(next);
-            feedback.setPreferences({ pressVibrationMs: next });
-          }}
-        />
+        <div
+          className={`grid grid-cols-[1fr_auto_120px] sm:grid-cols-[1fr_auto_150px] items-center gap-2 ${!hapticsAvailable ? 'opacity-50' : ''}`}
+        >
+          <span className="text-sm font-medium">Joystick press</span>
+          <span className="w-11 text-right text-sm font-semibold tabular-nums whitespace-nowrap">
+            {formatVibration(joystickPressMs)}
+          </span>
+          <Slider
+            className="w-full"
+            value={[joystickPressMs]}
+            min={0}
+            max={100}
+            step={5}
+            disabled={!hapticsAvailable}
+            onValueChange={(value) => {
+              if (!hapticsAvailable) return;
+              const next = Array.isArray(value)
+                ? (value[0] ?? 0)
+                : ((value as number) ?? 0);
+              setJoystickPressMs(next);
+              feedback.setPreferences({ joystickPressMs: next });
+            }}
+          />
+        </div>
+        <div
+          className={`grid grid-cols-[1fr_auto_120px] sm:grid-cols-[1fr_auto_150px] items-center gap-2 ${!hapticsAvailable ? 'opacity-50' : ''}`}
+        >
+          <span className="text-sm font-medium">Joystick edge</span>
+          <span className="w-11 text-right text-sm font-semibold tabular-nums whitespace-nowrap">
+            {formatVibration(joystickEdgeMs)}
+          </span>
+          <Slider
+            className="w-full"
+            value={[joystickEdgeMs]}
+            min={0}
+            max={100}
+            step={5}
+            disabled={!hapticsAvailable}
+            onValueChange={(value) => {
+              if (!hapticsAvailable) return;
+              const next = Array.isArray(value)
+                ? (value[0] ?? 0)
+                : ((value as number) ?? 0);
+              setJoystickEdgeMs(next);
+              feedback.setPreferences({ joystickEdgeMs: next });
+            }}
+          />
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor="rumble-toggle" className="flex-1">

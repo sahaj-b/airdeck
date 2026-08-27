@@ -3,6 +3,8 @@ import { createStore } from 'zustand/vanilla';
 
 export interface SettingsState {
   vibrationMs: number;
+  joystickPressMs: number;
+  joystickEdgeMs: number;
   rumble: boolean;
   sound: boolean;
   ignoreCutout: boolean;
@@ -22,6 +24,8 @@ export interface SettingsState {
 
 export interface SettingsActions {
   setVibrationMs: (v: number) => void;
+  setJoystickPressMs: (v: number) => void;
+  setJoystickEdgeMs: (v: number) => void;
   setRumble: (v: boolean) => void;
   setSound: (v: boolean) => void;
   setIgnoreCutout: (v: boolean) => void;
@@ -42,6 +46,8 @@ export type SettingsStore = SettingsState & SettingsActions;
 
 const DEFAULTS: SettingsState = {
   vibrationMs: 40,
+  joystickPressMs: 35,
+  joystickEdgeMs: 35,
   rumble: true,
   sound: false,
   ignoreCutout: true,
@@ -64,6 +70,8 @@ export const settingsStore = createStore<SettingsStore>()(
     (set) => ({
       ...DEFAULTS,
       setVibrationMs: (vibrationMs) => set({ vibrationMs }),
+      setJoystickPressMs: (joystickPressMs) => set({ joystickPressMs }),
+      setJoystickEdgeMs: (joystickEdgeMs) => set({ joystickEdgeMs }),
       setRumble: (rumble) => set({ rumble }),
       setSound: (sound) => set({ sound }),
       setIgnoreCutout: (ignoreCutout) => set({ ignoreCutout }),
@@ -82,7 +90,17 @@ export const settingsStore = createStore<SettingsStore>()(
     }),
     {
       name: 'airdeck.settings.v1',
-      version: 1,
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<SettingsState>;
+        if (version < 2) {
+          if (state.joystickPressMs == null)
+            state.joystickPressMs = DEFAULTS.joystickPressMs;
+          if (state.joystickEdgeMs == null)
+            state.joystickEdgeMs = DEFAULTS.joystickEdgeMs;
+        }
+        return state as SettingsState;
+      },
     },
   ),
 );

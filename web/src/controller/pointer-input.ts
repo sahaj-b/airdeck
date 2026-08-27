@@ -29,7 +29,13 @@ export interface JoystickOptions {
 
 export interface PointerFeedback {
   press(): void;
+  joystickPress?(): void;
+  joystickEdge?(): void;
 }
+
+export const JOYSTICK_BOUNDARY_THRESHOLD = 0.98;
+export const JOYSTICK_REARM_THRESHOLD = 0.85;
+export const JOYSTICK_EDGE_VIBRATION_FALLBACK_MS = 35;
 
 interface PointerOwnership {
   target: HTMLElement;
@@ -121,6 +127,7 @@ export class PointerInput {
   private readonly pointers = new Map<number, PointerOwnership>();
   private readonly elementPointers = new WeakMap<HTMLElement, Set<number>>();
   private readonly cleanups: (() => void)[] = [];
+  private readonly joystickArmed = new Map<string, boolean>();
   private gyroLocked: StickCommand | null = null;
 
   constructor(
@@ -205,7 +212,8 @@ export class PointerInput {
       // Pointer capture is unavailable in a few embedded browser contexts.
     }
     this.updatePointer(event, ownership);
-    this.feedback?.press();
+    if (control.type === 'joystick') this.feedback?.joystickPress?.();
+    else this.feedback?.press();
   }
 
   private pointerMove(event: PointerEvent): void {
@@ -273,6 +281,10 @@ export class PointerInput {
       );
       visual.style.setProperty('--axis-x', `${thumbOffset.x * 100}%`);
       visual.style.setProperty('--axis-y', `${thumbOffset.y * 100}%`);
+      this.maybeTriggerJoystickEdge(
+        source,
+        Math.hypot(thumbOffset.x, thumbOffset.y),
+      );
       return;
     }
 
@@ -286,10 +298,26 @@ export class PointerInput {
     }
   }
 
+  private maybeTriggerJoystickEdge(source: string, magnitude: number): void {
+    const armed = this.joystickArmed.get(source) ?? true;
+    if (armed && magnitude >= JOYSTICK_BOUNDARY_THRESHOLD) {
+      this.feedback?.joystickEdge?.();
+      this.joystickArmed.set(source, false);
+      return;
+    }
+    if (!armed && magnitude <= JOYSTICK_REARM_THRESHOLD) {
+      this.joystickArmed.set(source, true);
+    } else if (armed) {
+      // ensure entry exists for hysteresis tracking
+      if (!this.joystickArmed.has(source)) this.joystickArmed.set(source, true);
+    }
+  }
+
   private finishPointer(pointerId: number): void {
     const ownership = this.pointers.get(pointerId);
     if (!ownership) return;
     this.pointers.delete(pointerId);
+    this.joystickArmed.delete(ownership.source);
     this.state.clearSource(ownership.source);
     this.markElement(ownership.visual, pointerId, false);
     ownership.visual.style.setProperty('--axis-x', '0%');

@@ -22,7 +22,7 @@ const RUMBLE_STOP: Rumble = {
 function createNavigator(
   vibrate: (pattern: number | number[]) => boolean = () => true,
 ): NavigatorWithVibration {
-  return { vibrate } as unknown as NavigatorWithVibration;
+  return { vibrate, maxTouchPoints: 1 } as unknown as NavigatorWithVibration;
 }
 
 class FakeAudioContext {

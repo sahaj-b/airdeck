@@ -61,11 +61,14 @@ function IslandRoot({
       modal={true}
       swipeDirection="right"
     >
-      <DrawerContent className="flex flex-col" aria-describedby={undefined}>
+      <DrawerContent
+        className="flex flex-col max-w-full"
+        aria-describedby={undefined}
+      >
         {view === 'main' ? (
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto px-4 pb-6 pt-4"
+            className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 min-w-0"
           >
             <InlineSettingsPanel
               opts={opts}
@@ -76,7 +79,7 @@ function IslandRoot({
         ) : (
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto px-4 pb-6 pt-4 space-y-5"
+            className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 space-y-5 min-w-0"
           >
             <GyroSheet
               store={opts.store}

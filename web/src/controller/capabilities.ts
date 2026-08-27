@@ -49,6 +49,15 @@ function browserWindow(options: CapabilityManagerOptions): Window | undefined {
   return options.window ?? (typeof window === 'undefined' ? undefined : window);
 }
 
+function hasHapticsHardware(nav: NavigatorCapabilities, win?: Window): boolean {
+  if (typeof nav.vibrate !== 'function') return false;
+  const coarse = win?.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+  const touchPoints =
+    (nav as unknown as { maxTouchPoints?: number }).maxTouchPoints ?? 0;
+  const hasTouch = touchPoints > 0 || (win != null && 'ontouchstart' in win);
+  return hasTouch || coarse;
+}
+
 export function detectCapabilities(
   options: CapabilityManagerOptions = {},
 ): CapabilityStatus {
@@ -57,7 +66,7 @@ export function detectCapabilities(
   const currentScreen = browserScreen(options);
   const currentWindow = browserWindow(options);
   return {
-    haptics: typeof currentNavigator.vibrate === 'function',
+    haptics: hasHapticsHardware(currentNavigator, currentWindow),
     sound:
       currentWindow !== undefined &&
       ('AudioContext' in currentWindow ||

@@ -223,6 +223,8 @@ function showController(options: {
   const state = new InputStateStore();
   const feedback = new FeedbackController({
     pressVibrationMs: storeState.vibrationMs,
+    joystickPressMs: storeState.joystickPressMs,
+    joystickEdgeMs: storeState.joystickEdgeMs,
     rumble: storeState.rumble,
     sound: storeState.sound,
   });
@@ -233,10 +235,14 @@ function showController(options: {
     if (
       s.rumble !== prev.rumble ||
       s.sound !== prev.sound ||
-      s.vibrationMs !== prev.vibrationMs
+      s.vibrationMs !== prev.vibrationMs ||
+      s.joystickPressMs !== prev.joystickPressMs ||
+      s.joystickEdgeMs !== prev.joystickEdgeMs
     ) {
       feedback.setPreferences({
         pressVibrationMs: s.vibrationMs,
+        joystickPressMs: s.joystickPressMs,
+        joystickEdgeMs: s.joystickEdgeMs,
         rumble: s.rumble,
         sound: s.sound,
       });
@@ -339,9 +345,7 @@ function showController(options: {
   let islandLoading = false;
 
   const capabilityMessages = options.capabilities.currentStatus.messages;
-  const capabilityNotes = capabilityMessages.length
-    ? capabilityMessages.join(' ')
-    : 'All local feedback capabilities are available.';
+  const capabilityNotes = capabilityMessages.join(' ');
 
   const updateStatus = (transient: string | null): void => {
     const full = transient ?? CONNECTION_LABELS[socket.state];

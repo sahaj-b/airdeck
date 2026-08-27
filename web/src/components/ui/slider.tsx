@@ -18,6 +18,7 @@ function Slider({
 
   return (
     <SliderPrimitive.Root
+      data-base-ui-swipe-ignore
       className={cn('data-horizontal:w-full data-vertical:h-full', className)}
       data-slot="slider"
       defaultValue={defaultValue}
