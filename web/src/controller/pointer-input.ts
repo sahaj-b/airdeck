@@ -121,6 +121,7 @@ export class PointerInput {
   private readonly pointers = new Map<number, PointerOwnership>();
   private readonly elementPointers = new WeakMap<HTMLElement, Set<number>>();
   private readonly cleanups: (() => void)[] = [];
+  private gyroLocked: StickCommand | null = null;
 
   constructor(
     private readonly state: InputStateStore,
@@ -164,6 +165,10 @@ export class PointerInput {
     return cleanup;
   }
 
+  setGyroLocked(target: StickCommand | null): void {
+    this.gyroLocked = target;
+  }
+
   clear(): void {
     for (const pointerId of [...this.pointers.keys()])
       this.finishPointer(pointerId);
@@ -180,6 +185,12 @@ export class PointerInput {
     visual: HTMLElement,
     control: Control,
   ): void {
+    if (
+      control.type === 'joystick' &&
+      control.binding &&
+      this.gyroLocked === control.binding
+    )
+      return;
     event.preventDefault();
     this.finishPointer(event.pointerId);
     if (!control.binding && control.type !== 'dpad') return;

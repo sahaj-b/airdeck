@@ -27,6 +27,12 @@ export interface RenderedLayout {
   root: HTMLElement;
   pointerInput: PointerInput;
   setOrientation(orientation: Orientation): void;
+  setGyroLocked(target: 'leftStick' | 'rightStick' | null): void;
+  updateGyroThumb(
+    target: 'leftStick' | 'rightStick',
+    x: number,
+    y: number,
+  ): void;
   cancelPointers(): void;
   destroy(): void;
 }
@@ -134,10 +140,40 @@ export function renderLayout(
   view?.addEventListener('resize', onViewportChange);
   view?.addEventListener('orientationchange', onViewportChange);
 
+  const setGyroLocked = (target: 'leftStick' | 'rightStick' | null): void => {
+    pointerInput.setGyroLocked(target);
+    for (const section of renderedSections) {
+      for (const rc of section.controls) {
+        if (rc.control.type === 'joystick' && rc.control.binding) {
+          const isLocked = target !== null && rc.control.binding === target;
+          rc.visual.classList.toggle('gyro-locked', isLocked);
+          (rc.target ?? rc.visual).classList.toggle('gyro-locked', isLocked);
+        }
+      }
+    }
+  };
+
+  const updateGyroThumb = (
+    target: 'leftStick' | 'rightStick',
+    x: number,
+    y: number,
+  ): void => {
+    for (const section of renderedSections) {
+      for (const rc of section.controls) {
+        if (rc.control.binding === target && rc.control.type === 'joystick') {
+          rc.visual.style.setProperty('--axis-x', `${x * 100}%`);
+          rc.visual.style.setProperty('--axis-y', `${y * 100}%`);
+        }
+      }
+    }
+  };
+
   return {
     root,
     pointerInput,
     setOrientation: applyOrientation,
+    setGyroLocked,
+    updateGyroThumb,
     cancelPointers: () => pointerInput.clear(),
     destroy: () => {
       pointerInput.destroy();

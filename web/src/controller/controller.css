@@ -484,6 +484,15 @@ html[data-skin] .dpad-direction.dpad-right {
   margin: 0.75rem auto 0;
 }
 
+:is(.controller-control, .controller-hit-target).gyro-locked {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.gyro-preview-dot {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .controller-control,
   .dpad-direction {

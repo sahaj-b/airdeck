@@ -1,0 +1,75 @@
+import { Slider as SliderPrimitive } from '@base-ui/react/slider';
+import { cn } from '@/lib/utils';
+
+interface DualRangeProps {
+  deadzone: number;
+  maxAngle: number;
+  onDeadzoneChange: (v: number) => void;
+  onMaxChange: (v: number) => void;
+  maxLimit?: number;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function DualRange({
+  deadzone,
+  maxAngle,
+  onDeadzoneChange,
+  onMaxChange,
+  maxLimit = 60,
+  disabled = false,
+  className,
+}: DualRangeProps) {
+  const dzVal = Math.round(deadzone * maxLimit);
+  const maxVal = Math.round(maxAngle);
+
+  const handleChange = (value: number[]) => {
+    let [dz, mx] = value as [number, number];
+    if (typeof dz !== 'number' || typeof mx !== 'number') return;
+    // prevent crossing: deadzone thumb must stay at least 1 step below max thumb
+    if (dz >= mx) {
+      // clamp to the thumb that moved last; Base UI already reports ordered values,
+      // so we bias to the smaller gap.
+      if (dz !== dzVal) dz = Math.min(dz, mx - 1);
+      else mx = Math.max(mx, dz + 1);
+    }
+    onDeadzoneChange(Math.max(0, Math.min(0.5, dz / maxLimit)));
+    onMaxChange(Math.max(1, Math.min(maxLimit, mx)));
+  };
+
+  return (
+    <SliderPrimitive.Root
+      value={[dzVal, maxVal]}
+      min={0}
+      max={maxLimit}
+      step={1}
+      minStepsBetweenValues={1}
+      disabled={disabled}
+      onValueChange={handleChange}
+      className={cn('data-horizontal:w-full', className)}
+      data-slot="dual-range"
+    >
+      <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50">
+        <SliderPrimitive.Track
+          data-slot="slider-track"
+          className="relative grow overflow-hidden rounded-full bg-muted select-none data-horizontal:h-1 data-horizontal:w-full"
+        >
+          <SliderPrimitive.Indicator
+            data-slot="slider-range"
+            className="bg-primary select-none data-horizontal:h-full"
+          />
+        </SliderPrimitive.Track>
+        <SliderPrimitive.Thumb
+          data-slot="slider-thumb"
+          aria-label="Deadzone"
+          className="relative block size-3 shrink-0 cursor-pointer rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3"
+        />
+        <SliderPrimitive.Thumb
+          data-slot="slider-thumb"
+          aria-label="Max angle"
+          className="relative block size-3 shrink-0 cursor-pointer rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3"
+        />
+      </SliderPrimitive.Control>
+    </SliderPrimitive.Root>
+  );
+}

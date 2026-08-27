@@ -30,6 +30,12 @@ export interface SettingsActions {
   setGyroTarget: (v: SettingsState['gyroTarget']) => void;
   setGyroMode: (v: SettingsState['gyroMode']) => void;
   setGyroCalib: (beta: number | null, gamma: number | null) => void;
+  setDeadzoneX: (v: number) => void;
+  setDeadzoneY: (v: number) => void;
+  setMaxAngleX: (v: number) => void;
+  setMaxAngleY: (v: number) => void;
+  setInvertX: (v: boolean) => void;
+  setInvertY: (v: boolean) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -67,6 +73,12 @@ export const settingsStore = createStore<SettingsStore>()(
       setGyroMode: (gyroMode) => set({ gyroMode }),
       setGyroCalib: (gyroCalibBeta, gyroCalibGamma) =>
         set({ gyroCalibBeta, gyroCalibGamma }),
+      setDeadzoneX: (deadzoneX) => set({ deadzoneX }),
+      setDeadzoneY: (deadzoneY) => set({ deadzoneY }),
+      setMaxAngleX: (maxAngleX) => set({ maxAngleX }),
+      setMaxAngleY: (maxAngleY) => set({ maxAngleY }),
+      setInvertX: (invertX) => set({ invertX }),
+      setInvertY: (invertY) => set({ invertY }),
     }),
     {
       name: 'airdeck.settings.v1',

@@ -4,6 +4,7 @@ import { CapabilityManager } from '../controller/capabilities';
 import { FeedbackController } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
 import { buildFullscreenButton } from '../controller/fullscreen-button';
+import { GyroController } from '../controller/gyro/controller';
 import {
   type RenderedLayout,
   renderLayout,
@@ -49,6 +50,7 @@ let activeSender: FrameSender | undefined;
 let activeRenderer: RenderedLayout | undefined;
 let activeFeedback: FeedbackController | undefined;
 let activeCapabilities: CapabilityManager | undefined;
+let activeGyro: GyroController | undefined;
 let removeVisibilityHandlers: (() => void) | undefined;
 let removeControllerDocumentHandlers: (() => void) | undefined;
 let removeJoinFullscreenHandler: (() => void) | undefined;
@@ -68,6 +70,8 @@ function renderJoinScreen(errorMessage = ''): void {
   activeRenderer?.destroy();
   activeFeedback?.destroy();
   activeCapabilities?.destroy();
+  activeGyro?.destroy();
+  activeGyro = undefined;
   activeSocket = undefined;
   activeSender = undefined;
   activeRenderer = undefined;
@@ -242,6 +246,43 @@ function showController(options: {
     }
   });
 
+  // Gyro controller (vanilla, no React in hot path)
+  let gyroStatus: import('../controller/gyro/controller').GyroStatus = 'idle';
+  let gyroLiveX = 0;
+  let gyroLiveY = 0;
+  const gyro = new GyroController(state, settingsStore, {
+    getIsLandscape: () => window.innerWidth > window.innerHeight,
+    onVisualUpdate: (target, x, y) => {
+      gyroLiveX = x;
+      gyroLiveY = y;
+      activeRenderer?.updateGyroThumb(
+        target as 'leftStick' | 'rightStick',
+        x,
+        y,
+      );
+      if (island && !island.isDestroyed())
+        island.update({ gyroLiveX: x, gyroLiveY: y });
+    },
+    onStatusChange: (s) => {
+      gyroStatus = s;
+      if (island && !island.isDestroyed()) island.update({ gyroStatus: s });
+    },
+  });
+  activeGyro = gyro;
+
+  // keep exclusive lock in sync with gyro target/enabled
+  const syncGyroLock = () => {
+    const s = settingsStore.getState();
+    const locked = s.gyroEnabled
+      ? (s.gyroTarget as 'leftStick' | 'rightStick')
+      : null;
+    activeRenderer?.setGyroLocked(locked);
+  };
+  const unsubGyroLock = settingsStore.subscribe((s, prev) => {
+    if (s.gyroEnabled !== prev.gyroEnabled || s.gyroTarget !== prev.gyroTarget)
+      syncGyroLock();
+  });
+
   const shell = document.createElement('main');
   shell.className = 'controller-shell';
   shell.style.setProperty('--slot-accent', '#6ee7b7');
@@ -330,6 +371,10 @@ function showController(options: {
           selectedLayout: currentLayoutId,
           connectionText,
           pingText,
+          gyro,
+          gyroStatus,
+          gyroLiveX,
+          gyroLiveY,
         });
         return;
       }
@@ -350,6 +395,10 @@ function showController(options: {
         },
         connectionText,
         pingText,
+        gyro,
+        gyroStatus,
+        gyroLiveX,
+        gyroLiveY,
         onClose: () => {
           gearButton.setAttribute('aria-expanded', 'false');
           // focus back to gear for a11y, but only if still in DOM
@@ -383,6 +432,9 @@ function showController(options: {
     document.removeEventListener('keydown', onShellKeyDown);
     fullscreen.cleanup();
     unsubFeedback();
+    unsubGyroLock();
+    gyro.destroy();
+    activeGyro = undefined;
     island?.unmount();
   };
 
@@ -434,6 +486,7 @@ function showController(options: {
       });
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
+      syncGyroLock();
       if (island && !island.isDestroyed())
         island.update({ selectedLayout: currentLayoutId });
       updateStatus(diagnostic ?? 'Controller ready.');
@@ -473,6 +526,7 @@ function showController(options: {
     const wasRunning = activeSender?.isRunning ?? false;
     if (wasRunning) activeSender?.stop();
     activeRenderer?.cancelPointers();
+    gyro.handleVisibilityHidden();
     state.reset();
     if (wasRunning) activeSender?.start();
   };
