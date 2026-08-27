@@ -13,7 +13,7 @@ func SameOrigin(r *http.Request) bool {
 		return true
 	}
 	scheme := "http"
-	if r.TLS != nil {
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		scheme = "https"
 	}
 	expected := scheme + "://" + r.Host

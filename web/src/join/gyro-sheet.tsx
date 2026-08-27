@@ -178,6 +178,7 @@ export function GyroSheet({
             deadzone={deadzoneX}
             maxAngle={maxAngleX}
             disabled={disabled}
+            live={liveX}
             onDeadzoneChange={setDeadzoneX}
             onMaxChange={setMaxAngleX}
           />
@@ -205,6 +206,7 @@ export function GyroSheet({
               deadzone={deadzoneX}
               maxAngle={maxAngleX}
               disabled={disabled}
+              live={liveX}
               onDeadzoneChange={setDeadzoneX}
               onMaxChange={setMaxAngleX}
             />
@@ -230,6 +232,7 @@ export function GyroSheet({
               deadzone={deadzoneY}
               maxAngle={maxAngleY}
               disabled={disabled}
+              live={liveY}
               onDeadzoneChange={setDeadzoneY}
               onMaxChange={setMaxAngleY}
             />

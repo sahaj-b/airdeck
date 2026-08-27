@@ -8,6 +8,7 @@ interface DualRangeProps {
   onMaxChange: (v: number) => void;
   maxLimit?: number;
   disabled?: boolean;
+  live?: number;
   className?: string;
 }
 
@@ -18,10 +19,15 @@ export function DualRange({
   onMaxChange,
   maxLimit = 60,
   disabled = false,
+  live,
   className,
 }: DualRangeProps) {
   const dzVal = Math.round(deadzone * maxLimit);
   const maxVal = Math.round(maxAngle);
+  const liveAbs = Math.max(0, Math.min(1, Math.abs(live ?? 0)));
+  const livePos = dzVal + liveAbs * Math.max(0, maxVal - dzVal);
+  const liveLeftPct = (dzVal / maxLimit) * 100;
+  const liveWidthPct = ((livePos - dzVal) / maxLimit) * 100;
 
   const handleChange = (value: number[]) => {
     let [dz, mx] = value as [number, number];
@@ -49,15 +55,32 @@ export function DualRange({
       className={cn('data-horizontal:w-full', className)}
       data-slot="dual-range"
     >
-      <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50">
+      <SliderPrimitive.Control
+        data-base-ui-swipe-ignore
+        className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50"
+      >
         <SliderPrimitive.Track
           data-slot="slider-track"
           className="relative grow overflow-hidden rounded-full bg-muted select-none data-horizontal:h-1 data-horizontal:w-full"
         >
           <SliderPrimitive.Indicator
             data-slot="slider-range"
-            className="bg-primary select-none data-horizontal:h-full"
+            className="bg-primary/30 select-none data-horizontal:h-full"
           />
+          {live != null && !disabled && (
+            <div
+              data-slot="live-fill"
+              className="absolute top-0 h-full bg-primary transition-none pointer-events-none"
+              style={{ left: `${liveLeftPct}%`, width: `${liveWidthPct}%` }}
+            />
+          )}
+          {live != null && !disabled && liveAbs > 0 && (
+            <div
+              data-slot="live-dot"
+              className="absolute top-1/2 size-2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-primary border border-white shadow-sm pointer-events-none transition-none"
+              style={{ left: `${(livePos / maxLimit) * 100}%` }}
+            />
+          )}
         </SliderPrimitive.Track>
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
