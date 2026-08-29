@@ -18,24 +18,24 @@ describe('responsive layout resolver', () => {
     expect(allocation.widths[1]).toBeLessThan(layout.sections[1].aspectRatio);
   });
 
-  it('gives wide-screen space to the flexible center and then its gutters', () => {
+  it('gives wide-screen space to the flexible center with no gaps or margins', () => {
     const allocation = allocateSections(layout, { width: 1600, height: 400 });
     expect(allocation.widths[0]).toBeCloseTo(layout.sections[0].aspectRatio);
     expect(allocation.widths[2]).toBeCloseTo(layout.sections[2].aspectRatio);
-    expect(allocation.widths[1]).toBeCloseTo(layout.sections[1].maxWidth);
-    expect(allocation.gap).toBeCloseTo(layout.gapMax);
-    expect(allocation.outerGutter).toBeGreaterThan(0);
+    // center expands to fill viewport edge-to-edge
+    const expectedCenter =
+      1600 / 400 -
+      layout.sections[0].aspectRatio -
+      layout.sections[2].aspectRatio;
+    expect(allocation.widths[1]).toBeCloseTo(expectedCenter, 6);
   });
 
-  it('resolves centered positions, anchors, and reference-dimension sizes', () => {
+  it('resolves centered positions and reference-dimension sizes', () => {
     const simple: LayoutDocument = {
       id: 'simple',
       name: 'Simple',
       schemaVersion: 1,
       defaultOrientation: 'landscape',
-      referenceDimension: 'height',
-      gap: 0,
-      gapMax: 0,
       sections: [
         {
           id: 'section',
@@ -52,7 +52,6 @@ describe('responsive layout resolver', () => {
               type: 'button',
               geometry: {
                 position: { x: 0, y: 0 },
-                anchor: { x: 0.5, y: 0.5 },
                 size: { width: 0.2, height: 0.4 },
               },
               label: 'Button',
@@ -80,9 +79,6 @@ describe('responsive layout resolver', () => {
       name: 'Touch',
       schemaVersion: 1,
       defaultOrientation: 'landscape',
-      referenceDimension: 'height',
-      gap: 0,
-      gapMax: 0,
       sections: [
         {
           id: 'section',
@@ -98,7 +94,6 @@ describe('responsive layout resolver', () => {
             type: 'button' as const,
             geometry: {
               position: { x, y: 0 },
-              anchor: { x: 0.5, y: 0.5 },
               size: { width: 0.1, height: 0.1 },
             },
             label: 'Button',

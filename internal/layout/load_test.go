@@ -11,7 +11,6 @@ import (
 func baseDoc() Document {
 	return Document{
 		ID: "user-layout", Name: "User Layout", SchemaVersion: 1, DefaultOrientation: "landscape",
-		ReferenceDimension: "height", Gap: 0, GapMax: 0,
 		Sections: []Section{{
 			ID: "section", AspectRatio: 1, MinWidth: 1, MaxWidth: 1,
 			FlexGrow: 0, FlexShrink: 0, Protected: true, Padding: Padding{},

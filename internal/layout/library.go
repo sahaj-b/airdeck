@@ -17,7 +17,6 @@ type Size struct {
 
 type Geometry struct {
 	Position Point `json:"position"`
-	Anchor   Point `json:"anchor"`
 	Size     Size  `json:"size"`
 }
 
@@ -76,9 +75,6 @@ type Document struct {
 	Name               string    `json:"name"`
 	SchemaVersion      int       `json:"schemaVersion"`
 	DefaultOrientation string    `json:"defaultOrientation"`
-	ReferenceDimension string    `json:"referenceDimension"`
-	Gap                float64   `json:"gap"`
-	GapMax             float64   `json:"gapMax"`
 	Sections           []Section `json:"sections"`
 	Assets             []Asset   `json:"assets"`
 }

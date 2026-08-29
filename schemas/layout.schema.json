@@ -9,9 +9,6 @@
     "name",
     "schemaVersion",
     "defaultOrientation",
-    "referenceDimension",
-    "gap",
-    "gapMax",
     "sections",
     "assets"
   ],
@@ -30,22 +27,6 @@
     },
     "defaultOrientation": {
       "enum": ["landscape", "portrait"]
-    },
-    "referenceDimension": {
-      "const": "height",
-      "description": "V1 measures section widths, padding, control positions, and control sizes from the composition height."
-    },
-    "gap": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1,
-      "description": "The minimum gap between ordered sections, as a fraction of the composition height."
-    },
-    "gapMax": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1,
-      "description": "The maximum gap between ordered sections. Spare wide-screen space reaches gaps after flexible sections reach maxWidth."
     },
     "sections": {
       "type": "array",
@@ -83,25 +64,6 @@
         }
       }
     },
-    "anchor": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["x", "y"],
-      "properties": {
-        "x": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "The horizontal pivot inside the control. 0 is the left edge and 1 is the right edge."
-        },
-        "y": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "The vertical pivot inside the control. 0 is the top edge and 1 is the bottom edge."
-        }
-      }
-    },
     "size": {
       "type": "object",
       "additionalProperties": false,
@@ -124,13 +86,10 @@
     "geometry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["position", "anchor", "size"],
+      "required": ["position", "size"],
       "properties": {
         "position": {
           "$ref": "#/$defs/point"
-        },
-        "anchor": {
-          "$ref": "#/$defs/anchor"
         },
         "size": {
           "$ref": "#/$defs/size"

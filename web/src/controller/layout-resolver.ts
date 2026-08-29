@@ -42,8 +42,6 @@ export interface ResolvedLayout {
 
 export interface SectionAllocation {
   widths: number[];
-  gap: number;
-  outerGutter: number;
 }
 
 const EPSILON = 1e-7;
@@ -60,7 +58,7 @@ export function resolveLayout(
   const allocation = allocateSections(document, safeViewport);
   const reference = safeViewport.height;
   const sections: ResolvedSection[] = [];
-  let left = allocation.outerGutter * reference;
+  let left = 0;
 
   for (let index = 0; index < document.sections.length; index += 1) {
     const section = document.sections[index];
@@ -90,7 +88,7 @@ export function resolveLayout(
         resolveControl(control, section, content, reference, orientation),
       );
     sections.push({ section, rect, content, reference, controls });
-    left += width + allocation.gap * reference;
+    left += width;
   }
 
   return {
@@ -114,14 +112,9 @@ export function allocateSections(
   const widthRatio =
     reference > 0 ? Math.max(0, viewport.width / reference) : 0;
   const sectionCount = document.sections.length;
-  if (sectionCount === 0)
-    return { widths: [], gap: 0, outerGutter: widthRatio / 2 };
+  if (sectionCount === 0) return { widths: [] };
 
-  const gap = Math.min(
-    Math.max(0, document.gap),
-    sectionCount > 1 ? widthRatio / (sectionCount - 1) : 0,
-  );
-  const available = Math.max(0, widthRatio - gap * (sectionCount - 1));
+  const available = widthRatio;
   const widths = document.sections.map((section) =>
     clamp(section.aspectRatio, section.minWidth, section.maxWidth),
   );
@@ -169,21 +162,7 @@ export function allocateSections(
     );
   }
 
-  total = sum(widths);
-  let remaining = Math.max(0, widthRatio - total - gap * (sectionCount - 1));
-  let resolvedGap = gap;
-  if (sectionCount > 1 && remaining > EPSILON) {
-    const gapCapacity = Math.max(0, document.gapMax - resolvedGap);
-    const gapGrowth = Math.min(gapCapacity, remaining / (sectionCount - 1));
-    resolvedGap += gapGrowth;
-    remaining -= gapGrowth * (sectionCount - 1);
-  }
-
-  return {
-    widths,
-    gap: resolvedGap,
-    outerGutter: Math.max(0, remaining / 2),
-  };
+  return { widths };
 }
 
 function resolveControl(
@@ -199,8 +178,8 @@ function resolveControl(
   const centerX = content.left + content.width / 2;
   const centerY = content.top + content.height / 2;
   const visual: PixelRect = {
-    left: centerX + geometry.position.x * reference - geometry.anchor.x * width,
-    top: centerY + geometry.position.y * reference - geometry.anchor.y * height,
+    left: centerX + geometry.position.x * reference - width / 2,
+    top: centerY + geometry.position.y * reference - height / 2,
     width,
     height,
   };

@@ -8,7 +8,6 @@ import (
 func baseGeometry() Geometry {
 	return Geometry{
 		Position: Point{X: 0, Y: 0},
-		Anchor:   Point{X: 0.5, Y: 0.5},
 		Size:     Size{Width: 0.2, Height: 0.2},
 	}
 }
@@ -26,7 +25,6 @@ func baseSection() Section {
 func baseDocument() Document {
 	return Document{
 		ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape",
-		ReferenceDimension: "height", Gap: 0, GapMax: 0,
 		Sections: []Section{baseSection()}, Assets: []Asset{{ID: "asset", Path: "asset.png"}},
 	}
 }
@@ -62,7 +60,7 @@ func TestValidateRejectsIncompleteDPad(t *testing.T) {
 	doc := baseDocument()
 	doc.Sections[0].Controls = []Control{{
 		ID: "dpad", Type: "dpad", Geometry: Geometry{
-			Position: Point{}, Anchor: Point{X: 0.5, Y: 0.5}, Size: Size{Width: 0.5, Height: 0.5},
+			Position: Point{}, Size: Size{Width: 0.5, Height: 0.5},
 		}, Label: "D-pad", Visible: true, Bindings: &DPadBindings{Up: "dpadUp"},
 	}}
 	if err := ValidateDocument(doc); err == nil {
@@ -82,7 +80,7 @@ func TestValidateControlShapesAndSquares(t *testing.T) {
 		doc := baseDocument()
 		doc.Sections[0].Controls = []Control{{
 			ID: "stick", Type: "joystick", Geometry: Geometry{
-				Position: Point{}, Anchor: Point{X: 0.5, Y: 0.5}, Size: size,
+				Position: Point{}, Size: size,
 			}, Label: "Left stick", Visible: true, Binding: "leftStick", Shape: shape,
 		}}
 		return doc

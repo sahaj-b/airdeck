@@ -62,17 +62,11 @@ func ValidateDocument(document Document) error {
 	if document.DefaultOrientation != "landscape" && document.DefaultOrientation != "portrait" {
 		return fmt.Errorf("unsupported default orientation %q", document.DefaultOrientation)
 	}
-	if document.ReferenceDimension != "height" {
-		return fmt.Errorf("unsupported reference dimension %q", document.ReferenceDimension)
-	}
 	if len(document.Sections) == 0 || len(document.Sections) > 16 {
 		return errors.New("layout must contain between 1 and 16 sections")
 	}
 	if len(document.Assets) > 64 {
 		return errors.New("layout cannot contain more than 64 assets")
-	}
-	if !finite(document.Gap) || !finite(document.GapMax) || document.Gap < 0 || document.GapMax < document.Gap || document.Gap > 1 || document.GapMax > 1 {
-		return errors.New("layout gaps are invalid")
 	}
 
 	ids := make(map[string]string)
@@ -246,9 +240,6 @@ func validateGeometry(geometry Geometry, section Section, name string) error {
 	if !finite(geometry.Position.X) || !finite(geometry.Position.Y) || geometry.Position.X < -2 || geometry.Position.X > 2 || geometry.Position.Y < -2 || geometry.Position.Y > 2 {
 		return fmt.Errorf("%s position is invalid", name)
 	}
-	if !finite(geometry.Anchor.X) || !finite(geometry.Anchor.Y) || geometry.Anchor.X < 0 || geometry.Anchor.X > 1 || geometry.Anchor.Y < 0 || geometry.Anchor.Y > 1 {
-		return fmt.Errorf("%s anchor is invalid", name)
-	}
 	if !finite(geometry.Size.Width) || !finite(geometry.Size.Height) || geometry.Size.Width <= 0 || geometry.Size.Height <= 0 || geometry.Size.Width > 2 || geometry.Size.Height > 2 {
 		return fmt.Errorf("%s size is invalid", name)
 	}
@@ -257,9 +248,9 @@ func validateGeometry(geometry Geometry, section Section, name string) error {
 	contentHeight := 1 - section.Padding.Top - section.Padding.Bottom
 	centerX := section.Padding.Left + contentWidth/2
 	centerY := section.Padding.Top + contentHeight/2
-	left := centerX + geometry.Position.X - geometry.Anchor.X*geometry.Size.Width
+	left := centerX + geometry.Position.X - geometry.Size.Width/2
 	right := left + geometry.Size.Width
-	top := centerY + geometry.Position.Y - geometry.Anchor.Y*geometry.Size.Height
+	top := centerY + geometry.Position.Y - geometry.Size.Height/2
 	bottom := top + geometry.Size.Height
 	const epsilon = 1e-9
 	if left < -epsilon || right > section.AspectRatio+epsilon || top < -epsilon || bottom > 1+epsilon {

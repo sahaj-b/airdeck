@@ -16,7 +16,6 @@ export interface Size {
 
 export interface Geometry {
   position: Point;
-  anchor: Point;
   size: Size;
 }
 
@@ -80,9 +79,6 @@ export interface LayoutDocument {
   name: string;
   schemaVersion: 1;
   defaultOrientation: Orientation;
-  referenceDimension: 'height';
-  gap: number;
-  gapMax: number;
   sections: Section[];
   assets: LayoutAsset[];
 }
@@ -104,16 +100,6 @@ export interface LayoutParseResult {
 export function validateLayout(value: unknown): value is LayoutDocument {
   if (!validateSchema(value)) return false;
   const document = value as LayoutDocument;
-  if (!idPattern.test(document.id)) return false;
-  if (
-    document.referenceDimension !== 'height' ||
-    !Number.isFinite(document.gap) ||
-    !Number.isFinite(document.gapMax) ||
-    document.gap < 0 ||
-    document.gapMax < document.gap
-  )
-    return false;
-
   const ids = new Set<string>();
   const add = (id: string) => {
     if (ids.has(id)) return false;
@@ -223,9 +209,6 @@ function validGeometry(geometry: Geometry, section: Section): boolean {
     ![geometry.position.x, geometry.position.y].every(
       (value) => Number.isFinite(value) && value >= -2 && value <= 2,
     ) ||
-    ![geometry.anchor.x, geometry.anchor.y].every(
-      (value) => Number.isFinite(value) && value >= 0 && value <= 1,
-    ) ||
     ![geometry.size.width, geometry.size.height].every(
       (value) => Number.isFinite(value) && value > 0 && value <= 2,
     )
@@ -237,11 +220,9 @@ function validGeometry(geometry: Geometry, section: Section): boolean {
   const contentHeight = 1 - section.padding.top - section.padding.bottom;
   const centerX = section.padding.left + contentWidth / 2;
   const centerY = section.padding.top + contentHeight / 2;
-  const left =
-    centerX + geometry.position.x - geometry.anchor.x * geometry.size.width;
+  const left = centerX + geometry.position.x - geometry.size.width / 2;
   const right = left + geometry.size.width;
-  const top =
-    centerY + geometry.position.y - geometry.anchor.y * geometry.size.height;
+  const top = centerY + geometry.position.y - geometry.size.height / 2;
   const bottom = top + geometry.size.height;
   const epsilon = 1e-9;
   return (
