@@ -3,7 +3,7 @@ export function readBoolean(key: string, fallback: boolean): boolean {
   return value === null ? fallback : value === 'true';
 }
 
-export function readNumber(key: string, fallback: number): number {
+function readNumber(key: string, fallback: number): number {
   const value = readStorage(key);
   if (value === null) return fallback;
   const parsed = Number(value);

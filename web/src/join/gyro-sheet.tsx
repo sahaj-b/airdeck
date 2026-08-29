@@ -109,18 +109,18 @@ export function GyroSheet({
       {secureHint && <p className="text-xs text-amber-400">Gyro needs HTTPS</p>}
       {permissionDenied && (
         <p className="text-xs text-destructive">
-          Permission denied — enable in Settings &gt; Safari &gt; Motion &amp;
+          Permission denied, enable in Settings &gt; Safari &gt; Motion &amp;
           Orientation Access
         </p>
       )}
       {unsupported && (
         <p className="text-xs text-muted-foreground">
-          Gyroscope not supported on this device — using touch only.
+          Gyroscope not supported on this device, using touch only.
         </p>
       )}
       {landscapeHint && (
         <p className="text-xs text-amber-400">
-          Rotate to landscape — portrait forces neutral
+          Rotate to landscape, portrait forces neutral
         </p>
       )}
 

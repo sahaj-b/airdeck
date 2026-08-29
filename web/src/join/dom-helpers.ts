@@ -36,10 +36,7 @@ export function checkboxField(
   return { wrapper, input };
 }
 
-export function settingsRow(
-  labelText: string,
-  value: HTMLElement,
-): HTMLDivElement {
+function settingsRow(labelText: string, value: HTMLElement): HTMLDivElement {
   const row = document.createElement('div');
   row.className = 'settings-row';
   const label = document.createElement('span');
@@ -53,7 +50,7 @@ export function showError(element: HTMLElement, message: string): void {
   element.textContent = message;
 }
 
-export function formatVibration(ms: number): string {
+function formatVibration(ms: number): string {
   return ms > 0 ? `${ms} ms` : 'Off';
 }
 

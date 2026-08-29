@@ -1,17 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
-import { Button } from '../components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../components/ui/card';
 import { AdminStore, useAdminSnapshot } from './admin-store';
 import type { SettingsUpdate } from './api';
+import { ErrorScreen } from './components/error-screen';
 import { HostPanel } from './components/host-panel';
+import { LoadingScreen } from './components/loading-screen';
 import { QRCard } from './components/qr-card';
 import { Roster } from './components/roster';
 
@@ -72,7 +66,7 @@ function Dashboard() {
   const state = snapshot.state;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-4 lg:mb-10">
           <h1 className="flex items-center gap-5 leading-none">
@@ -124,53 +118,6 @@ function Dashboard() {
           />
         </div>
       </div>
-    </div>
-  );
-}
-
-function LoadingScreen() {
-  return (
-    <div className="grid min-h-screen place-items-center bg-background p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase">
-            Airdeck host
-          </CardDescription>
-          <CardTitle className="text-xl">Loading dashboard...</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/3 animate-[shimmer_1.2s_ease-in-out_infinite] rounded-full bg-primary/60" />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function ErrorScreen({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <div className="grid min-h-screen place-items-center bg-background p-6">
-      <Card className="w-full max-w-md border-destructive/50">
-        <CardHeader>
-          <CardDescription className="text-[11px] font-bold tracking-[0.16em] uppercase text-destructive">
-            Airdeck host
-          </CardDescription>
-          <CardTitle>Dashboard unavailable</CardTitle>
-          <CardDescription>{message}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button type="button" onClick={onRetry}>
-            Retry
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

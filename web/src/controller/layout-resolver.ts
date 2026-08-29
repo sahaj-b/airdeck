@@ -82,11 +82,13 @@ export function resolveLayout(
           (section.padding.top + section.padding.bottom) * reference,
       ),
     };
-    const controls = section.controls
-      .filter((control) => control.visible || control.hitOnly)
-      .map((control) =>
+    const controls: ResolvedControl[] = [];
+    for (const control of section.controls) {
+      if (!control.visible && !control.hitOnly) continue;
+      controls.push(
         resolveControl(control, section, content, reference, orientation),
       );
+    }
     sections.push({ section, rect, content, reference, controls });
     left += width;
   }
@@ -193,12 +195,13 @@ function shrinkToFloor(
   predicate: (section: Section) => boolean,
   floor: (section: Section) => number,
 ): number {
-  const candidates = sections
-    .map((section, index) => ({ section, index }))
-    .filter(
-      ({ section, index }) =>
-        predicate(section) && widths[index] > floor(section) + EPSILON,
-    );
+  const candidates: { section: Section; index: number }[] = [];
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
+    if (predicate(section) && widths[index] > floor(section) + EPSILON) {
+      candidates.push({ section, index });
+    }
+  }
   while (deficit > EPSILON && candidates.length > 0) {
     const weight = candidates.reduce(
       (total, { section, index }) =>
@@ -235,12 +238,13 @@ function distributeGrow(
   predicate: (section: Section) => boolean,
   ceiling: (section: Section) => number,
 ): void {
-  const candidates = sections
-    .map((section, index) => ({ section, index }))
-    .filter(
-      ({ section, index }) =>
-        predicate(section) && widths[index] < ceiling(section) - EPSILON,
-    );
+  const candidates: { section: Section; index: number }[] = [];
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
+    if (predicate(section) && widths[index] < ceiling(section) - EPSILON) {
+      candidates.push({ section, index });
+    }
+  }
   while (extra > EPSILON && candidates.length > 0) {
     const weight = candidates.reduce(
       (total, { section }) => total + Math.max(EPSILON, section.flexGrow),

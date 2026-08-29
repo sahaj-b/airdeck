@@ -16,6 +16,10 @@ import { SKINS } from '@/skins';
 import { getSkin, setSkin } from '@/skins/loader';
 import type { MountOptions } from './settings-island';
 
+function formatVibration(ms: number): string {
+  return ms > 0 ? `${ms} ms` : 'Off';
+}
+
 export function InlineSettingsPanel({
   opts,
   onOpenGyro,
@@ -60,10 +64,6 @@ export function InlineSettingsPanel({
     setStoreSkin(id);
     setSkin(id);
   };
-
-  function formatVibration(ms: number): string {
-    return ms > 0 ? `${ms} ms` : 'Off';
-  }
 
   const hapticsAvailable = feedback.hapticsAvailable;
 

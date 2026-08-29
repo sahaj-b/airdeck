@@ -37,9 +37,7 @@ export function HostPanel({
 }: HostPanelProps) {
   const [bind, setBind] = useState(state.config.bind);
   const [port, setPort] = useState(String(state.config.port));
-  const [advertisedHost, setAdvertisedHost] = useState(
-    state.config.advertisedHost,
-  );
+  const advertisedHostRef = useRef(state.config.advertisedHost);
   const [advertisedHostSelect, setAdvertisedHostSelect] = useState(() =>
     deriveHostSelect(state.config.advertisedHost, state.advertisedCandidates),
   );
@@ -64,13 +62,16 @@ export function HostPanel({
   // then snaps back to Auto). Only sync when the server value actually
   // changed from last synced, and preserve dirty local edits.
   const lastServerHostRef = useRef(state.config.advertisedHost);
-  const lastServerCandidatesRef = useRef(state.advertisedCandidates.join('|'));
+  const lastServerCandidatesRef = useRef<string>('');
   const lastServerBindRef = useRef(state.config.bind);
   const lastServerPortRef = useRef(state.config.port);
   const lastServerAdvertisedPortRef = useRef(state.config.advertisedPort);
   const lastServerDefaultLayoutRef = useRef(state.config.defaultLayout);
   const lastServerGraceRef = useRef(state.config.gracePeriodSeconds);
 
+  // Intentional prop-to-state sync with staleness guard. Deriving during
+  // render would clobber the user's in-flight input on every 1Hz WS tick.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: prop sync with guard
   useEffect(() => {
     const serverHost = state.config.advertisedHost;
     const candidatesKey = state.advertisedCandidates.join('|');
@@ -80,7 +81,7 @@ export function HostPanel({
     if (hostChanged) {
       lastServerHostRef.current = serverHost;
       lastServerCandidatesRef.current = candidatesKey;
-      setAdvertisedHost(serverHost);
+      advertisedHostRef.current = serverHost;
       setAdvertisedHostSelect(
         deriveHostSelect(serverHost, state.advertisedCandidates),
       );
@@ -89,8 +90,6 @@ export function HostPanel({
       );
     } else if (candidatesChanged) {
       lastServerCandidatesRef.current = candidatesKey;
-      // Candidates (LAN IPs) changed but host didn't — keep __custom__
-      // editing intact, just refresh the select mapping for auto/ip.
       setAdvertisedHostSelect((prev) =>
         prev === '__custom__'
           ? prev
@@ -133,7 +132,7 @@ export function HostPanel({
     onSave({
       bind: bind.trim(),
       port: numberValue(port),
-      advertisedHost: advertisedHost.trim(),
+      advertisedHost: advertisedHostRef.current.trim(),
       advertisedPort: numberValue(advertisedPort),
       gracePeriodSeconds,
     });
@@ -152,223 +151,48 @@ export function HostPanel({
           <CardTitle className="text-lg">Settings</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <section className="space-y-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <Label htmlFor="accepting-joins" className="shrink-0 text-sm">
-                  Accept new joins
-                </Label>
-                <Switch
-                  id="accepting-joins"
-                  checked={state.acceptingJoins}
-                  onCheckedChange={(checked) => onJoinsChange(checked)}
-                  className="ml-auto"
-                />
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {state.acceptingJoins
-                  ? 'Players can enter the session.'
-                  : 'New joins are blocked.'}
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <Label
-                  htmlFor="default-layout-top"
-                  className="shrink-0 text-sm"
-                >
-                  Layout
-                </Label>
-                <Select
-                  value={defaultLayout}
-                  onValueChange={handleDefaultLayoutChange}
-                >
-                  <SelectTrigger
-                    id="default-layout-top"
-                    className="ml-auto w-[200px]"
-                  >
-                    <SelectValue placeholder="Select layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {state.layouts.map((layout) => (
-                      <SelectItem key={layout.id} value={layout.id}>
-                        {layout.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                New phones join with this. Existing players keep theirs.
-              </p>
-            </div>
-            {state.players.length > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onApplyLayoutToAll(defaultLayout)}
-                className="w-full justify-center"
-              >
-                Apply to all {state.players.length} players
-              </Button>
-            )}
-          </section>
+          <GeneralSection
+            acceptingJoins={state.acceptingJoins}
+            defaultLayout={defaultLayout}
+            layouts={state.layouts}
+            playerCount={state.players.length}
+            onJoinsChange={onJoinsChange}
+            onLayoutChange={handleDefaultLayoutChange}
+            onApplyLayoutToAll={onApplyLayoutToAll}
+          />
 
           <Separator />
 
-          <section className="space-y-3">
-            <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
-              Network
-            </h2>
-            <form onSubmit={save} className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Label htmlFor="bind-address" className="shrink-0 text-sm">
-                  Bind address
-                </Label>
-                <Input
-                  id="bind-address"
-                  value={bind}
-                  onChange={(event) => setBind(event.target.value)}
-                  autoComplete="off"
-                  placeholder="0.0.0.0"
-                  className="ml-auto w-[200px]"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Label htmlFor="listen-port" className="shrink-0 text-sm">
-                  Listen port
-                </Label>
-                <Input
-                  id="listen-port"
-                  type="number"
-                  min={0}
-                  max={65535}
-                  value={port}
-                  onChange={(event) => setPort(event.target.value)}
-                  className="ml-auto w-[200px]"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Label htmlFor="advertised-host" className="shrink-0 text-sm">
-                  Advertised host
-                </Label>
-                <Select
-                  value={advertisedHostSelect}
-                  onValueChange={(value) => {
-                    if (value === null) return;
-                    setAdvertisedHostSelect(value);
-                    if (value === '__custom__') {
-                      setAdvertisedHost(customHost.trim());
-                    } else if (value === 'auto') {
-                      setAdvertisedHost('');
-                    } else {
-                      setAdvertisedHost(value);
-                    }
-                  }}
-                >
-                  <SelectTrigger
-                    id="advertised-host"
-                    className="ml-auto w-[200px]"
-                  >
-                    <span className="truncate text-sm">
-                      {advertisedHostSelect === 'auto'
-                        ? autoLabel
-                        : advertisedHostSelect === '__custom__'
-                          ? 'Custom…'
-                          : advertisedHostSelect || autoLabel}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">{autoLabel}</SelectItem>
-                    {state.advertisedCandidates.map((ip) => (
-                      <SelectItem key={ip} value={ip}>
-                        {ip}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="__custom__">Custom…</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {advertisedHostSelect === '__custom__' && (
-                <div className="flex items-center gap-3">
-                  <Label
-                    htmlFor="advertised-host-custom"
-                    className="shrink-0 text-sm"
-                  >
-                    Custom host
-                  </Label>
-                  <Input
-                    id="advertised-host-custom"
-                    value={customHost}
-                    onChange={(event) => {
-                      const v = event.target.value;
-                      setCustomHost(v);
-                      setAdvertisedHost(v.trim());
-                    }}
-                    autoComplete="off"
-                    placeholder="hostname or IP"
-                    className="ml-auto w-[200px]"
-                  />
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="advertised-port" className="shrink-0 text-sm">
-                    Advertised port
-                  </Label>
-                  <Input
-                    id="advertised-port"
-                    type="number"
-                    min={0}
-                    max={65535}
-                    value={advertisedPort}
-                    onChange={(event) => setAdvertisedPort(event.target.value)}
-                    className="ml-auto w-[200px]"
-                  />
-                </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  0 = use listening port.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="grace-period" className="shrink-0 text-sm">
-                    Grace period
-                  </Label>
-                  <div className="ml-auto flex w-[200px] items-center gap-1.5">
-                    <Input
-                      id="grace-period"
-                      type="number"
-                      min={1}
-                      max={60}
-                      value={String(gracePeriodSeconds)}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v))
-                          setGracePeriodSeconds(Math.min(60, Math.max(1, v)));
-                      }}
-                      className="flex-1 tabular-nums"
-                    />
-                    <span className="text-xs text-muted-foreground">s</span>
-                  </div>
-                </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  How long to keep a disconnected slot reserved.
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <Button type="submit" className="w-full">
-                  Save settings
-                </Button>
-              </div>
-            </form>
-          </section>
+          <NetworkSection
+            bind={bind}
+            port={port}
+            advertisedHostSelect={advertisedHostSelect}
+            customHost={customHost}
+            advertisedPort={advertisedPort}
+            gracePeriodSeconds={gracePeriodSeconds}
+            advertisedCandidates={state.advertisedCandidates}
+            autoLabel={autoLabel}
+            onBindChange={setBind}
+            onPortChange={setPort}
+            onHostSelectChange={(value) => {
+              if (value === null) return;
+              setAdvertisedHostSelect(value);
+              if (value === '__custom__') {
+                advertisedHostRef.current = customHost.trim();
+              } else if (value === 'auto') {
+                advertisedHostRef.current = '';
+              } else {
+                advertisedHostRef.current = value;
+              }
+            }}
+            onCustomHostChange={(v) => {
+              setCustomHost(v);
+              advertisedHostRef.current = v.trim();
+            }}
+            onAdvertisedPortChange={setAdvertisedPort}
+            onGraceChange={setGracePeriodSeconds}
+            onSave={save}
+          />
         </CardContent>
       </Card>
 
@@ -386,6 +210,255 @@ export function HostPanel({
         </p>
       </div>
     </div>
+  );
+}
+
+function GeneralSection({
+  acceptingJoins,
+  defaultLayout,
+  layouts,
+  playerCount,
+  onJoinsChange,
+  onLayoutChange,
+  onApplyLayoutToAll,
+}: {
+  acceptingJoins: boolean;
+  defaultLayout: string;
+  layouts: AdminState['layouts'];
+  playerCount: number;
+  onJoinsChange: (v: boolean) => void;
+  onLayoutChange: (v: string | null) => void;
+  onApplyLayoutToAll: (id: string) => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <Label htmlFor="accepting-joins" className="shrink-0 text-sm">
+            Accept new joins
+          </Label>
+          <Switch
+            id="accepting-joins"
+            checked={acceptingJoins}
+            onCheckedChange={(checked) => onJoinsChange(checked)}
+            className="ml-auto"
+          />
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {acceptingJoins
+            ? 'Players can enter the session.'
+            : 'New joins are blocked.'}
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <Label htmlFor="default-layout-top" className="shrink-0 text-sm">
+            Layout
+          </Label>
+          <Select value={defaultLayout} onValueChange={onLayoutChange}>
+            <SelectTrigger
+              id="default-layout-top"
+              className="ml-auto w-[200px]"
+            >
+              <SelectValue placeholder="Select layout" />
+            </SelectTrigger>
+            <SelectContent>
+              {layouts.map((layout) => (
+                <SelectItem key={layout.id} value={layout.id}>
+                  {layout.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          New phones join with this. Existing players keep theirs.
+        </p>
+      </div>
+      {playerCount > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onApplyLayoutToAll(defaultLayout)}
+          className="w-full justify-center"
+        >
+          Apply to all {playerCount} players
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function NetworkSection({
+  bind,
+  port,
+  advertisedHostSelect,
+  customHost,
+  advertisedPort,
+  gracePeriodSeconds,
+  advertisedCandidates,
+  autoLabel,
+  onBindChange,
+  onPortChange,
+  onHostSelectChange,
+  onCustomHostChange,
+  onAdvertisedPortChange,
+  onGraceChange,
+  onSave,
+}: {
+  bind: string;
+  port: string;
+  advertisedHostSelect: string;
+  customHost: string;
+  advertisedPort: string;
+  gracePeriodSeconds: number;
+  advertisedCandidates: string[];
+  autoLabel: string;
+  onBindChange: (v: string) => void;
+  onPortChange: (v: string) => void;
+  onHostSelectChange: (v: string | null) => void;
+  onCustomHostChange: (v: string) => void;
+  onAdvertisedPortChange: (v: string) => void;
+  onGraceChange: (v: number) => void;
+  onSave: (e: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
+        Network
+      </h2>
+      <form onSubmit={onSave} className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Label htmlFor="bind-address" className="shrink-0 text-sm">
+            Bind address
+          </Label>
+          <Input
+            id="bind-address"
+            value={bind}
+            onChange={(event) => onBindChange(event.target.value)}
+            autoComplete="off"
+            placeholder="0.0.0.0"
+            className="ml-auto w-[200px]"
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Label htmlFor="listen-port" className="shrink-0 text-sm">
+            Listen port
+          </Label>
+          <Input
+            id="listen-port"
+            type="number"
+            min={0}
+            max={65535}
+            value={port}
+            onChange={(event) => onPortChange(event.target.value)}
+            className="ml-auto w-[200px]"
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Label htmlFor="advertised-host" className="shrink-0 text-sm">
+            Advertised host
+          </Label>
+          <Select
+            value={advertisedHostSelect}
+            onValueChange={onHostSelectChange}
+          >
+            <SelectTrigger id="advertised-host" className="ml-auto w-[200px]">
+              <span className="truncate text-sm">
+                {advertisedHostSelect === 'auto'
+                  ? autoLabel
+                  : advertisedHostSelect === '__custom__'
+                    ? 'Custom…'
+                    : advertisedHostSelect || autoLabel}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">{autoLabel}</SelectItem>
+              {advertisedCandidates.map((ip) => (
+                <SelectItem key={ip} value={ip}>
+                  {ip}
+                </SelectItem>
+              ))}
+              <SelectItem value="__custom__">Custom…</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {advertisedHostSelect === '__custom__' && (
+          <div className="flex items-center gap-3">
+            <Label
+              htmlFor="advertised-host-custom"
+              className="shrink-0 text-sm"
+            >
+              Custom host
+            </Label>
+            <Input
+              id="advertised-host-custom"
+              value={customHost}
+              onChange={(event) => onCustomHostChange(event.target.value)}
+              autoComplete="off"
+              placeholder="hostname or IP"
+              className="ml-auto w-[200px]"
+            />
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Label htmlFor="advertised-port" className="shrink-0 text-sm">
+              Advertised port
+            </Label>
+            <Input
+              id="advertised-port"
+              type="number"
+              min={0}
+              max={65535}
+              value={advertisedPort}
+              onChange={(event) => onAdvertisedPortChange(event.target.value)}
+              className="ml-auto w-[200px]"
+            />
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            0 = use listening port.
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Label htmlFor="grace-period" className="shrink-0 text-sm">
+              Grace period
+            </Label>
+            <div className="ml-auto flex w-[200px] items-center gap-1.5">
+              <Input
+                id="grace-period"
+                type="number"
+                min={1}
+                max={60}
+                value={String(gracePeriodSeconds)}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v))
+                    onGraceChange(Math.min(60, Math.max(1, v)));
+                }}
+                className="flex-1 tabular-nums"
+              />
+              <span className="text-xs text-muted-foreground">s</span>
+            </div>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            How long to keep a disconnected slot reserved.
+          </p>
+        </div>
+
+        <div className="pt-2">
+          <Button type="submit" className="w-full">
+            Save settings
+          </Button>
+        </div>
+      </form>
+    </section>
   );
 }
 
