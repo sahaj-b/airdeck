@@ -58,11 +58,20 @@ export type {
   LayoutSummary,
   Ping,
   Pong,
+  PublishPending,
+  PublishResult,
   ResetMessage,
   Rumble,
   Welcome,
 } from './generated/protocol';
 export type { LayoutDocument };
+
+export interface PendingPublishRequest {
+  id: string;
+  document: LayoutDocument;
+  phoneId: string;
+  phoneName: string;
+}
 
 // Hand-written composite types (not in Go, dashboard-specific)
 export type ServerMessage =

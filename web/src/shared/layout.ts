@@ -45,6 +45,19 @@ export type ControlType = Control['type'];
 export type ControlShape = NonNullable<Control['shape']>;
 export type Orientation = LayoutDocument['defaultOrientation'];
 
+export const LAYOUT_SECTION_IDS = ['left', 'center', 'right'] as const;
+export type LayoutSectionId = (typeof LAYOUT_SECTION_IDS)[number];
+
+export interface ValidationError {
+  path: string;
+  message: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+}
+
 const validateSchema: ValidateFunction = new Ajv2020({
   allErrors: true,
   strict: false,
@@ -95,6 +108,149 @@ export function validateLayout(value: unknown): value is LayoutDocument {
   return true;
 }
 
+export function getValidationErrors(value: unknown): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const ok = validateSchema(value);
+  if (!ok) {
+    for (const error of validateSchema.errors ?? []) {
+      errors.push({
+        path: error.instancePath || '/',
+        message: error.message ?? 'schema error',
+      });
+    }
+    return errors;
+  }
+  const document = value as LayoutDocument;
+  if (document.sections.length !== 3)
+    errors.push({
+      path: '/sections',
+      message: 'layout must contain exactly 3 sections',
+    });
+  const expected: string[] = ['left', 'center', 'right'];
+  for (let i = 0; i < 3; i += 1) {
+    if (document.sections[i]?.id !== expected[i])
+      errors.push({
+        path: `/sections/${i}/id`,
+        message: `section ${i} must be ${expected[i]}`,
+      });
+  }
+  const seen = new Map<string, string>();
+  const checkId = (id: string, kind: string, path: string) => {
+    if (!id) errors.push({ path, message: `${kind} id is required` });
+    else if (seen.has(id))
+      errors.push({
+        path,
+        message: `duplicate id ${id} used by ${seen.get(id)} and ${kind}`,
+      });
+    else seen.set(id, kind);
+  };
+  checkId(document.id, 'document', '/id');
+  for (const asset of document.assets ?? []) {
+    checkId(asset.id, 'asset', `/assets/${asset.id}`);
+    if (!safeAsset.test(asset.path) || asset.path.includes('..'))
+      errors.push({
+        path: `/assets/${asset.id}/path`,
+        message: 'unsafe asset path',
+      });
+  }
+  for (const section of document.sections ?? []) {
+    checkId(section.id, 'section', `/sections/${section.id}`);
+    if (!finitePositive(section.relativeWidth) || section.relativeWidth > 4)
+      errors.push({
+        path: `/sections/${section.id}/relativeWidth`,
+        message: 'relativeWidth is invalid',
+      });
+    if (
+      section.relativeMinWidth !== undefined &&
+      (!finitePositive(section.relativeMinWidth) ||
+        section.relativeMinWidth > 4)
+    )
+      errors.push({
+        path: `/sections/${section.id}/relativeMinWidth`,
+        message: 'relativeMinWidth is invalid',
+      });
+    for (const control of section.controls ?? []) {
+      checkId(
+        control.id,
+        'control',
+        `/sections/${section.id}/controls/${control.id}`,
+      );
+      const controlErrors = getControlErrors(control, section);
+      for (const error of controlErrors)
+        errors.push({
+          path: `/sections/${section.id}/controls/${control.id}/${error.path}`,
+          message: error.message,
+        });
+    }
+  }
+  return errors;
+}
+
+export function validateLayoutDetailed(value: unknown): ValidationResult {
+  const errors = getValidationErrors(value);
+  return { valid: errors.length === 0, errors };
+}
+
+export function getControlErrors(
+  control: Control,
+  section: Section,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (!validGeometry(control.geometry, section))
+    errors.push({
+      path: 'geometry',
+      message: 'geometry extends outside section bounds or has invalid size',
+    });
+  if (control.shape && control.shape !== 'round' && control.shape !== 'rect')
+    errors.push({
+      path: 'shape',
+      message: `unsupported shape ${control.shape}`,
+    });
+  if (control.type === 'image' && !control.asset)
+    errors.push({ path: 'asset', message: 'image control requires an asset' });
+  if (control.type === 'label' && control.binding)
+    errors.push({
+      path: 'binding',
+      message: 'label controls cannot bind input',
+    });
+  if (control.binding && !knownCommand(control.binding))
+    errors.push({
+      path: 'binding',
+      message: `unknown command ${control.binding}`,
+    });
+  if (control.type === 'dpad') {
+    if (
+      control.bindings?.up !== 'dpadUp' ||
+      control.bindings.down !== 'dpadDown' ||
+      control.bindings.left !== 'dpadLeft' ||
+      control.bindings.right !== 'dpadRight'
+    )
+      errors.push({
+        path: 'bindings',
+        message: 'd-pad requires fixed four bindings',
+      });
+  }
+  if (
+    control.type === 'joystick' &&
+    control.binding !== CommandLeftStick &&
+    control.binding !== CommandRightStick
+  )
+    errors.push({
+      path: 'binding',
+      message: 'joystick requires leftStick or rightStick',
+    });
+  if (
+    control.type === 'trigger' &&
+    control.binding !== CommandLeftTrigger &&
+    control.binding !== CommandRightTrigger
+  )
+    errors.push({
+      path: 'binding',
+      message: 'trigger requires leftTrigger or rightTrigger',
+    });
+  return errors;
+}
+
 export function parseLayoutDocument(value: unknown): LayoutParseResult {
   if (validateLayout(value)) return { layout: value };
   return {
@@ -122,23 +278,11 @@ function validControl(
   section: Section,
   assetIds: Set<string>,
 ): boolean {
-  if (!validGeometry(control.geometry, section)) return false;
+  if (getControlErrors(control, section).length > 0) return false;
   if (
     control.type === 'image' &&
     (!control.asset || !assetIds.has(control.asset))
   )
-    return false;
-  if (control.binding && !knownCommand(control.binding)) return false;
-  if (control.type === 'label' && control.binding) return false;
-  if (
-    control.type === 'dpad' &&
-    (control.bindings?.up !== 'dpadUp' ||
-      control.bindings?.down !== 'dpadDown' ||
-      control.bindings?.left !== 'dpadLeft' ||
-      control.bindings?.right !== 'dpadRight')
-  )
-    return false;
-  if (control.shape && control.shape !== 'round' && control.shape !== 'rect')
     return false;
   return true;
 }
@@ -196,12 +340,4 @@ function knownCommand(command: string): boolean {
 
 function finitePositive(value: number): boolean {
   return Number.isFinite(value) && value > 0;
-}
-
-// Deprecated: orientations were removed in v1. Kept for backwards compat, returns geometry directly.
-export function orientationGeometry(
-  control: Control,
-  _orientation: Orientation,
-): Geometry {
-  return control.geometry;
 }

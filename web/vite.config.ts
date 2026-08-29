@@ -30,6 +30,7 @@ export default defineConfig({
       input: {
         join: resolve(root, 'join.html'),
         dashboard: resolve(root, 'dashboard.html'),
+        editor: resolve(root, 'editor.html'),
       },
       output: {
         manualChunks(id) {

@@ -1,9 +1,5 @@
 import type { Orientation } from '../shared/contracts';
-import {
-  type Control,
-  type LayoutDocument,
-  type Section,
-} from '../shared/layout';
+import type { Control, LayoutDocument, Section } from '../shared/layout';
 
 export interface Viewport {
   width: number;
