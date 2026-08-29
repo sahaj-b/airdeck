@@ -36,8 +36,12 @@ func (serverFakeFactory) Create(device.RumbleFunc) (device.Device, error) {
 }
 
 func newTestHTTPServer(t *testing.T, bind string) (*Server, config.Config, *session.Session) {
+	return newTestHTTPServerWithUserDir(t, bind, "")
+}
+
+func newTestHTTPServerWithUserDir(t *testing.T, bind, userDir string) (*Server, config.Config, *session.Session) {
 	t.Helper()
-	library, err := layout.LoadDefault("", "xbox-default")
+	library, err := layout.LoadDefault(userDir, "xbox-default")
 	if err != nil {
 		t.Fatal(err)
 	}

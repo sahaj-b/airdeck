@@ -40,6 +40,9 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 	mux := http.NewServeMux()
 	if !adminOnly {
 		mux.HandleFunc("/ws", s.options.Transport.ServeHTTP)
+		mux.HandleFunc("/api/layouts/publish", s.handlePublishCreate)
+		mux.HandleFunc("/api/layouts/publish/", s.handlePublishCancel)
+		mux.HandleFunc("/assets/user/", s.userAssetHandler)
 	}
 	mux.HandleFunc("/api/admin/", func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackRequest(r) {
@@ -55,8 +58,15 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 		}
 		s.staticHandler(w, r)
 	})
+	mux.HandleFunc("/editor", func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackRequest(r) {
+			http.Error(w, "editor is local to the host", http.StatusForbidden)
+			return
+		}
+		s.staticHandler(w, r)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if adminOnly && !strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/dashboard" && !strings.HasPrefix(r.URL.Path, "/assets/") {
+		if adminOnly && !strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/dashboard" && r.URL.Path != "/editor" && !strings.HasPrefix(r.URL.Path, "/assets/") {
 			http.NotFound(w, r)
 			return
 		}
@@ -134,10 +144,132 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 		s.bulkLayoutAPI(w, r)
 	case strings.HasPrefix(path, "/players/"):
 		s.playerAPI(w, r, strings.TrimPrefix(path, "/players/"))
+	case strings.HasPrefix(path, "/layouts/publish/"):
+		if strings.HasSuffix(path, "/accept") {
+			s.handlePublishAccept(w, r)
+			return
+		}
+		if strings.HasSuffix(path, "/decline") {
+			s.handlePublishDecline(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	case strings.HasPrefix(path, "/layouts"):
+		s.layoutAdminAPI(w, r, strings.TrimPrefix(path, "/layouts"))
 	case path == "/ws" && r.Method == http.MethodGet:
 		s.adminWebSocket(w, r)
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+func (s *Server) layoutAdminAPI(w http.ResponseWriter, r *http.Request, path string) {
+	if path == "/reload" && r.Method == http.MethodPost {
+		if err := s.options.Layouts.Reload(); err != nil {
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		s.options.Session.ReconcileLayouts()
+		writeJSON(w, http.StatusOK, s.currentState())
+		return
+	}
+	if path == "" || path == "/" {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxPublishBytes)
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		doc, err := layout.ValidateJSON(data)
+		if err != nil {
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		if err := s.options.Layouts.Create(doc); err != nil {
+			if errors.Is(err, layout.ErrBuiltinProtected) {
+				writeErrorStatus(w, err, http.StatusForbidden)
+				return
+			}
+			if errors.Is(err, layout.ErrLayoutExists) {
+				writeErrorStatus(w, err, http.StatusConflict)
+				return
+			}
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		s.broadcastAdminState()
+		writeJSON(w, http.StatusCreated, doc)
+		return
+	}
+	id := strings.TrimPrefix(path, "/")
+	if strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		doc, ok := s.options.Layouts.Get(id)
+		if !ok {
+			writeErrorStatus(w, errors.New("layout not found"), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, doc)
+	case http.MethodPut:
+		r.Body = http.MaxBytesReader(w, r.Body, maxPublishBytes)
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		doc, err := layout.ValidateJSON(data)
+		if err != nil {
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		if doc.ID != id {
+			writeErrorStatus(w, errors.New("document id must match url"), http.StatusBadRequest)
+			return
+		}
+		if err := s.options.Layouts.Update(doc); err != nil {
+			if errors.Is(err, layout.ErrBuiltinProtected) {
+				writeErrorStatus(w, err, http.StatusForbidden)
+				return
+			}
+			if errors.Is(err, layout.ErrLayoutNotFound) {
+				writeErrorStatus(w, err, http.StatusNotFound)
+				return
+			}
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		s.broadcastAdminState()
+		writeJSON(w, http.StatusOK, doc)
+	case http.MethodDelete:
+		if err := s.options.Layouts.Delete(id); err != nil {
+			if errors.Is(err, layout.ErrBuiltinProtected) {
+				writeErrorStatus(w, err, http.StatusForbidden)
+				return
+			}
+			if errors.Is(err, layout.ErrLayoutNotFound) {
+				writeErrorStatus(w, err, http.StatusNotFound)
+				return
+			}
+			if errors.Is(err, layout.ErrDefaultProtected) {
+				writeErrorStatus(w, err, http.StatusBadRequest)
+				return
+			}
+			writeErrorStatus(w, err, http.StatusBadRequest)
+			return
+		}
+		s.options.Session.ReconcileLayouts()
+		s.broadcastAdminState()
+		writeJSON(w, http.StatusOK, s.currentState())
+	default:
+		methodNotAllowed(w)
 	}
 }
 
@@ -290,8 +422,9 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	out := make(chan any, 32)
 	s.mu.Lock()
-	s.adminWS[conn] = struct{}{}
+	s.adminWS[conn] = out
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
@@ -319,9 +452,7 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	// Push the full state at 1 Hz so inputs, lastInput ages, and RTT refresh
-	// between session events. ApplyInput never emits an event, so without this
-	// the dashboard would freeze lastInput at the last join/kick/stale update.
+	// 1 Hz state push keeps lastInput ages and RTT fresh between events.
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -335,6 +466,10 @@ func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 		case event := <-events:
 			message := adminEvent{Type: event.Type, Player: event.Player, Message: event.Message, State: s.currentState()}
 			if err := conn.WriteJSON(message); err != nil {
+				return
+			}
+		case value := <-out:
+			if err := conn.WriteJSON(value); err != nil {
 				return
 			}
 		}

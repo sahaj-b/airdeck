@@ -3,6 +3,7 @@ package layout
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/sahaj-b/airdeck/internal/protocol"
 )
@@ -69,12 +70,15 @@ type Summary struct {
 }
 
 type Library struct {
+	mu        sync.RWMutex
 	docs      map[string]Document
 	defaultID string
+	builtins  map[string]struct{}
+	userDir   string
 }
 
 func NewLibrary(docs []Document, defaultID string) (*Library, error) {
-	library := &Library{docs: make(map[string]Document), defaultID: defaultID}
+	library := &Library{docs: make(map[string]Document), defaultID: defaultID, builtins: make(map[string]struct{})}
 	for _, doc := range docs {
 		if err := ValidateDocument(doc); err != nil {
 			return nil, fmt.Errorf("layout %q: %w", doc.ID, err)
@@ -90,18 +94,56 @@ func NewLibrary(docs []Document, defaultID string) (*Library, error) {
 	return library, nil
 }
 
-func (l *Library) Default() Document { return l.docs[l.defaultID] }
+func (l *Library) Default() Document {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.docs[l.defaultID]
+}
+
+func (l *Library) DefaultID() string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.defaultID
+}
+
+func (l *Library) UserDir() string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.userDir
+}
+
+func (l *Library) IsBuiltin(id string) bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	_, ok := l.builtins[id]
+	return ok
+}
 
 func (l *Library) Get(id string) (Document, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	doc, ok := l.docs[id]
 	return doc, ok
 }
 
 func (l *Library) Summaries() []Summary {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	out := make([]Summary, 0, len(l.docs))
 	for _, doc := range l.docs {
 		out = append(out, Summary{ID: doc.ID, Name: doc.Name})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+func (l *Library) setSource(userDir string, builtins map[string]struct{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.userDir = userDir
+	if builtins == nil {
+		l.builtins = make(map[string]struct{})
+	} else {
+		l.builtins = builtins
+	}
 }

@@ -86,3 +86,17 @@ type DebugInputTrace struct {
 	Sequence   uint32 `json:"sequence"`
 	ClientTime uint64 `json:"clientTime"`
 }
+
+type PublishPending struct {
+	Type      string `json:"type" tstype:"'layout.publish.pending'"`
+	ID        string `json:"id"`
+	Document  any    `json:"document"`
+	PhoneID   string `json:"phoneId"`
+	PhoneName string `json:"phoneName"`
+}
+
+type PublishResult struct {
+	Type   string `json:"type" tstype:"'publish.result'"`
+	ID     string `json:"id"`
+	Status string `json:"status" tstype:"'accepted' | 'declined' | 'expired' | 'cancelled'"`
+}

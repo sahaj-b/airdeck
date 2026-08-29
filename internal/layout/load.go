@@ -111,5 +111,14 @@ func LoadDefault(userDir, defaultID string) (*Library, error) {
 	if defaultID == "" {
 		defaultID = "xbox-default"
 	}
-	return NewLibrary(documents, defaultID)
+	library, err := NewLibrary(documents, defaultID)
+	if err != nil {
+		return nil, err
+	}
+	builtinsSet := make(map[string]struct{}, len(builtins))
+	for _, doc := range builtins {
+		builtinsSet[doc.ID] = struct{}{}
+	}
+	library.setSource(userDir, builtinsSet)
+	return library, nil
 }

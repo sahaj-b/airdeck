@@ -548,6 +548,36 @@ func (s *Session) SetGracePeriod(gracePeriod time.Duration) {
 	s.emit(Event{Type: "settings"})
 }
 
+func (s *Session) ReconcileLayouts() {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.mu.RLock()
+	defaultID := s.defaultLayout
+	s.mu.RUnlock()
+	defaultDoc, ok := s.layouts.Get(defaultID)
+	if !ok {
+		defaultDoc = s.layouts.Default()
+		defaultID = defaultDoc.ID
+	}
+	s.mu.Lock()
+	var affected []*Player
+	for _, player := range s.players {
+		if _, ok := s.layouts.Get(player.LayoutID); !ok {
+			player.LayoutID = defaultID
+			affected = append(affected, player)
+		}
+	}
+	s.mu.Unlock()
+	for _, player := range affected {
+		if player.Send != nil {
+			_ = player.Send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: defaultDoc.ID, Layout: defaultDoc})
+		}
+	}
+	if len(affected) > 0 {
+		s.emit(Event{Type: "player.layout"})
+	}
+}
+
 func (s *Session) NotifySettings() { s.emit(Event{Type: "settings"}) }
 
 func (s *Session) Layout(id string) (layout.Document, error) {

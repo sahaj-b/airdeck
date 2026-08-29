@@ -40,7 +40,8 @@ type Server struct {
 	adminLn    net.Listener
 	publicPort int
 	adminPort  int
-	adminWS    map[*websocket.Conn]struct{}
+	adminWS    map[*websocket.Conn]chan any
+	pending    *PendingStore
 }
 
 type listenerSet struct {
@@ -57,7 +58,9 @@ func New(options Options) *Server {
 	if err != nil {
 		static = options.Static
 	}
-	return &Server{options: options, static: static, adminWS: make(map[*websocket.Conn]struct{})}
+	s := &Server{options: options, static: static, adminWS: make(map[*websocket.Conn]chan any)}
+	s.pending = newPendingStore(s)
+	return s
 }
 
 func (s *Server) buildListenerSet(cfg config.Config) (listenerSet, error) {
@@ -304,11 +307,26 @@ func (s *Server) CloseConnections() {
 	for conn := range s.adminWS {
 		connections = append(connections, conn)
 	}
-	s.adminWS = make(map[*websocket.Conn]struct{})
+	s.adminWS = make(map[*websocket.Conn]chan any)
 	s.mu.Unlock()
 	for _, conn := range connections {
 		_ = conn.Close()
 	}
+}
+
+func (s *Server) broadcastAdmin(value any) {
+	s.mu.Lock()
+	for _, ch := range s.adminWS {
+		select {
+		case ch <- value:
+		default:
+		}
+	}
+	s.mu.Unlock()
+}
+
+func (s *Server) broadcastAdminState() {
+	s.broadcastAdmin(s.currentState())
 }
 
 func (s *Server) Close(ctx context.Context) error {
@@ -340,7 +358,7 @@ func (s *Server) Rebind(ctx context.Context, cfg config.Config) error {
 	for conn := range s.adminWS {
 		connections = append(connections, conn)
 	}
-	s.adminWS = make(map[*websocket.Conn]struct{})
+	s.adminWS = make(map[*websocket.Conn]chan any)
 	s.installListenerSet(cfg, replacement)
 	s.mu.Unlock()
 	for _, conn := range connections {

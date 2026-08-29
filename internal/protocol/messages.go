@@ -9,17 +9,19 @@ import (
 )
 
 const (
-	MessageHello        = "hello"
-	MessageWelcome      = "welcome"
-	MessagePing         = "ping"
-	MessagePong         = "pong"
-	MessageLayout       = "layout"
-	MessageLayoutSelect = "layout.select"
-	MessageRumble       = "rumble"
-	MessageError        = "error"
-	MessageClose        = "close"
-	MessageReset        = "session.reset"
-	MessageDebugTrace   = "debug.inputTrace"
+	MessageHello          = "hello"
+	MessageWelcome        = "welcome"
+	MessagePing           = "ping"
+	MessagePong           = "pong"
+	MessageLayout         = "layout"
+	MessageLayoutSelect   = "layout.select"
+	MessageRumble         = "rumble"
+	MessageError          = "error"
+	MessageClose          = "close"
+	MessageReset          = "session.reset"
+	MessageDebugTrace     = "debug.inputTrace"
+	MessagePublishPending = "layout.publish.pending"
+	MessagePublishResult  = "publish.result"
 )
 
 type Envelope struct {

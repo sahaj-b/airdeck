@@ -23,11 +23,12 @@ type Server struct {
 	upgrader        websocket.Upgrader
 	mu              sync.Mutex
 	clients         map[*Client]struct{}
+	clientsByID     map[string]*Client
 	unsubscribe     func()
 }
 
 func NewServer(s *session.Session, handler *input.Handler, layouts *layout.Library, targetInputRate int) *Server {
-	server := &Server{Session: s, Input: handler, Layouts: layouts, TargetInputRate: targetInputRate, clients: make(map[*Client]struct{}), upgrader: websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024, CheckOrigin: func(r *http.Request) bool { return SameOrigin(r) }}}
+	server := &Server{Session: s, Input: handler, Layouts: layouts, TargetInputRate: targetInputRate, clients: make(map[*Client]struct{}), clientsByID: make(map[string]*Client), upgrader: websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024, CheckOrigin: func(r *http.Request) bool { return SameOrigin(r) }}}
 	server.unsubscribe = s.Subscribe(func(event session.Event) {
 		if event.Type == "session.reset" {
 			server.broadcastReset()
@@ -54,11 +55,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.clients[client] = struct{}{}
 	s.mu.Unlock()
-	defer func() { client.Close(); s.mu.Lock(); delete(s.clients, client); s.mu.Unlock() }()
-	s.runClient(r, client)
+	var playerIDForCleanup string
+	defer func() {
+		client.Close()
+		s.mu.Lock()
+		delete(s.clients, client)
+		if playerIDForCleanup != "" {
+			if current, ok := s.clientsByID[playerIDForCleanup]; ok && current == client {
+				delete(s.clientsByID, playerIDForCleanup)
+			}
+		}
+		s.mu.Unlock()
+	}()
+	// runClient will populate playerIDForCleanup when admission succeeds.
+	s.runClient(r, client, &playerIDForCleanup)
 }
 
-func (s *Server) runClient(r *http.Request, client *Client) {
+func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *string) {
 	client.conn.SetReadLimit(4 * 1024)
 	messageType, data, err := client.conn.ReadMessage()
 	if err != nil || messageType != websocket.TextMessage {
@@ -79,6 +92,12 @@ func (s *Server) runClient(r *http.Request, client *Client) {
 	}
 	player := admission.Player
 	generation := player.Generation
+	s.mu.Lock()
+	s.clientsByID[player.ID] = client
+	if playerIDForCleanup != nil {
+		*playerIDForCleanup = player.ID
+	}
+	s.mu.Unlock()
 	welcome := protocol.Welcome{Type: protocol.MessageWelcome, PlayerID: player.ID, Slot: player.Slot, DisplayName: player.Name, Accent: player.Accent, ReconnectID: player.ReconnectID, ProtocolVersion: protocol.Version, FrameSize: protocol.FrameSize, TargetInputRate: s.TargetInputRate, SelectedLayout: player.LayoutID}
 	welcome.AvailableLayouts = make([]protocol.LayoutSummary, 0)
 	for _, summary := range s.Layouts.Summaries() {
@@ -213,6 +232,16 @@ func (s *Server) broadcastReset() {
 	for _, client := range clients {
 		_ = client.sendAndClose(protocol.ResetMessage{Type: protocol.MessageReset})
 	}
+}
+
+func (s *Server) SendToPlayer(playerID string, value any) error {
+	s.mu.Lock()
+	client, ok := s.clientsByID[playerID]
+	s.mu.Unlock()
+	if !ok {
+		return errors.New("player not connected")
+	}
+	return client.Send(value)
 }
 
 func (s *Server) Close() {
