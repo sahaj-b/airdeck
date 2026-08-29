@@ -5,3 +5,4 @@ benchmarks/
 *.log
 .airdeck-config/
 .DS_Store
+Caddyfile
