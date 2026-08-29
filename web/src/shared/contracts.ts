@@ -1,92 +1,76 @@
-export const PROTOCOL_VERSION = 1;
-export const FRAME_SIZE = 20;
-
+import {
+  BitBack,
+  BitDPadDown,
+  BitDPadLeft,
+  BitDPadRight,
+  BitDPadUp,
+  BitEast,
+  BitGuide,
+  BitLB,
+  BitLS,
+  BitNorth,
+  BitRB,
+  BitRS,
+  BitSouth,
+  BitStart,
+  BitWest,
+  FrameSize as GeneratedFrameSize,
+  Version as GeneratedVersion,
+} from './generated/protocol';
 import type { LayoutDocument } from './layout';
 
-export type { LayoutDocument };
+// Protocol SSOT: Go internal/protocol is canonical, tygo generates ./generated/protocol.ts
+export const PROTOCOL_VERSION = GeneratedVersion;
+export const FRAME_SIZE = GeneratedFrameSize;
 
 export const ButtonBits = {
-  south: 1 << 0,
-  east: 1 << 1,
-  west: 1 << 2,
-  north: 1 << 3,
-  dpadUp: 1 << 4,
-  dpadDown: 1 << 5,
-  dpadLeft: 1 << 6,
-  dpadRight: 1 << 7,
-  leftShoulder: 1 << 8,
-  rightShoulder: 1 << 9,
-  leftStick: 1 << 10,
-  rightStick: 1 << 11,
-  start: 1 << 12,
-  back: 1 << 13,
-  guide: 1 << 14,
+  south: BitSouth,
+  east: BitEast,
+  west: BitWest,
+  north: BitNorth,
+  dpadUp: BitDPadUp,
+  dpadDown: BitDPadDown,
+  dpadLeft: BitDPadLeft,
+  dpadRight: BitDPadRight,
+  leftShoulder: BitLB,
+  rightShoulder: BitRB,
+  leftStick: BitLS,
+  rightStick: BitRS,
+  start: BitStart,
+  back: BitBack,
+  guide: BitGuide,
 } as const;
 
-export type Command = keyof typeof ButtonBits | 'leftTrigger' | 'rightTrigger';
+export type { Command } from './generated/protocol';
 export type Orientation = 'portrait' | 'landscape';
 
-export interface Capabilities {
-  sound: boolean;
-  wakeLock: boolean;
-  fullscreen: boolean;
-  orientation: boolean;
-}
+export type { Config } from './generated/config';
+// Re-export generated protocol messages (Go canonical)
+export type {
+  Capabilities,
+  CloseMessage,
+  DebugInputTrace,
+  Envelope,
+  ErrorMessage,
+  Hello,
+  LayoutMessage,
+  LayoutSelect,
+  LayoutSummary,
+  Ping,
+  Pong,
+  ResetMessage,
+  Rumble,
+  Welcome,
+} from './generated/protocol';
+export type { LayoutDocument };
 
-export interface LayoutSummary {
-  id: string;
-  name: string;
-}
-export interface Hello {
-  type: 'hello';
-  sessionCode: string;
-  displayName?: string;
-  reconnectId?: string;
-  clientVersion: string;
-  selectedLayout?: string;
-  capabilities: Capabilities;
-}
-export interface Welcome {
-  type: 'welcome';
-  playerId: string;
-  slot: number;
-  displayName: string;
-  accent: string;
-  reconnectId: string;
-  protocolVersion: number;
-  frameSize: number;
-  targetInputRate: number;
-  selectedLayout: string;
-  availableLayouts: LayoutSummary[];
-}
-export interface LayoutMessage {
-  type: 'layout';
-  id: string;
-  layout: LayoutDocument;
-}
-export interface Ping {
-  type: 'ping';
-  id: string;
-  sent: number;
-  rttMs?: number;
-}
-export interface ErrorMessage {
-  type: 'error';
-  code: string;
-  message: string;
-}
-export interface Rumble {
-  type: 'rumble';
-  strong: number;
-  weak: number;
-  active: boolean;
-}
+// Hand-written composite types (not in Go, dashboard-specific)
 export type ServerMessage =
-  | Welcome
-  | LayoutMessage
-  | Ping
-  | ErrorMessage
-  | Rumble
+  | import('./generated/protocol').Welcome
+  | import('./generated/protocol').LayoutMessage
+  | import('./generated/protocol').Ping
+  | import('./generated/protocol').ErrorMessage
+  | import('./generated/protocol').Rumble
   | { type: 'close'; reason?: string }
   | { type: 'session.reset' };
 
@@ -129,6 +113,6 @@ export interface AdminState {
     inputRate: number;
     gracePeriodSeconds: number;
   };
-  layouts: LayoutSummary[];
+  layouts: import('./generated/protocol').LayoutSummary[];
   players: PlayerSnapshot[];
 }

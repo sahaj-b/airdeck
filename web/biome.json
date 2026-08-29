@@ -5,6 +5,7 @@
       "src/**",
       "!src/layouts/*.json",
       "!src/shared/layout.schema.json",
+      "!src/shared/generated/**",
       "vite.config.ts"
     ]
   },
@@ -37,6 +38,32 @@
         "rules": {
           "complexity": {
             "noImportantStyles": "off"
+          },
+          "correctness": {
+            "noUnknownProperty": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/join/join.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          },
+          "suspicious": {
+            "noDuplicateProperties": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/controller/capabilities.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off"
           }
         }
       }

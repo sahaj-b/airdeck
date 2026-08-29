@@ -1,93 +1,58 @@
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020.js';
 import defaultLayout from '../layouts/xbox-default.json';
-import type { Command, Orientation } from './contracts';
-import { ButtonBits } from './contracts';
+import {
+  CommandBack,
+  CommandDPadDown,
+  CommandDPadLeft,
+  CommandDPadRight,
+  CommandDPadUp,
+  CommandEast,
+  CommandGuide,
+  CommandLeftShoulder,
+  CommandLeftStick,
+  CommandLeftTrigger,
+  CommandNorth,
+  CommandRightShoulder,
+  CommandRightStick,
+  CommandRightTrigger,
+  CommandSouth,
+  CommandStart,
+  CommandWest,
+} from './generated/protocol';
 import schema from './layout.schema.json';
 
-export interface Point {
-  x: number;
-  y: number;
-}
+// Re-export generated types as SSOT. Go is canonical.
+export type {
+  Asset as LayoutAsset,
+  Control,
+  Document as LayoutDocument,
+  DPadBindings,
+  Geometry,
+  OrientationOverrides,
+  Padding,
+  Point,
+  Section,
+  Size,
+  Summary as LayoutSummary,
+} from './generated/layout';
 
-export interface Size {
-  width: number;
-  height: number;
-}
+import type {
+  Control,
+  Geometry,
+  Document as LayoutDocument,
+  Section,
+  Size,
+} from './generated/layout';
 
-export interface Geometry {
-  position: Point;
-  size: Size;
-}
-
-export interface OrientationOverrides {
-  portrait?: Geometry;
-  landscape?: Geometry;
-}
-
-export interface Padding {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
-
-export interface DPadBindings {
-  up: 'dpadUp';
-  down: 'dpadDown';
-  left: 'dpadLeft';
-  right: 'dpadRight';
-}
-
-export type ControlType =
-  | 'button'
-  | 'dpad'
-  | 'joystick'
-  | 'trigger'
-  | 'label'
-  | 'image';
-export type ControlShape = 'circle' | 'pill' | 'rect';
-export interface Control {
-  id: string;
-  type: ControlType;
-  geometry: Geometry;
-  label: string;
-  visible: boolean;
-  hitOnly?: boolean;
-  shape?: ControlShape;
-  binding?: Command;
-  bindings?: DPadBindings;
-  orientations?: OrientationOverrides;
-  asset?: string;
-}
-export interface Section {
-  id: string;
-  aspectRatio: number;
-  minWidth: number;
-  maxWidth: number;
-  flexGrow: number;
-  flexShrink: number;
-  protected: boolean;
-  padding: Padding;
-  controls: Control[];
-}
-export interface LayoutAsset {
-  id: string;
-  path: string;
-}
-export interface LayoutDocument {
-  id: string;
-  name: string;
-  schemaVersion: 1;
-  defaultOrientation: Orientation;
-  sections: Section[];
-  assets: LayoutAsset[];
-}
+export type ControlType = Control['type'];
+export type ControlShape = NonNullable<Control['shape']>;
+export type Orientation = LayoutDocument['defaultOrientation'];
 
 const validateSchema: ValidateFunction = new Ajv2020({
   allErrors: true,
   strict: false,
 }).compile(schema);
-const idPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
 const safeAsset = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/;
 
 export const DEFAULT_LAYOUT: LayoutDocument = defaultLayout as LayoutDocument;
@@ -151,7 +116,9 @@ function validSection(section: Section): boolean {
   );
 }
 
-function validPadding(padding: Padding): boolean {
+function validPadding(
+  padding: LayoutDocument['sections'][number]['padding'],
+): boolean {
   return [padding.left, padding.right, padding.top, padding.bottom].every(
     (value) => finiteNonNegative(value) && value <= 0.5,
   );
@@ -238,11 +205,25 @@ function isSquare(size: Size): boolean {
 }
 
 const KNOWN_COMMANDS = new Set<string>([
-  ...Object.keys(ButtonBits),
-  'leftTrigger',
-  'rightTrigger',
+  CommandSouth,
+  CommandEast,
+  CommandWest,
+  CommandNorth,
+  CommandDPadUp,
+  CommandDPadDown,
+  CommandDPadLeft,
+  CommandDPadRight,
+  CommandLeftShoulder,
+  CommandRightShoulder,
+  CommandLeftStick,
+  CommandRightStick,
+  CommandStart,
+  CommandBack,
+  CommandGuide,
+  CommandLeftTrigger,
+  CommandRightTrigger,
 ]);
-function knownCommand(command: string): command is Command {
+function knownCommand(command: string): boolean {
   return KNOWN_COMMANDS.has(command);
 }
 

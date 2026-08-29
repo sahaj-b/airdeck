@@ -1,0 +1,16 @@
+packages:
+  - path: "github.com/sahaj-b/airdeck/internal/layout"
+    output_path: "web/src/shared/generated/layout.ts"
+    exclude_files:
+      - "load.go"
+      - "validate.go"
+    frontmatter: |
+      import type { Command } from "./protocol";
+    type_mappings:
+      protocol.Command: "Command"
+  - path: "github.com/sahaj-b/airdeck/internal/protocol"
+    output_path: "web/src/shared/generated/protocol.ts"
+    exclude_files:
+      - "frame.go"
+  - path: "github.com/sahaj-b/airdeck/internal/config"
+    output_path: "web/src/shared/generated/config.ts"

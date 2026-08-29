@@ -3,6 +3,8 @@ package layout
 import (
 	"fmt"
 	"sort"
+
+	"github.com/sahaj-b/airdeck/internal/protocol"
 )
 
 type Point struct {
@@ -33,21 +35,21 @@ type Padding struct {
 }
 
 type DPadBindings struct {
-	Up    string `json:"up,omitempty"`
-	Down  string `json:"down,omitempty"`
-	Left  string `json:"left,omitempty"`
-	Right string `json:"right,omitempty"`
+	Up    string `json:"up,omitempty" tstype:"'dpadUp'"`
+	Down  string `json:"down,omitempty" tstype:"'dpadDown'"`
+	Left  string `json:"left,omitempty" tstype:"'dpadLeft'"`
+	Right string `json:"right,omitempty" tstype:"'dpadRight'"`
 }
 
 type Control struct {
 	ID           string                `json:"id"`
-	Type         string                `json:"type"`
+	Type         string                `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image'"`
 	Geometry     Geometry              `json:"geometry"`
 	Label        string                `json:"label"`
 	Visible      bool                  `json:"visible"`
 	HitOnly      bool                  `json:"hitOnly,omitempty"`
-	Shape        string                `json:"shape,omitempty"`
-	Binding      string                `json:"binding,omitempty"`
+	Shape        string                `json:"shape,omitempty" tstype:"'circle' | 'pill' | 'rect'"`
+	Binding      protocol.Command      `json:"binding,omitempty"`
 	Bindings     *DPadBindings         `json:"bindings,omitempty"`
 	Orientations *OrientationOverrides `json:"orientations,omitempty"`
 	Asset        string                `json:"asset,omitempty"`
@@ -73,8 +75,8 @@ type Asset struct {
 type Document struct {
 	ID                 string    `json:"id"`
 	Name               string    `json:"name"`
-	SchemaVersion      int       `json:"schemaVersion"`
-	DefaultOrientation string    `json:"defaultOrientation"`
+	SchemaVersion      int       `json:"schemaVersion" tstype:"1"`
+	DefaultOrientation string    `json:"defaultOrientation" tstype:"'landscape' | 'portrait'"`
 	Sections           []Section `json:"sections"`
 	Assets             []Asset   `json:"assets"`
 }

@@ -187,7 +187,7 @@ func validateControl(control Control, section Section, assetIDs map[string]struc
 		return errors.New("label controls cannot bind input")
 	}
 	if control.Binding != "" {
-		if _, ok := protocol.KnownCommands[protocol.Command(control.Binding)]; !ok {
+		if _, ok := protocol.KnownCommands[control.Binding]; !ok {
 			return fmt.Errorf("unknown semantic command %q", control.Binding)
 		}
 	}
@@ -209,10 +209,10 @@ func validateControl(control Control, section Section, assetIDs map[string]struc
 			return errors.New("d-pad controls require four bindings")
 		}
 	}
-	if control.Type == "joystick" && control.Binding != string(protocol.CommandLeftStick) && control.Binding != string(protocol.CommandRightStick) {
+	if control.Type == "joystick" && control.Binding != protocol.CommandLeftStick && control.Binding != protocol.CommandRightStick {
 		return errors.New("joystick controls require a stick binding")
 	}
-	if control.Type == "trigger" && control.Binding != string(protocol.CommandLeftTrigger) && control.Binding != string(protocol.CommandRightTrigger) {
+	if control.Type == "trigger" && control.Binding != protocol.CommandLeftTrigger && control.Binding != protocol.CommandRightTrigger {
 		return errors.New("trigger controls require a trigger binding")
 	}
 	if control.Orientations != nil {

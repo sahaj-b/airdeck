@@ -119,7 +119,7 @@ export function allocateSections(
     clamp(section.aspectRatio, section.minWidth, section.maxWidth),
   );
 
-  let total = sum(widths);
+  const total = sum(widths);
   if (total > available) {
     let deficit = total - available;
     deficit = shrinkToFloor(

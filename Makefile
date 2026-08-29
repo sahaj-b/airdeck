@@ -6,6 +6,7 @@ GO_FILES := cmd/main.go tools/lanbench/main.go $(shell find internal -type f -na
 
 sync-contracts:
 	node scripts/sync-contracts.mjs
+	go run github.com/gzuidhof/tygo@v0.2.21 generate
 
 web-build: sync-contracts
 	pnpm --dir web install --frozen-lockfile
@@ -20,6 +21,8 @@ test:
 
 lint:
 	node scripts/sync-contracts.mjs --check
+	go run github.com/gzuidhof/tygo@v0.2.21 generate
+	git diff --exit-code -- web/src/shared/generated
 	go vet ./...
 	pnpm --dir web typecheck
 	pnpm --dir web lint

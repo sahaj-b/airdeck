@@ -3,7 +3,6 @@ import '../controller/controller.css';
 import { CapabilityManager } from '../controller/capabilities';
 import { FeedbackController } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
-import { bindTap } from '../controller/tap';
 import { buildFullscreenButton } from '../controller/fullscreen-button';
 import { GyroController } from '../controller/gyro/controller';
 import {
@@ -12,6 +11,7 @@ import {
 } from '../controller/layout-renderer';
 import { ControllerSocket, SELECTED_LAYOUT_KEY } from '../controller/socket';
 import { InputStateStore } from '../controller/state';
+import { bindTap } from '../controller/tap';
 import type { Welcome } from '../shared/contracts';
 import { getSkin, initSkin, setSkin } from '../skins/loader';
 import './join.css';
