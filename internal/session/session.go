@@ -208,7 +208,7 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	if name == "" {
 		name = fmt.Sprintf("Player %d", slot+1)
 	}
-	player := &Player{ID: id, Slot: slot, Name: name, FallbackName: fmt.Sprintf("Player %d", slot+1), Accent: slotAccents[slot], State: StateJoining, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, DeviceStatus: "creating", Send: send, Close: close}
+	player := &Player{ID: id, Slot: slot, Name: name, Accent: slotAccents[slot], State: StateJoining, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, DeviceStatus: "creating", Send: send, Close: close}
 	playerID := player.ID
 	if err := s.devices.Create(slot, func(strong, weak uint16) { s.dispatchRumble(playerID, strong, weak) }); err != nil {
 		s.mu.Unlock()

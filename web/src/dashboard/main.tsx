@@ -56,6 +56,9 @@ function Dashboard() {
     (id: string, layoutId: string) => store.setLayout(id, layoutId),
     [],
   );
+  const onApplyLayoutToAll = useCallback((layoutId: string) => {
+    void store.setAllLayouts(layoutId).catch(() => undefined);
+  }, []);
 
   if (snapshot.loading && !snapshot.state) return <LoadingScreen />;
   if (!snapshot.state)
@@ -67,6 +70,7 @@ function Dashboard() {
     );
 
   const state = snapshot.state;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -116,6 +120,7 @@ function Dashboard() {
             onJoinsChange={onJoinsChange}
             onNewSession={onNewSession}
             onSave={onSaveSettings}
+            onApplyLayoutToAll={onApplyLayoutToAll}
           />
         </div>
       </div>

@@ -1,5 +1,7 @@
 /airdeck
 /lanbench
+/tmp/
+/build-errors.log
 benchmarks/
 *.tmp
 *.log

@@ -7,6 +7,7 @@ import {
   movePlayer,
   newSession,
   type SettingsUpdate,
+  setAllPlayerLayouts,
   setJoins,
   setPlayerLayout,
   updateSettings,
@@ -124,6 +125,10 @@ export class AdminStore {
 
   async setLayout(id: string, layoutId: string): Promise<void> {
     await this.runAction(setPlayerLayout(id, layoutId));
+  }
+
+  async setAllLayouts(layoutId: string): Promise<void> {
+    await this.runAction(setAllPlayerLayouts(layoutId));
   }
 
   private async runAction(action: Promise<AdminState>): Promise<void> {

@@ -143,6 +143,14 @@
     cursor: pointer;
   }
 
+  /* tooltip metrics (RTT / last input) must not look clickable */
+  [data-slot="tooltip-trigger"] {
+    cursor: default;
+  }
+  [data-slot="tooltip-trigger"]:has([data-slot="button"]) {
+    cursor: pointer;
+  }
+
   input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;

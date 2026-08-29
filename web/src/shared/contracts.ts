@@ -85,7 +85,6 @@ export interface PlayerSnapshot {
   id: string;
   slot: number;
   name: string;
-  fallbackName: string;
   accent: string;
   state: PlayerState;
   layoutId: string;
@@ -101,6 +100,7 @@ export interface AdminState {
   code: string;
   acceptingJoins: boolean;
   advertisedJoinURL: string;
+  advertisedCandidates: string[];
   publicPort: number;
   adminPort: number;
   config: {

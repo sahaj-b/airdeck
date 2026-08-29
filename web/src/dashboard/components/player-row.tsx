@@ -1,4 +1,4 @@
-import { UserX } from 'lucide-react';
+import { ArrowRightLeft, Unplug } from 'lucide-react';
 import { memo, useState } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -9,7 +9,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
-import { TableCell, TableRow } from '../../components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui/tooltip';
 import type { LayoutSummary, PlayerSnapshot } from '../../shared/contracts';
 
 interface PlayerRowProps {
@@ -33,9 +37,7 @@ export const PlayerRow = memo(function PlayerRow({
 }: PlayerRowProps) {
   const [busy, setBusy] = useState(false);
   const freeSlots = Array.from({ length: 16 }, (_, slot) => slot).filter(
-    (slot) =>
-      slot === player.slot ||
-      !players.some((candidate) => candidate.slot === slot),
+    (slot) => slot === player.slot || !players.some((c) => c.slot === slot),
   );
 
   async function run(action: () => Promise<void>): Promise<void> {
@@ -49,84 +51,124 @@ export const PlayerRow = memo(function PlayerRow({
     }
   }
 
+  const age = formatAge(player.lastInput, now);
+  const rtt = formatRTT(player.rttNanos);
+  const hasRTT = Number.isFinite(player.rttNanos) && player.rttNanos > 0;
+  const isClosed = player.state === 'closed';
+  const accent = player.accent || 'oklch(0.65 0.12 260)';
+
   return (
-    <TableRow>
-      <TableCell className="font-mono text-xs font-bold text-primary">
-        P{player.slot + 1}
-      </TableCell>
-
-      <TableCell>
-        <div className="grid gap-0.5">
-          <span
-            className="text-sm font-medium leading-none"
-            style={{ color: player.accent }}
-          >
-            {player.name}
-          </span>
-          {player.name !== player.fallbackName && (
-            <span className="max-w-[140px] truncate text-[11px] leading-none text-muted-foreground">
-              {player.fallbackName}
-            </span>
-          )}
-        </div>
-      </TableCell>
-
-      <TableCell>
-        <Badge className={stateClass(player.state)} variant="secondary">
-          {player.state}
-        </Badge>
-      </TableCell>
-
-      <TableCell className="tabular-nums text-xs text-muted-foreground">
-        {formatAge(player.lastInput, now)}
-      </TableCell>
-
-      <TableCell className="tabular-nums text-xs">
-        {formatRTT(player.rttNanos)}
-      </TableCell>
-
-      <TableCell>
-        <Select
-          value={player.layoutId}
-          disabled={busy || player.state === 'closed'}
-          onValueChange={(value) => {
-            if (value == null) return;
-            void run(() => onLayout(player.id, value));
+    <div
+      className={`group flex flex-col gap-3 bg-transparent px-3 py-3 transition-colors sm:px-4 ${busy ? 'opacity-60' : ''} ${isClosed ? 'opacity-50' : ''}`}
+    >
+      <div className="flex flex-wrap items-start gap-3 sm:gap-3.5">
+        <div
+          className="grid size-11 shrink-0 place-items-center rounded-xl border text-sm font-bold tracking-tight tabular-nums sm:size-[44px]"
+          style={{
+            backgroundColor: `${accent}18`,
+            color: accent,
+            borderColor: `${accent}30`,
           }}
+          role="img"
+          aria-label={`Slot ${player.slot + 1}`}
         >
-          <SelectTrigger size="sm" className="h-7 w-[130px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {layouts.map((layout) => (
-              <SelectItem key={layout.id} value={layout.id}>
-                {layout.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </TableCell>
+          P{player.slot + 1}
+        </div>
 
-      <TableCell>
-        <div className="grid gap-0.5">
-          <span
-            className={`text-xs font-medium leading-none ${deviceColor(player.deviceStatus)}`}
-          >
-            {player.deviceStatus || 'unknown'}
-          </span>
-          {player.deviceReason && (
-            <span className="max-w-[170px] truncate text-[11px] text-muted-foreground">
-              {player.deviceReason}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className="truncate text-[15px] font-semibold leading-none tracking-tight"
+              style={{ color: accent }}
+            >
+              {player.name}
             </span>
+            <Badge
+              className={`${stateClass(player.state)} rounded-full px-2 py-0 text-[11px] font-medium leading-none`}
+              variant="secondary"
+            >
+              {labelForState(player.state)}
+            </Badge>
+            {player.graceDeadline && player.state === 'disconnected-grace' && (
+              <span className="text-[11px] tabular-nums text-muted-foreground">
+                until {formatTime(player.graceDeadline)}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-none">
+            <Tooltip>
+              <TooltipTrigger style={{ cursor: 'default' }}>
+                <span
+                  className={`tabular-nums ${hasRTT ? 'font-semibold tracking-tight text-foreground' : 'font-medium text-muted-foreground'}`}
+                >
+                  {rtt}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">RTT / Ping</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger style={{ cursor: 'default' }}>
+                <span className="tabular-nums text-muted-foreground">
+                  {age}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">Last input</TooltipContent>
+            </Tooltip>
+            {player.deviceStatus !== 'ready' && (
+              <span
+                className={`hidden font-medium sm:inline ${deviceColor(player.deviceStatus)}`}
+              >
+                {player.deviceStatus || 'unknown'}
+              </span>
+            )}
+          </div>
+
+          {player.deviceReason && (
+            <div className="mt-1 max-w-[32ch] truncate text-[11px] leading-none text-muted-foreground sm:max-w-none">
+              {player.deviceReason}
+            </div>
+          )}
+
+          {player.deviceStatus !== 'ready' && (
+            <div className="mt-1 text-xs leading-none sm:hidden">
+              <span
+                className={`font-medium ${deviceColor(player.deviceStatus)}`}
+              >
+                {player.deviceStatus || 'unknown'}
+              </span>
+            </div>
           )}
         </div>
-      </TableCell>
 
-      <TableCell>
-        <div className="flex items-center gap-1.5">
+        {/* Single controls block: full-width on mobile (aligned under name), inline on desktop */}
+        <div className="flex w-full items-center gap-2 pl-[52px] sm:pl-[56px] lg:ml-auto lg:w-auto lg:pl-0">
+          <Select
+            value={player.layoutId}
+            disabled={busy || isClosed}
+            onValueChange={(value) => {
+              if (value == null) return;
+              void run(() => onLayout(player.id, value));
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-8 flex-1 rounded-full bg-background text-xs sm:flex-none sm:w-[148px] lg:w-[132px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {layouts.map((layout) => (
+                <SelectItem key={layout.id} value={layout.id}>
+                  {layout.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Select
             value=""
-            disabled={busy || player.state === 'closed'}
+            disabled={busy || isClosed}
             onValueChange={(value) => {
               if (value == null) return;
               const target = Number(value);
@@ -134,8 +176,14 @@ export const PlayerRow = memo(function PlayerRow({
                 void run(() => onMove(player.id, target));
             }}
           >
-            <SelectTrigger size="sm" className="h-7 w-[88px] text-xs">
-              <SelectValue placeholder="Move…" />
+            <SelectTrigger
+              size="sm"
+              className="h-8 w-[96px] shrink-0 rounded-full bg-background text-xs"
+            >
+              <span className="flex items-center gap-1">
+                <ArrowRightLeft className="size-3 opacity-60 lg:hidden" />
+                <SelectValue placeholder="Move" />
+              </span>
             </SelectTrigger>
             <SelectContent>
               {freeSlots.map((slot) => (
@@ -145,41 +193,63 @@ export const PlayerRow = memo(function PlayerRow({
                   disabled={slot === player.slot}
                 >
                   P{slot + 1}
+                  {slot === player.slot ? ' • current' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            title="Kick player"
-            aria-label="Kick player"
-            disabled={busy}
-            onClick={() => void run(() => onKick(player.id))}
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-          >
-            <UserX className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`Kick ${player.name}`}
+                disabled={busy}
+                onClick={() => void run(() => onKick(player.id))}
+                className="ml-auto shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:ml-1 lg:ml-0"
+              >
+                <Unplug className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Kick player</TooltipContent>
+          </Tooltip>
         </div>
-      </TableCell>
-    </TableRow>
+      </div>
+    </div>
   );
 });
+
+function labelForState(state: PlayerSnapshot['state']): string {
+  switch (state) {
+    case 'active':
+      return 'active';
+    case 'stale':
+      return 'idle';
+    case 'device-error':
+      return 'device error';
+    case 'disconnected-grace':
+      return 'reconnecting';
+    case 'closed':
+      return 'closed';
+    default:
+      return state;
+  }
+}
 
 function stateClass(state: PlayerSnapshot['state']): string {
   switch (state) {
     case 'active':
-      return 'border-emerald-500/20 bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300';
+      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
     case 'stale':
-      return 'border-amber-500/20 bg-amber-500/15 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300';
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300';
     case 'device-error':
       return 'border-destructive/20 bg-destructive/10 text-destructive';
     case 'disconnected-grace':
-      return 'bg-muted text-muted-foreground border-transparent';
+      return 'border-border bg-muted text-muted-foreground';
     default:
-      return '';
+      return 'border-border bg-muted text-muted-foreground';
   }
 }
 
@@ -191,15 +261,25 @@ function deviceColor(status: string): string {
 
 function formatAge(value: string, now: number): string {
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'No input';
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'no input yet';
   const age = Math.max(0, now - timestamp);
-  if (age < 1000) return '<1s';
-  if (age < 60_000) return `${Math.floor(age / 1000)}s`;
-  return `${Math.floor(age / 60_000)}m`;
+  if (age < 1000) return 'just now';
+  if (age < 60_000) return `${Math.floor(age / 1000)}s ago`;
+  return `${Math.floor(age / 60_000)}m ago`;
 }
 
 function formatRTT(nanos: number): string {
   if (!Number.isFinite(nanos) || nanos <= 0) return '—';
-  const milliseconds = Math.round(nanos / 1_000_000);
-  return `${String(milliseconds).padStart(2)}ms`;
+  const ms = Math.round(nanos / 1_000_000);
+  return `${String(ms)}ms`;
+}
+
+function formatTime(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }

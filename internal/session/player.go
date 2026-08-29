@@ -17,7 +17,6 @@ type Player struct {
 	ID            string
 	Slot          int
 	Name          string
-	FallbackName  string
 	Accent        string
 	State         PlayerState
 	LayoutID      string
@@ -39,7 +38,6 @@ type PlayerSnapshot struct {
 	ID            string      `json:"id"`
 	Slot          int         `json:"slot"`
 	Name          string      `json:"name"`
-	FallbackName  string      `json:"fallbackName"`
 	Accent        string      `json:"accent"`
 	State         PlayerState `json:"state"`
 	LayoutID      string      `json:"layoutId"`
@@ -55,7 +53,7 @@ type PlayerSnapshot struct {
 
 func (p *Player) Snapshot() PlayerSnapshot {
 	return PlayerSnapshot{
-		ID: p.ID, Slot: p.Slot, Name: p.Name, FallbackName: p.FallbackName, Accent: p.Accent,
+		ID: p.ID, Slot: p.Slot, Name: p.Name, Accent: p.Accent,
 		State: p.State, LayoutID: p.LayoutID, Generation: p.Generation, ReconnectID: p.ReconnectID,
 		LastInput: p.LastInput,
 		LastPong:  p.LastPong, RTT: p.RTT.Nanoseconds(), DeviceStatus: p.DeviceStatus,

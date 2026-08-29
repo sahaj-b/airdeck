@@ -18,14 +18,15 @@ import (
 )
 
 type adminState struct {
-	Code              string                   `json:"code"`
-	AcceptingJoins    bool                     `json:"acceptingJoins"`
-	AdvertisedJoinURL string                   `json:"advertisedJoinURL"`
-	PublicPort        int                      `json:"publicPort"`
-	AdminPort         int                      `json:"adminPort"`
-	Config            config.Config            `json:"config"`
-	Layouts           []layout.Summary         `json:"layouts"`
-	Players           []session.PlayerSnapshot `json:"players"`
+	Code                 string                   `json:"code"`
+	AcceptingJoins       bool                     `json:"acceptingJoins"`
+	AdvertisedJoinURL    string                   `json:"advertisedJoinURL"`
+	AdvertisedCandidates []string                 `json:"advertisedCandidates"`
+	PublicPort           int                      `json:"publicPort"`
+	AdminPort            int                      `json:"adminPort"`
+	Config               config.Config            `json:"config"`
+	Layouts              []layout.Summary         `json:"layouts"`
+	Players              []session.PlayerSnapshot `json:"players"`
 }
 
 type adminEvent struct {
@@ -73,15 +74,37 @@ func (s *Server) currentState() adminState {
 	players := s.options.Session.Players()
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
 	return adminState{
-		Code:              s.options.Session.Code(),
-		AcceptingJoins:    s.options.Session.AcceptingJoins(),
-		AdvertisedJoinURL: s.AdvertisedJoinURL(),
-		PublicPort:        publicPort,
-		AdminPort:         adminPort,
-		Config:            cfg,
-		Layouts:           s.options.Layouts.Summaries(),
-		Players:           players,
+		Code:                 s.options.Session.Code(),
+		AcceptingJoins:       s.options.Session.AcceptingJoins(),
+		AdvertisedJoinURL:    s.AdvertisedJoinURL(),
+		AdvertisedCandidates: advertisedCandidates(),
+		PublicPort:           publicPort,
+		AdminPort:            adminPort,
+		Config:               cfg,
+		Layouts:              s.options.Layouts.Summaries(),
+		Players:              players,
 	}
+}
+
+func advertisedCandidates() []string {
+	primary := defaultAdvertisedHost()
+	ips := allLocalIPv4s()
+	seen := make(map[string]struct{}, len(ips)+1)
+	var out []string
+	if primary != "" && primary != "127.0.0.1" {
+		seen[primary] = struct{}{}
+		out = append(out, primary)
+	}
+	var rest []string
+	for _, ip := range ips {
+		if _, ok := seen[ip]; !ok {
+			seen[ip] = struct{}{}
+			rest = append(rest, ip)
+		}
+	}
+	sort.Strings(rest)
+	out = append(out, rest...)
+	return out
 }
 
 func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +130,8 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.currentState())
 	case path == "/settings" && r.Method == http.MethodPut:
 		s.updateSettings(w, r)
+	case path == "/players/layout" && r.Method == http.MethodPut:
+		s.bulkLayoutAPI(w, r)
 	case strings.HasPrefix(path, "/players/"):
 		s.playerAPI(w, r, strings.TrimPrefix(path, "/players/"))
 	case path == "/ws" && r.Method == http.MethodGet:
@@ -114,6 +139,24 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (s *Server) bulkLayoutAPI(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		LayoutID string `json:"layoutId"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeErrorStatus(w, err, http.StatusBadRequest)
+		return
+	}
+	if _, ok := s.options.Layouts.Get(body.LayoutID); !ok {
+		writeErrorStatus(w, fmt.Errorf("layout %q is not available", body.LayoutID), http.StatusBadRequest)
+		return
+	}
+	for _, player := range s.options.Session.Players() {
+		_ = s.options.Session.SetLayout(player.ID, body.LayoutID)
+	}
+	writeJSON(w, http.StatusOK, s.currentState())
 }
 
 func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {

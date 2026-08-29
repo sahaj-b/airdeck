@@ -6,6 +6,14 @@ import { defineConfig } from 'vite';
 
 const root = dirname(fileURLToPath(import.meta.url));
 
+const devPort = process.env.AIRDECK_PORT ?? '6969';
+const viteDevProxy = process.env.AIRDECK_DEV
+  ? {
+      '/ws': { target: `http://127.0.0.1:${devPort}`, ws: true },
+      '/api': { target: `http://127.0.0.1:${devPort}` },
+    }
+  : undefined;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -13,6 +21,8 @@ export default defineConfig({
       '@': resolve(root, 'src'),
     },
   },
+  clearScreen: false,
+  server: viteDevProxy ? { proxy: viteDevProxy, host: true } : undefined,
   build: {
     outDir: resolve(root, '../internal/web/dist'),
     emptyOutDir: true,

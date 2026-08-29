@@ -197,26 +197,35 @@ func defaultAdvertisedHost() string {
 		}
 	}
 	// Fallback: first non-loopback IPv4, then 127.0.0.1.
-	interfaces, err := net.Interfaces()
-	if err == nil {
-		for _, iface := range interfaces {
-			if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-				continue
-			}
-			addrs, err := iface.Addrs()
-			if err != nil {
-				continue
-			}
-			for _, addr := range addrs {
-				ipnet, ok := addr.(*net.IPNet)
-				if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
-					continue
-				}
-				return ipnet.IP.String()
-			}
-		}
+	if ips := allLocalIPv4s(); len(ips) > 0 {
+		return ips[0]
 	}
 	return "127.0.0.1"
+}
+
+func allLocalIPv4s() []string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+				continue
+			}
+			out = append(out, ipnet.IP.String())
+		}
+	}
+	return out
 }
 
 func defaultRouteInterface() (string, error) {

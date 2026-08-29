@@ -90,6 +90,13 @@ export function setPlayerLayout(
   );
 }
 
+export function setAllPlayerLayouts(layoutId: string): Promise<AdminState> {
+  return request<AdminState>('/api/admin/players/layout', {
+    method: 'PUT',
+    body: JSON.stringify({ layoutId }),
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }

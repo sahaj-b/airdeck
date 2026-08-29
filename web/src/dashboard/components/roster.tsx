@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Badge } from '../../components/ui/badge';
 import {
   Card,
@@ -5,13 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from '../../components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../components/ui/table';
+import { TooltipProvider } from '../../components/ui/tooltip';
 import type { LayoutSummary, PlayerSnapshot } from '../../shared/contracts';
 import { PlayerRow } from './player-row';
 
@@ -34,50 +29,48 @@ export function Roster({
 }: RosterProps) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-lg">Players</CardTitle>
-          <Badge variant="secondary" className="tabular-nums">
-            {players.length} / 16
+          <CardTitle className="text-lg tracking-tight">Players</CardTitle>
+          <Badge
+            variant="secondary"
+            className="inline-flex items-baseline gap-[2px] rounded-full px-2.5 py-1 tabular-nums"
+          >
+            <span className="text-[13px] font-bold leading-none tracking-tight text-foreground">
+              {players.length}
+            </span>
+            <span className="text-[11px] font-medium leading-none text-muted-foreground/60">
+              / 16
+            </span>
           </Badge>
         </div>
       </CardHeader>
       <CardContent>
         {players.length === 0 ? (
-          <div className="grid gap-1 rounded-lg border border-dashed p-8 text-center">
-            <div className="text-sm font-medium">No players connected.</div>
+          <div className="grid gap-1 rounded-xl border border-dashed p-8 text-center">
+            <div className="text-sm font-medium">No players connected</div>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Slot</TableHead>
-                <TableHead>Player</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Last input</TableHead>
-                <TableHead>RTT</TableHead>
-                <TableHead>Layout</TableHead>
-                <TableHead>Device</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {players.map((player) => (
-                <PlayerRow
-                  key={player.id}
-                  player={player}
-                  players={players}
-                  layouts={layouts}
-                  now={now}
-                  onKick={onKick}
-                  onMove={onMove}
-                  onLayout={onLayout}
-                />
+          <TooltipProvider delay={0}>
+            <div className="grid">
+              {players.map((player, idx) => (
+                <Fragment key={player.id}>
+                  <PlayerRow
+                    player={player}
+                    players={players}
+                    layouts={layouts}
+                    now={now}
+                    onKick={onKick}
+                    onMove={onMove}
+                    onLayout={onLayout}
+                  />
+                  {idx < players.length - 1 && (
+                    <div className="mx-6 h-[2px] rounded-full bg-border" />
+                  )}
+                </Fragment>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          </TooltipProvider>
         )}
       </CardContent>
     </Card>

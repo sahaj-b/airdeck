@@ -2,7 +2,7 @@ SHELL := /bin/sh
 
 GO_FILES := cmd/main.go tools/lanbench/main.go $(shell find internal -type f -name '*.go' ! -path 'internal/uinput/*' | sort)
 
-.PHONY: sync-contracts web-build build test lint fmt bench
+.PHONY: sync-contracts web-build build dev test lint fmt bench
 
 sync-contracts:
 	node scripts/sync-contracts.mjs
@@ -30,6 +30,21 @@ lint:
 fmt:
 	gofumpt -w $(GO_FILES)
 	pnpm --dir web format
+
+dev:
+	air -c .air.toml & \
+	GO_PID=$$!; \
+	PORT=$${AIRDECK_PORT:-6969}; \
+	for i in $$(seq 1 50); do \
+		if curl -sf http://127.0.0.1:$$PORT/api/admin/state >/dev/null 2>&1; then break; fi; \
+		if ! kill -0 $$GO_PID 2>/dev/null; then echo "air failed to start"; wait $$GO_PID; exit 1; fi; \
+		sleep 0.2; \
+	done; \
+	AIRDECK_DEV=1 AIRDECK_PORT=$$PORT pnpm --dir web dev & \
+	VITE_PID=$$!; \
+	trap 'kill $$GO_PID $$VITE_PID 2>/dev/null; exit' INT TERM; \
+	wait $$GO_PID; \
+	kill $$VITE_PID 2>/dev/null; wait $$VITE_PID 2>/dev/null
 
 PLAYERS ?= 1
 DURATION ?= 5s
