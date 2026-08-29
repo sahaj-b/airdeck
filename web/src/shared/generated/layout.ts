@@ -16,16 +16,6 @@ export interface Geometry {
   position: Point;
   size: Size;
 }
-export interface OrientationOverrides {
-  portrait?: Geometry;
-  landscape?: Geometry;
-}
-export interface Padding {
-  left: number /* float64 */;
-  right: number /* float64 */;
-  top: number /* float64 */;
-  bottom: number /* float64 */;
-}
 export interface DPadBindings {
   up?: 'dpadUp';
   down?: 'dpadDown';
@@ -39,21 +29,15 @@ export interface Control {
   label: string;
   visible: boolean;
   hitOnly?: boolean;
-  shape?: 'circle' | 'pill' | 'rect';
+  shape?: 'round' | 'rect';
   binding?: Command;
   bindings?: DPadBindings;
-  orientations?: OrientationOverrides;
   asset?: string;
 }
 export interface Section {
   id: string;
-  aspectRatio: number /* float64 */;
-  minWidth: number /* float64 */;
-  maxWidth: number /* float64 */;
-  flexGrow: number /* float64 */;
-  flexShrink: number /* float64 */;
-  protected: boolean;
-  padding: Padding;
+  relativeWidth: number /* float64 */;
+  relativeMinWidth?: number /* float64 */;
   controls: Control[];
 }
 export interface Asset {

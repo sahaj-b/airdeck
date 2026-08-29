@@ -28,8 +28,6 @@ export type {
   Document as LayoutDocument,
   DPadBindings,
   Geometry,
-  OrientationOverrides,
-  Padding,
   Point,
   Section,
   Size,
@@ -41,7 +39,6 @@ import type {
   Geometry,
   Document as LayoutDocument,
   Section,
-  Size,
 } from './generated/layout';
 
 export type ControlType = Control['type'];
@@ -65,6 +62,11 @@ export interface LayoutParseResult {
 export function validateLayout(value: unknown): value is LayoutDocument {
   if (!validateSchema(value)) return false;
   const document = value as LayoutDocument;
+  if (document.sections.length !== 3) return false;
+  const expected: string[] = ['left', 'center', 'right'];
+  for (let i = 0; i < 3; i += 1) {
+    if (document.sections[i].id !== expected[i]) return false;
+  }
   const ids = new Set<string>();
   const add = (id: string) => {
     if (ids.has(id)) return false;
@@ -103,25 +105,16 @@ export function parseLayoutDocument(value: unknown): LayoutParseResult {
 }
 
 function validSection(section: Section): boolean {
-  return (
-    finitePositive(section.aspectRatio) &&
-    finitePositive(section.minWidth) &&
-    finitePositive(section.maxWidth) &&
-    section.maxWidth >= section.minWidth &&
-    finiteNonNegative(section.flexGrow) &&
-    finiteNonNegative(section.flexShrink) &&
-    validPadding(section.padding) &&
-    section.padding.left + section.padding.right < section.minWidth &&
-    section.padding.top + section.padding.bottom < 1
-  );
-}
-
-function validPadding(
-  padding: LayoutDocument['sections'][number]['padding'],
-): boolean {
-  return [padding.left, padding.right, padding.top, padding.bottom].every(
-    (value) => finiteNonNegative(value) && value <= 0.5,
-  );
+  if (!finitePositive(section.relativeWidth) || section.relativeWidth > 4)
+    return false;
+  if (section.relativeMinWidth !== undefined) {
+    if (
+      !finitePositive(section.relativeMinWidth) ||
+      section.relativeMinWidth > 4
+    )
+      return false;
+  }
+  return true;
 }
 
 function validControl(
@@ -145,29 +138,8 @@ function validControl(
       control.bindings?.right !== 'dpadRight')
   )
     return false;
-  if (
-    control.orientations &&
-    Object.values(control.orientations).some(
-      (geometry) => geometry && !validGeometry(geometry, section),
-    )
-  )
+  if (control.shape && control.shape !== 'round' && control.shape !== 'rect')
     return false;
-  if (
-    control.shape &&
-    control.shape !== 'circle' &&
-    control.shape !== 'pill' &&
-    control.shape !== 'rect'
-  )
-    return false;
-  if (control.type === 'joystick' || control.type === 'dpad') {
-    const geometries = [
-      control.geometry,
-      control.orientations?.portrait,
-      control.orientations?.landscape,
-    ];
-    if (geometries.some((geometry) => geometry && !isSquare(geometry.size)))
-      return false;
-  }
   return true;
 }
 
@@ -182,11 +154,10 @@ function validGeometry(geometry: Geometry, section: Section): boolean {
   )
     return false;
 
-  const contentWidth =
-    section.aspectRatio - section.padding.left - section.padding.right;
-  const contentHeight = 1 - section.padding.top - section.padding.bottom;
-  const centerX = section.padding.left + contentWidth / 2;
-  const centerY = section.padding.top + contentHeight / 2;
+  const contentWidth = section.relativeWidth;
+  const contentHeight = 1;
+  const centerX = contentWidth / 2;
+  const centerY = contentHeight / 2;
   const left = centerX + geometry.position.x - geometry.size.width / 2;
   const right = left + geometry.size.width;
   const top = centerY + geometry.position.y - geometry.size.height / 2;
@@ -194,14 +165,10 @@ function validGeometry(geometry: Geometry, section: Section): boolean {
   const epsilon = 1e-9;
   return (
     left >= -epsilon &&
-    right <= section.aspectRatio + epsilon &&
+    right <= contentWidth + epsilon &&
     top >= -epsilon &&
     bottom <= 1 + epsilon
   );
-}
-
-function isSquare(size: Size): boolean {
-  return Math.abs(size.width - size.height) < 1e-9;
 }
 
 const KNOWN_COMMANDS = new Set<string>([
@@ -231,13 +198,10 @@ function finitePositive(value: number): boolean {
   return Number.isFinite(value) && value > 0;
 }
 
-function finiteNonNegative(value: number): boolean {
-  return Number.isFinite(value) && value >= 0;
-}
-
+// Deprecated: orientations were removed in v1. Kept for backwards compat, returns geometry directly.
 export function orientationGeometry(
   control: Control,
-  orientation: Orientation,
+  _orientation: Orientation,
 ): Geometry {
-  return control.orientations?.[orientation] ?? control.geometry;
+  return control.geometry;
 }

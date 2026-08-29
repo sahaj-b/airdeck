@@ -29,28 +29,62 @@ describe('validateLayout', () => {
     expect(validateLayout(incomplete)).toBe(false);
   });
 
-  it('rejects non-square joysticks and unknown shapes', () => {
+  it('allows non-square joysticks for gyro oval and rejects legacy shapes', () => {
     const oval = structuredClone(xboxDefault) as typeof xboxDefault;
     const stick = oval.sections[0].controls.find(
       (control) => control.type === 'joystick',
     );
     if (!stick) throw new Error('built-in joystick missing');
     stick.geometry.size.height = stick.geometry.size.width / 2;
-    expect(validateLayout(oval)).toBe(false);
+    expect(validateLayout(oval)).toBe(true);
 
     const shaped = structuredClone(xboxDefault) as typeof xboxDefault;
-    shaped.sections[0].controls[0].shape = 'triangle';
+    shaped.sections[0].controls[0].shape = 'circle' as unknown as string;
     expect(validateLayout(shaped)).toBe(false);
+
+    const pill = structuredClone(xboxDefault) as typeof xboxDefault;
+    pill.sections[0].controls[0].shape = 'pill' as unknown as string;
+    expect(validateLayout(pill)).toBe(false);
+
+    const round = structuredClone(xboxDefault) as typeof xboxDefault;
+    round.sections[0].controls[0].shape = 'round';
+    expect(validateLayout(round)).toBe(true);
   });
 
-  it('rejects invalid section constraints and geometry outside a section', () => {
+  it('rejects invalid section relativeWidth and geometry outside a section', () => {
     const invalidSection = structuredClone(xboxDefault) as typeof xboxDefault;
-    invalidSection.sections[1].maxWidth =
-      invalidSection.sections[1].minWidth / 2;
+    invalidSection.sections[1].relativeWidth = 0;
     expect(validateLayout(invalidSection)).toBe(false);
 
     const invalidGeometry = structuredClone(xboxDefault) as typeof xboxDefault;
     invalidGeometry.sections[0].controls[0].geometry.position.x = 2;
     expect(validateLayout(invalidGeometry)).toBe(false);
+  });
+
+  it('rejects wrong section count or order and legacy fields', () => {
+    const twoSections = structuredClone(xboxDefault) as typeof xboxDefault;
+    twoSections.sections = twoSections.sections.slice(
+      0,
+      2,
+    ) as typeof twoSections.sections;
+    expect(validateLayout(twoSections)).toBe(false);
+
+    const wrongOrder = structuredClone(xboxDefault) as typeof xboxDefault;
+    const tmp = wrongOrder.sections[0];
+    const sec1 = wrongOrder.sections[1];
+    if (!tmp || !sec1) throw new Error('missing section');
+    wrongOrder.sections[0] = sec1;
+    wrongOrder.sections[1] = tmp;
+    expect(validateLayout(wrongOrder)).toBe(false);
+
+    const legacy = structuredClone(xboxDefault) as unknown as Record<
+      string,
+      unknown
+    >;
+    legacy.sections = (legacy.sections as unknown[]).map((s: unknown) => ({
+      ...(s as object),
+      aspectRatio: 1,
+    }));
+    expect(validateLayout(legacy)).toBe(false);
   });
 });

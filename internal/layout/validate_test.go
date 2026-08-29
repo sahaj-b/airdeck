@@ -12,12 +12,19 @@ func baseGeometry() Geometry {
 	}
 }
 
-func baseSection() Section {
+func baseSection(id string, width float64) Section {
+	min := 0.65
+	if id == "center" {
+		min = 0.38
+	}
+	if id == "right" {
+		min = 0.67
+	}
+	m := min
 	return Section{
-		ID: "section", AspectRatio: 1, MinWidth: 1, MaxWidth: 1,
-		FlexGrow: 0, FlexShrink: 0, Protected: true,
-		Padding: Padding{}, Controls: []Control{{
-			ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
+		ID: id, RelativeWidth: width, RelativeMinWidth: &m,
+		Controls: []Control{{
+			ID: id + "-btn", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
 		}},
 	}
 }
@@ -25,7 +32,12 @@ func baseSection() Section {
 func baseDocument() Document {
 	return Document{
 		ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape",
-		Sections: []Section{baseSection()}, Assets: []Asset{{ID: "asset", Path: "asset.png"}},
+		Sections: []Section{
+			baseSection("left", 0.86),
+			baseSection("center", 0.5),
+			baseSection("right", 0.94),
+		},
+		Assets: []Asset{{ID: "asset", Path: "asset.png"}},
 	}
 }
 
@@ -48,8 +60,9 @@ func TestValidateRejectsUnsafeAndDuplicateDocuments(t *testing.T) {
 	base.Assets[0].Path = "asset.png"
 	duplicate := baseGeometry()
 	duplicate.Position.X = 0.2
+	// duplicate control id within same doc (left-btn already exists, reuse)
 	base.Sections[0].Controls = append(base.Sections[0].Controls, Control{
-		ID: "button", Type: "button", Geometry: duplicate, Label: "B", Visible: true, Binding: "east",
+		ID: "left-btn", Type: "button", Geometry: duplicate, Label: "B", Visible: true, Binding: "east",
 	})
 	if err := ValidateDocument(base); err == nil {
 		t.Fatal("duplicate control id was accepted")
@@ -75,7 +88,25 @@ func TestValidateRejectsIncompleteDPad(t *testing.T) {
 	}
 }
 
-func TestValidateControlShapesAndSquares(t *testing.T) {
+func TestValidateFixedSections(t *testing.T) {
+	doc := baseDocument()
+	doc.Sections = doc.Sections[:2]
+	if err := ValidateDocument(doc); err == nil {
+		t.Fatal("2 sections was accepted")
+	}
+	doc = baseDocument()
+	doc.Sections[0].ID = "wrong"
+	if err := ValidateDocument(doc); err == nil {
+		t.Fatal("wrong section order was accepted")
+	}
+	doc = baseDocument()
+	doc.Sections[1].RelativeWidth = 0
+	if err := ValidateDocument(doc); err == nil {
+		t.Fatal("zero relativeWidth was accepted")
+	}
+}
+
+func TestValidateControlShapesAndUnlockedJoystick(t *testing.T) {
 	newDoc := func(size Size, shape string) Document {
 		doc := baseDocument()
 		doc.Sections[0].Controls = []Control{{
@@ -85,19 +116,34 @@ func TestValidateControlShapesAndSquares(t *testing.T) {
 		}}
 		return doc
 	}
-	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.2}, "")); err == nil {
-		t.Fatal("non-square joystick was accepted")
+	// Non-square joystick must now be ACCEPTED (unlocked for gyro oval)
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.2}, "")); err != nil {
+		t.Fatalf("non-square joystick was rejected but should be allowed: %v", err)
 	}
 	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "triangle")); err == nil {
 		t.Fatal("unknown control shape was accepted")
 	}
-	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "circle")); err != nil {
-		t.Fatalf("circle shape was rejected: %v", err)
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "round")); err != nil {
+		t.Fatalf("round shape was rejected: %v", err)
 	}
-
-	outside := newDoc(Size{Width: 0.4, Height: 0.4}, "circle")
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "rect")); err != nil {
+		t.Fatalf("rect shape was rejected: %v", err)
+	}
+	// old circle should be rejected
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "circle")); err == nil {
+		t.Fatal("old circle shape was accepted")
+	}
+	outside := newDoc(Size{Width: 0.4, Height: 0.4}, "round")
 	outside.Sections[0].Controls[0].Geometry.Position.X = 0.8
 	if err := ValidateDocument(outside); err == nil {
 		t.Fatal("control outside the authored section was accepted")
+	}
+}
+
+func TestValidateRejectsLegacyFields(t *testing.T) {
+	// JSON with legacy aspectRatio should be rejected by schema
+	raw := `{"id":"test","name":"Test","schemaVersion":1,"defaultOrientation":"landscape","sections":[{"id":"left","aspectRatio":0.86,"minWidth":0.65,"maxWidth":0.86,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"center","aspectRatio":0.5,"minWidth":0.38,"maxWidth":4,"flexGrow":1,"flexShrink":1,"protected":false,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"right","aspectRatio":0.94,"minWidth":0.67,"maxWidth":0.94,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]}],"assets":[]}`
+	if _, err := ValidateJSON([]byte(raw)); err == nil {
+		t.Fatal("legacy fields were accepted by schema")
 	}
 }

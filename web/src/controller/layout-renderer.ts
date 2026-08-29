@@ -77,8 +77,7 @@ export function renderLayout(
   orientationMessage.setAttribute('role', 'status');
   orientationMessage.textContent =
     'Rotate your phone to landscape to use this controller.';
-  // Stuck-in-portrait escape hatch: fullscreen can retrigger orientation lock
-  // where the browser supports it.
+  // Fullscreen escape hatch: can retrigger orientation lock where supported.
   const fallbackFullscreen = buildFullscreenButton();
   orientationMessage.append(fallbackFullscreen.button);
   root.append(orientationMessage);
@@ -114,20 +113,14 @@ export function renderLayout(
 
   if (options.chrome) {
     options.chrome.classList.add('controller-runtime-chrome');
-    const centerIndex = Math.max(
-      0,
-      layout.sections.findIndex((section) => section.flexGrow > 0),
-    );
+    const centerIndex = 1;
     renderedSections[centerIndex]?.element.append(options.chrome);
   }
 
   container.replaceChildren(root);
 
-  // Long-press / selection / haptic kill. Must be capture + non-passive
-  // or iOS and Android will still select and buzz before pointerdown fires.
-  // preventDefault on touchstart/touchend suppresses the synthetic click on
-  // touch, so the settings/fullscreen buttons bind via pointer events
-  // (bindTap in tap.ts) instead of click.
+  // Must be capture + non-passive or iOS/Android still selects/buzzes before pointerdown.
+  // preventDefault on touchstart kills synthetic clicks, so buttons use pointer events (bindTap).
   const kill = (event: Event): void => {
     event.preventDefault();
   };
@@ -272,6 +265,7 @@ function renderControl(
   if (control.type === 'label') {
     const label = document.createElement('span');
     label.className = 'controller-label';
+    label.dataset.controlId = control.id;
     label.textContent = control.label;
     return { control, visual: label };
   }
@@ -279,6 +273,7 @@ function renderControl(
   if (control.type === 'image') {
     const image = document.createElement('img');
     image.className = 'controller-image';
+    image.dataset.controlId = control.id;
     image.alt = control.label;
     image.draggable = false;
     image.addEventListener('dragstart', (event) => event.preventDefault());
@@ -392,7 +387,6 @@ function applyResolvedGeometry(
 
 function applyDynamicSizing(rendered: RenderedControl, rect: PixelRect): void {
   const { control, visual } = rendered;
-  // Joystick hides its label, dpad uses SVG, images have no text, hitOnly fillers are invisible
   if (
     control.hitOnly ||
     control.type === 'joystick' ||

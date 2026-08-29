@@ -6,18 +6,8 @@
   "sections": [
     {
       "id": "left",
-      "aspectRatio": 0.86,
-      "minWidth": 0.65,
-      "maxWidth": 0.86,
-      "flexGrow": 0,
-      "flexShrink": 1,
-      "protected": true,
-      "padding": {
-        "left": 0.035,
-        "right": 0.035,
-        "top": 0.03,
-        "bottom": 0.03
-      },
+      "relativeWidth": 0.86,
+      "relativeMinWidth": 0.65,
       "controls": [
         {
           "id": "lt",
@@ -71,7 +61,7 @@
           "label": "Left stick",
           "visible": true,
           "binding": "leftStick",
-          "shape": "circle"
+          "shape": "round"
         },
         {
           "id": "dpad",
@@ -111,24 +101,14 @@
           "label": "L3",
           "visible": false,
           "binding": "leftStick",
-          "shape": "circle"
+          "shape": "round"
         }
       ]
     },
     {
       "id": "center",
-      "aspectRatio": 0.5,
-      "minWidth": 0.38,
-      "maxWidth": 4,
-      "flexGrow": 1,
-      "flexShrink": 1,
-      "protected": false,
-      "padding": {
-        "left": 0.04,
-        "right": 0.04,
-        "top": 0.03,
-        "bottom": 0.03
-      },
+      "relativeWidth": 0.5,
+      "relativeMinWidth": 0.38,
       "controls": [
         {
           "id": "back",
@@ -146,7 +126,7 @@
           "label": "Back",
           "visible": true,
           "binding": "back",
-          "shape": "pill"
+          "shape": "round"
         },
         {
           "id": "start",
@@ -164,7 +144,7 @@
           "label": "Start",
           "visible": true,
           "binding": "start",
-          "shape": "pill"
+          "shape": "round"
         },
         {
           "id": "guide",
@@ -182,24 +162,14 @@
           "label": "Guide",
           "visible": false,
           "binding": "guide",
-          "shape": "circle"
+          "shape": "round"
         }
       ]
     },
     {
       "id": "right",
-      "aspectRatio": 0.94,
-      "minWidth": 0.67,
-      "maxWidth": 0.94,
-      "flexGrow": 0,
-      "flexShrink": 1,
-      "protected": true,
-      "padding": {
-        "left": 0.035,
-        "right": 0.035,
-        "top": 0.03,
-        "bottom": 0.03
-      },
+      "relativeWidth": 0.94,
+      "relativeMinWidth": 0.67,
       "controls": [
         {
           "id": "rt",
@@ -253,7 +223,7 @@
           "label": "Right stick",
           "visible": true,
           "binding": "rightStick",
-          "shape": "circle"
+          "shape": "round"
         },
         {
           "id": "xyab-fill-n",
@@ -347,7 +317,7 @@
           "label": "Y",
           "visible": true,
           "binding": "north",
-          "shape": "circle"
+          "shape": "round"
         },
         {
           "id": "west",
@@ -365,7 +335,7 @@
           "label": "X",
           "visible": true,
           "binding": "west",
-          "shape": "circle"
+          "shape": "round"
         },
         {
           "id": "east",
@@ -383,7 +353,7 @@
           "label": "B",
           "visible": true,
           "binding": "east",
-          "shape": "circle"
+          "shape": "round"
         },
         {
           "id": "south",
@@ -401,7 +371,7 @@
           "label": "A",
           "visible": true,
           "binding": "south",
-          "shape": "circle"
+          "shape": "round"
         },
         {
           "id": "rs-click",
@@ -419,7 +389,7 @@
           "label": "R3",
           "visible": false,
           "binding": "rightStick",
-          "shape": "circle"
+          "shape": "round"
         }
       ]
     }

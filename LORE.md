@@ -12,15 +12,15 @@
 - **Display name:** An optional player label shown in the host roster. If absent, the host generates a slot-based fallback such as `Player 1`.
 - **Slot accent:** A stable accessible color assigned from the player's slot. It supports scanning but never replaces the slot number or display name.
 - **Advertised URL:** The host-selected LAN URL shown to users and encoded in the QR code. It may differ from the address on which the server listens. QR joins use `/join?code=...`; the base URL opens the code prompt.
-- **LayoutDocument:** A versioned JSON document that defines the visual controls, logical commands, ordered sections, and responsive geometry for one phone controller layout. Sections carry aspect ratios, flex constraints, padding, and protected status. Control positions are centered offsets from a section's content area, sized as fractions of viewport height, so shapes never stretch with screen aspect. Geometry is always center-pivoted.
-- **Layout resolver:** The phone-side pure function that turns a `LayoutDocument` plus a viewport size into resolved pixel rectangles for sections and controls. Left and right sections are fixed edge-pinned slices, center fills all remaining width. The resolver handles center-first shrinking on compact screens, protected side sections, and pure WYSIWYG hit bounds (hit equals visual). Independent from DOM styling.
-- **Responsive section:** An ordered composition slice with an aspect ratio, minimum and maximum widths, flex grow/shrink weights, padding, and a protected flag. Sections are resolved left-to-right with no inter-section gaps and no outer margins. Left and right pin to viewport edges, center expands to fill. The center section shrinks first on compact screens; protected side sections keep their authored width until all flexible shrink is exhausted.
+- **LayoutDocument:** A versioned JSON document that defines the visual controls, logical commands, and 3 fixed sections (`left`, `center`, `right`) for one phone controller layout. Sections carry `relativeWidth` (width in viewport-height units) and optional `relativeMinWidth`. Control geometry is `{ position: {x,y}, size: {width,height} }`, center-pivoted, all values in viewport-height fractions, so shapes never stretch with screen aspect. No anchor, no gaps, no outer margins, no section padding. Sections are edge-to-edge, left pinned at 0, center fills `viewportWidth - left.relativeWidth - right.relativeWidth`.
+- **Layout resolver:** The phone-side pure function that turns a `LayoutDocument` plus a viewport size into resolved pixel rectangles for sections and controls. Left and right pinned edge-to-edge at `relativeWidth * viewportHeight`, center fills remaining width. Resolver handles ultra-narrow overflow by proportionally scaling sides. Pure WYSIWYG hit bounds (hit equals visual). Independent from DOM styling.
+- **Responsive section:** One of 3 fixed vertical slices (`left`, `center`, `right`). Left and right have `relativeWidth` (width in height units); center fills `viewportWidth - left - right`. Optional `relativeMinWidth` guards ultra-narrow overflow. Sections are resolved left-to-right with no gaps, no outer margins, no padding. Left and right pin to viewport edges, center auto-fills. No flex weights or protected flags in v1.
 - **Visual bounds:** The rendered pixel rectangle of a control, matching the authored geometry.
 - **Hit bounds:** Equal to visual bounds. Touch input uses the same rect as rendering. Use a larger authored size to get a larger hit area.
 - **Hit-only control:** A `LayoutDocument` control flagged `hitOnly`. It renders an invisible touch hit target that routes touches to a binding, filling gaps between visible controls (for example between face buttons). Hit equals visual, so the authored size must already cover the desired gap area.
 - **Layout renderer:** The phone-side code that turns a `LayoutDocument` into interactive controls. QRController's `FlexController` is a reference for this layer.
-- **Layout editor:** The future admin tool that modifies a `LayoutDocument`. It is separate from the runtime renderer.
-- **Orientation override:** An optional portrait or landscape geometry override for a control in the same `LayoutDocument`, replacing the base geometry for that orientation. It cannot change the control's logical command.
+- **Layout editor:** The admin tool that modifies a `LayoutDocument`. Two surfaces: dashboard full editor (React, sections + controls, 3-column hybrid) and phone minimal editor (lazy React island, control geometry only, single overlay bar). Both mutate the same JSON document; neither replaces the runtime renderer.
+- **Orientation override:** Not in v1. Layout is landscape-locked; portrait shows a fallback "Rotate your phone" message. No per-control orientation geometry.
 - **Runtime chrome:** The player name, connection status, settings gear, and fullscreen control that appear above the controller. Runtime chrome lives inside the responsive composition (not in a separate viewport row) and participates in the center section's layout.
 - **Landscape-first:** The phone controller's primary layout posture. Portrait remains usable through a compact fallback or guidance state.
 - **Input watchdog:** A host-side timer that neutralizes a player's virtual controller after valid input snapshots stop arriving. It prevents a stale network state from holding buttons or axes forever.
@@ -144,9 +144,9 @@ Built-in `LayoutDocument` files ship with the frontend assets. User documents li
 
 ## Responsive layout contract
 
-A `LayoutDocument` contains ordered sections, each with an aspect ratio, minimum and maximum widths, flex grow/shrink weights, padding, and a protected flag. Sections are resolved left-to-right with no gaps and no outer margins. Left and right sections are fixed edge-pinned (flexGrow 0, maxWidth equals aspectRatio) and only shrink on ultra-compact screens. Center has flexGrow 1 and a large maxWidth, so it fills all remaining width between the sides.
+A `LayoutDocument` has 3 fixed sections: `left`, `center`, `right`. Left and right have `relativeWidth` (width in viewport-height units); center fills `viewportWidth - left.relativeWidth - right.relativeWidth`. Optional `relativeMinWidth` guards ultra-narrow overflow. Sections are edge-to-edge, left pinned at 0, no gaps, no outer margins, no padding. Controls decide edge kiss via geometry, not section inset.
 
-Control geometry uses center-pivoted positions and sizes as fractions of viewport height. A control must not have an x-position based on section width while its width silently uses section height without the contract making that relationship explicit.
+Control geometry uses center-pivoted positions and sizes as fractions of viewport height. No anchor. A control must not have an x-position based on section width while its width silently uses section height without the contract making that relationship explicit.
 
 The phone runtime applies a responsive resolver that computes section widths and control positions from the `LayoutDocument` and the current viewport. The resolver is a pure function independent from DOM styling. Responsive composition is generated by the resolver, not stored as a second layout document.
 
@@ -156,11 +156,11 @@ The renderer uses WYSIWYG hit bounds: visual geometry and touch hit geometry are
 
 ## Split frontend surfaces
 
-Airdeck uses React for the low-rate host dashboard and vanilla TypeScript modules for the high-frequency phone controller runtime. The surfaces share typed data contracts, not rendering components. The v1.5 editor may use React and `interact.js` without adding either dependency to the phone play bundle.
+Airdeck uses React for the low-rate host dashboard and the lazy phone editor, while the high-frequency phone controller runtime stays vanilla TypeScript. The dashboard full editor and phone minimal editor both use React and `interact.js`. The phone play bundle stays vanilla because the editor is loaded only after the user taps Edit.
 
-## Lazy React islands for phone settings
+## Lazy islands for phone settings and editing
 
-Phone controller settings are lazy React islands inside the vanilla join app: the initial join entry contains no React. A `zustand/vanilla` store (`airdeck.settings.v1`, `version:1`) holds all low-frequency config (including future gyro calibration) and is shared between the vanilla core and the island via `getState()/subscribe` vs `useStore`. The island mounts on gear click via `await import('./settings-island')` -> `createRoot(host).render(<SettingsPanel/>)` and unmounts on close. This keeps the 60hz input path (pointer/gyro -> InputStateStore -> FrameSender -> ws + direct --axis-x/y thumb updates) free of React reconciliation, while allowing shadcn/radix UI for complex sheets. Manual vendor chunking keeps `react|react-dom|scheduler` together (Vite #12209/#17653).
+Phone controller settings are lazy React islands inside the vanilla join app, and phone minimal editing is a second lazy React island in the same app. Both keep the 60hz input path free of framework reconciliation when not open. The initial join entry contains no React or editor code. A `zustand/vanilla` store (`airdeck.settings.v1`, `version:1`) holds low-frequency config and is shared between the vanilla core and React islands via `getState()/subscribe` vs `useStore`. The settings island mounts on gear click via `await import('./settings-island')` -> `createRoot(host).render(<SettingsPanel/>)` and unmounts on close. The phone editor island loads only on `Edit` via a nested dynamic import, and its `interact.js` dependency stays in that async editor graph. Manual vendor chunking keeps `react|react-dom|scheduler` together (Vite #12209/#17653).
 
 ## Validated layout documents
 
@@ -216,12 +216,27 @@ Browser clients must connect from the host-served origin. Origin-less future nat
 
 Airdeck trusts the user-controlled LAN or hotspot for v1. It uses a short session code as a lightweight guard against accidental or prank joins, not as strong authentication. QR URLs include the code, while manually typed base URLs prompt for it. The product does not add accounts, persistent passwords, cryptographic join challenges, or mandatory approval for the first release.
 
+## Layout editor split and 3-fixed sections
+
+Airdeck's controller layout is 3 fixed sections (`left`, `center`, `right`) with `relativeWidth` (width in height units). Left and right are fixed at `relativeWidth`; center fills the remainder. No `maxWidth`, `flexGrow`/`flexShrink`, `protected`, or `padding` in v1. Shapes are `round`|`rect` only (`pill` was removed; stretched `round` covers the capsule via aspect unlock). Orientation is landscape-locked; portrait shows a rotate fallback. We chose 3-fixed over N-section flex because all 20 QRController presets (5 generic + 15 game-specific) use exactly 3 sections and variants are layout switches, not section-count changes. The trade-off is that a future 4-section or 2-section layout needs a schema v2, but the v1 invariant keeps the resolver, validator, and editor divider logic trivial.
+
+The editor is split by capability, not framework: the dashboard has the full editor (React + `interact.js`, 3-column hybrid, explicit Save, undo stack, publish accept), and the phone has a minimal geometry-only editor (lazy React island + `interact.js`, single overlay bar, `localStorage` personal edits, gesture undo). The phone pauses `FrameSender` while editing, so React cannot interfere with the 60hz play path. Both editors share pure helpers (`resolveLayout`, `validateLayout`, clamping, square constraint, history) and small React interaction primitives such as normalized drag/resize conversion and selection handles. They do not share the dashboard shell or inspector, because the phone interaction model is deliberately smaller.
+
+Phone personal edits are full `LayoutDocument` clones in `localStorage` (`airdeck.personalLayouts`), shown as a separate `My edits` group in the layout picker. Publishing to the host is `POST /api/layouts/publish` returning 202 with a pending store; the dashboard approves via `POST /api/admin/layouts/publish/:id/accept` and writes the file. We chose 202 + admin WebSocket notify + controller WebSocket push over a blocking POST because approval time is unbounded (host may be AFK) and blocking would hit browser/proxy timeouts and hold server handlers.
+
 ## Lazy-loaded controller skins
 
 Phone controller themes are named skins that overlay `data-skin` CSS without changing the layout or input contract. Each skin lives as a standalone `web/src/skins/*.css` file. The join client loads only the active skin via a dynamic `import('./<skin>.css?raw')` which Vite splits into a separate chunk. `web/src/skins/loader.ts` caches the fetched text in memory, injects it into a single `<style id="airdeck-skin">` element, and toggles `document.documentElement[data-skin]`. `web/src/skins/index.ts` exposes the skin registry and `loadSkinCSS` with a per-ID loader map. The active choice persists in `localStorage` under `airdeck.skin` with `airdeck` as the default. Previously all nine skins were statically imported and bundled into the join entry. Lazy loading keeps the initial join payload small and makes skin switches instant after the first fetch.
 
+## Go-canonical typed contracts with tygo codegen
+
+Go types in `internal/protocol`, `internal/layout`, and `internal/config` are the single source of truth for wire messages, layout documents, and host configuration. TypeScript types are derived via `tygo` code generation to `web/src/shared/generated` using `tygo.yaml` as the mapping, with `tstype` tags providing literal unions for discriminated `type` fields and command bindings. JSON Schema and preset layouts remain file-synced via `scripts/sync-contracts.mjs`, but typed structs are never hand-duplicated. The frontend re-exports generated types and builds runtime constants such as `ButtonBits`, `PROTOCOL_VERSION`, and `FRAME_SIZE` from generated values, so adding a `Command` or layout field in Go requires only `make sync-contracts` to stay consistent. Drift is enforced by `make lint`, which regenerates and fails on `git diff --exit-code` for the generated directory, and generated files are excluded from formatting and linting and must not be edited manually.
+
 # Decisions
 
+- Layout editor is split as above: dashboard full vs phone minimal React island, 3-fixed `relativeWidth`, `round`|`rect`, host-owned files with 202 publish + approval.
+- 3-fixed sections replace the N-section flex model for v1; `pill` shape replaced by stretched `round` via aspect unlock.
+- Phone personal edits are full documents in `localStorage`, not deltas, with `My edits` grouping and inline publish/delete.
 - The host architecture must keep the client protocol independent of whether the client is a browser or a future native app.
 - Native device creation and network/session management share one host process in the first architecture.
 - V1 UI copy is English only. Airdeck does not carry a localization framework or language packs for this private tool.
@@ -233,5 +248,5 @@ Phone controller themes are named skins that overlay `data-skin` CSS without cha
 - Broader Linux distributions, architectures, and permission setup beyond the tested Arch x86_64 baseline.
 - The exact maximum supported player count beyond the v1 ceiling of 16.
 - Future binary protocol extensions beyond the v1 20-byte input frame.
-- Whether the v1.5 editor needs extra interaction primitives beyond the selected `interact.js` drag/resize layer.
+- Whether the editor needs extra interaction primitives beyond `interact.js` drag/resize (snapping was explicitly cut).
 - Whether v2 needs individual slot locks or an approval queue beyond the v1 global accepting-joins toggle.

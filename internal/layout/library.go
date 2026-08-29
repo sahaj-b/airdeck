@@ -22,18 +22,6 @@ type Geometry struct {
 	Size     Size  `json:"size"`
 }
 
-type OrientationOverrides struct {
-	Portrait  *Geometry `json:"portrait,omitempty"`
-	Landscape *Geometry `json:"landscape,omitempty"`
-}
-
-type Padding struct {
-	Left   float64 `json:"left"`
-	Right  float64 `json:"right"`
-	Top    float64 `json:"top"`
-	Bottom float64 `json:"bottom"`
-}
-
 type DPadBindings struct {
 	Up    string `json:"up,omitempty" tstype:"'dpadUp'"`
 	Down  string `json:"down,omitempty" tstype:"'dpadDown'"`
@@ -42,29 +30,23 @@ type DPadBindings struct {
 }
 
 type Control struct {
-	ID           string                `json:"id"`
-	Type         string                `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image'"`
-	Geometry     Geometry              `json:"geometry"`
-	Label        string                `json:"label"`
-	Visible      bool                  `json:"visible"`
-	HitOnly      bool                  `json:"hitOnly,omitempty"`
-	Shape        string                `json:"shape,omitempty" tstype:"'circle' | 'pill' | 'rect'"`
-	Binding      protocol.Command      `json:"binding,omitempty"`
-	Bindings     *DPadBindings         `json:"bindings,omitempty"`
-	Orientations *OrientationOverrides `json:"orientations,omitempty"`
-	Asset        string                `json:"asset,omitempty"`
+	ID       string           `json:"id"`
+	Type     string           `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image'"`
+	Geometry Geometry         `json:"geometry"`
+	Label    string           `json:"label"`
+	Visible  bool             `json:"visible"`
+	HitOnly  bool             `json:"hitOnly,omitempty"`
+	Shape    string           `json:"shape,omitempty" tstype:"'round' | 'rect'"`
+	Binding  protocol.Command `json:"binding,omitempty"`
+	Bindings *DPadBindings    `json:"bindings,omitempty"`
+	Asset    string           `json:"asset,omitempty"`
 }
 
 type Section struct {
-	ID          string    `json:"id"`
-	AspectRatio float64   `json:"aspectRatio"`
-	MinWidth    float64   `json:"minWidth"`
-	MaxWidth    float64   `json:"maxWidth"`
-	FlexGrow    float64   `json:"flexGrow"`
-	FlexShrink  float64   `json:"flexShrink"`
-	Protected   bool      `json:"protected"`
-	Padding     Padding   `json:"padding"`
-	Controls    []Control `json:"controls"`
+	ID               string    `json:"id"`
+	RelativeWidth    float64   `json:"relativeWidth"`
+	RelativeMinWidth *float64  `json:"relativeMinWidth,omitempty"`
+	Controls         []Control `json:"controls"`
 }
 
 type Asset struct {

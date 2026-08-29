@@ -172,12 +172,8 @@ select {
 
 /* Shape invariants: the data-skin prefix guarantees these win over any skin
    rule, so geometric shape never changes with a skin. */
-html[data-skin] .controller-control[data-shape="circle"] {
+html[data-skin] .controller-control[data-shape="round"] {
   border-radius: 50%;
-}
-
-html[data-skin] .controller-control[data-shape="pill"] {
-  border-radius: 999px;
 }
 
 .control-joystick {

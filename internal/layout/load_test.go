@@ -9,15 +9,18 @@ import (
 )
 
 func baseDoc() Document {
+	minLeft := 0.65
+	minCenter := 0.38
+	minRight := 0.67
 	return Document{
 		ID: "user-layout", Name: "User Layout", SchemaVersion: 1, DefaultOrientation: "landscape",
-		Sections: []Section{{
-			ID: "section", AspectRatio: 1, MinWidth: 1, MaxWidth: 1,
-			FlexGrow: 0, FlexShrink: 0, Protected: true, Padding: Padding{},
-			Controls: []Control{{
+		Sections: []Section{
+			{ID: "left", RelativeWidth: 0.86, RelativeMinWidth: &minLeft, Controls: []Control{{
 				ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
-			}},
-		}},
+			}}},
+			{ID: "center", RelativeWidth: 0.5, RelativeMinWidth: &minCenter, Controls: []Control{}},
+			{ID: "right", RelativeWidth: 0.94, RelativeMinWidth: &minRight, Controls: []Control{}},
+		},
 		Assets: []Asset{{ID: "asset", Path: "asset.png"}},
 	}
 }
