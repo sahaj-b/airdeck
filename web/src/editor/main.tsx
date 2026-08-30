@@ -44,16 +44,17 @@ import type { AdminLayoutSummary } from '@/shared/contracts';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import { validateLayoutDetailed } from '@/shared/layout';
 import {
-  clampGeometry,
+  addHitfill,
   cloneDocument,
+  deleteControl,
   duplicateControl,
   findControl,
   isDefaultLocked,
   isDirty,
   LayoutHistory,
   moveControl,
-  nextControlId,
   type SectionId,
+  slugifyId,
 } from '@/shared/layout-editor';
 import { getSkin, initSkin } from '../skins/loader';
 import {
@@ -63,6 +64,7 @@ import {
 import { Inspector } from './components/inspector';
 import { LayoutCanvas } from './components/layout-canvas';
 import { LayoutHeader } from './components/layout-header';
+import { LayoutPicker } from './components/layout-picker';
 import { SectionsPanel } from './components/sections-panel';
 import './editor.css';
 
@@ -112,6 +114,13 @@ function EditorApp() {
   });
   const historyRef = useRef<LayoutHistory>(new LayoutHistory(50));
   const persistedRef = useRef<LayoutDocument | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Fork dialog state
+  const [forkOpen, setForkOpen] = useState(false);
+  const [forkName, setForkName] = useState('');
+  const [forkBusy, setForkBusy] = useState(false);
+  const [forkError, setForkError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -159,6 +168,8 @@ function EditorApp() {
     return layout?.builtin ?? false;
   }, [draft, layouts]);
 
+  const readOnly = currentBuiltin;
+
   const currentDefault = draft?.id === config?.defaultLayout;
 
   // Load admin state and optionally ?layout=<id>
@@ -171,17 +182,22 @@ function EditorApp() {
         setLayouts(state.layouts);
         setConfig(state.config);
         const params = new URLSearchParams(window.location.search);
+        const paramId = params.get('layout');
         const targetId =
-          params.get('layout') ||
-          state.config.defaultLayout ||
-          state.layouts[0]?.id;
-        if (!targetId) return;
-        const doc = await getAdminLayout(targetId);
-        if (cancelled) return;
-        setDraft(cloneDocument(doc as LayoutDocument));
-        setPersisted(cloneDocument(doc as LayoutDocument));
-        historyRef.current.reset(doc as LayoutDocument);
-        setDirty(false);
+          paramId || state.config.defaultLayout || state.layouts[0]?.id;
+        if (targetId) {
+          try {
+            const doc = await getAdminLayout(targetId);
+            if (cancelled) return;
+            setDraft(cloneDocument(doc as LayoutDocument));
+            setPersisted(cloneDocument(doc as LayoutDocument));
+            historyRef.current.reset(doc as LayoutDocument);
+            setDirty(false);
+          } catch {
+            if (!cancelled && paramId) setPickerOpen(true);
+          }
+        }
+        if (!paramId) setPickerOpen(true);
       } catch {
         // leave empty state for local dev without host
       }
@@ -243,18 +259,67 @@ function EditorApp() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedControlId, markDirty]);
 
-  // Draft change helper: optimistic dirty during drag, precise on commit
-  const handleDraftChange = useCallback(
-    (next: LayoutDocument, commit: boolean) => {
+  // Fork helpers ------------------------------------------------------------
+  const defaultForkName = useCallback(
+    (base: string) => {
+      let name = `${base} copy`;
+      let id = slugifyId(name);
+      let i = 2;
+      while (layouts.some((l) => l.id === id)) {
+        name = `${base} copy ${i}`;
+        id = slugifyId(name);
+        i += 1;
+      }
+      return name;
+    },
+    [layouts],
+  );
+
+  const requestFork = useCallback(() => {
+    if (!currentBuiltin) return;
+    setForkName(defaultForkName(draft?.name ?? 'Layout'));
+    setForkError(null);
+    setForkOpen(true);
+  }, [currentBuiltin, draft, defaultForkName]);
+
+  // Single mutation chokepoint. The ONLY place that reads currentBuiltin to
+  // decide whether the built-in layout is writable.
+  const applyCommit = useCallback(
+    (
+      next: LayoutDocument,
+      opts?: { live?: boolean },
+    ): LayoutDocument | null => {
+      if (currentBuiltin) {
+        return null;
+      }
       setDraft(next);
-      if (commit) {
+      if (opts?.live) {
+        markDirtyOptimistic();
+      } else {
         historyRef.current.push(next);
         markDirty(next);
-      } else {
-        markDirtyOptimistic();
       }
+      return next;
     },
-    [markDirty, markDirtyOptimistic],
+    [currentBuiltin, markDirty, markDirtyOptimistic],
+  );
+
+  const mutate = useCallback(
+    (
+      transform: (doc: LayoutDocument) => LayoutDocument,
+    ): LayoutDocument | null => {
+      if (!draft) return null;
+      return applyCommit(transform(draft));
+    },
+    [draft, applyCommit],
+  );
+
+  // Draft change helper: live during drag, precise on commit
+  const handleDraftChange = useCallback(
+    (next: LayoutDocument, commit: boolean) => {
+      applyCommit(next, { live: !commit });
+    },
+    [applyCommit],
   );
 
   const handleSelectLayout = useCallback(async (id: string) => {
@@ -268,9 +333,24 @@ function EditorApp() {
       setSelectedSectionId(null);
       setLocks({});
       setError(null);
+      const url = new URL(window.location.href);
+      url.searchParams.set('layout', id);
+      window.history.replaceState(null, '', url);
     } catch {
       setError('Failed to load layout.');
     }
+  }, []);
+
+  const handleOpenPicked = useCallback(
+    async (id: string) => {
+      setPickerOpen(false);
+      await handleSelectLayout(id);
+    },
+    [handleSelectLayout],
+  );
+
+  const handlePickerCancel = useCallback(() => {
+    setPickerOpen(false);
   }, []);
 
   const handleNewLayout = useCallback(() => {
@@ -279,7 +359,7 @@ function EditorApp() {
 
   const handleRename = useCallback(
     async (name: string) => {
-      if (!draft) return;
+      if (!draft || currentBuiltin) return;
       const next = cloneDocument(draft);
       next.name = name;
       await updateAdminLayout(next.id, next);
@@ -290,11 +370,11 @@ function EditorApp() {
       const state = await getAdminState();
       setLayouts(state.layouts);
     },
-    [draft],
+    [draft, currentBuiltin],
   );
 
   const handleDelete = useCallback(async () => {
-    if (!draft) return;
+    if (!draft || currentBuiltin) return;
     await deleteAdminLayout(draft.id);
     const state = await getAdminState();
     setLayouts(state.layouts);
@@ -307,10 +387,10 @@ function EditorApp() {
     if (fallbackId) {
       await handleSelectLayout(fallbackId);
     }
-  }, [draft, config, handleSelectLayout]);
+  }, [draft, currentBuiltin, config, handleSelectLayout]);
 
   const handleSave = useCallback(async () => {
-    if (!draft || !persisted) return;
+    if (!draft || !persisted || currentBuiltin) return;
     if (errors.length > 0) return;
     const isNew = !layouts.some((l) => l.id === draft.id);
     try {
@@ -329,7 +409,7 @@ function EditorApp() {
       const message = error instanceof Error ? error.message : 'Save failed.';
       setError(message);
     }
-  }, [draft, persisted, errors, layouts]);
+  }, [draft, persisted, errors, layouts, currentBuiltin]);
 
   const handleDiscard = useCallback(() => {
     if (!persisted) return;
@@ -385,114 +465,50 @@ function EditorApp() {
   // Control CRUD
   const handleDuplicateControl = useCallback(
     (controlId: string) => {
-      if (!draft) return;
-      const before = findControl(draft, controlId);
-      if (!before) return;
-      const next = duplicateControl(draft, controlId);
-      // find new id: the control inserted after source
-      const section = next.sections.find((s) => s.id === before.section.id);
+      const next = mutate((doc) => duplicateControl(doc, controlId));
+      if (!next) return;
+      const found = findControl(next, controlId);
+      const section = found?.section;
       const idx = section?.controls.findIndex((c) => c.id === controlId) ?? -1;
       const newControl = section?.controls[idx + 1];
-      setDraft(next);
-      historyRef.current.push(next);
-      markDirty(next);
       if (newControl) {
         setSelectedControlId(newControl.id);
         setSelectedSectionId(null);
       }
     },
-    [draft, markDirty],
+    [mutate],
   );
 
   const handleDeleteControl = useCallback(
     (controlId: string) => {
-      if (!draft) return;
-      const next = cloneDocument(draft);
-      let deletedIsParent = false;
-      for (const section of next.sections) {
-        const index = section.controls.findIndex(
-          (candidate) => candidate.id === controlId,
-        );
-        if (index >= 0) {
-          const removed = section.controls[index];
-          deletedIsParent = removed.type !== 'hitfill';
-          section.controls.splice(index, 1);
-          break;
-        }
-      }
-      // cascade: if deleted was a parent, delete its hitfills
-      if (deletedIsParent) {
-        for (const section of next.sections) {
-          section.controls = section.controls.filter(
-            (candidate) => candidate.parentId !== controlId,
-          );
-        }
-      }
-      setDraft(next);
-      historyRef.current.push(next);
-      markDirty(next);
+      const next = mutate((doc) => deleteControl(doc, controlId));
+      if (!next) return;
       if (selectedControlId === controlId) setSelectedControlId(null);
-      // if selected was a hitfill of deleted parent, also clear selection if it was removed?
-      if (draft) {
-        const stillExists = next.sections.some((s) =>
-          s.controls.some((c) => c.id === selectedControlId),
-        );
-        if (!stillExists) setSelectedControlId(null);
-      }
+      // if selected was a hitfill of deleted parent, also clear selection
+      const stillExists = next.sections.some((s) =>
+        s.controls.some((c) => c.id === selectedControlId),
+      );
+      if (!stillExists) setSelectedControlId(null);
     },
-    [draft, selectedControlId, markDirty],
+    [mutate, selectedControlId],
   );
 
   const handleAddHitfill = useCallback(
     (parentId: string) => {
-      if (!draft) return;
-      const found = findControl(draft, parentId);
-      if (!found) return;
-      if (found.control.type === 'hitfill') return;
-      const next = cloneDocument(draft);
-      const targetSection = next.sections.find(
-        (s) => s.id === found.section.id,
-      );
-      if (!targetSection) return;
-      const parentControl = targetSection.controls.find(
-        (c) => c.id === parentId,
-      );
-      if (!parentControl) return;
-      const newId = nextControlId(next);
-      const offsetPos = {
-        x: parentControl.geometry.position.x + 0.04,
-        y: parentControl.geometry.position.y + 0.04,
-      };
-      const rawGeom = {
-        position: offsetPos,
-        size: { width: 0.08, height: 0.08 },
-      };
-      const clamped = clampGeometry(rawGeom, targetSection);
-      const hitfill = {
-        id: newId,
-        type: 'hitfill' as const,
-        geometry: clamped,
-        label: '',
-        parentId,
-        shape: 'rect' as const,
-      };
-      // insert after parent for visibility
-      const parentIndex = targetSection.controls.findIndex(
-        (c) => c.id === parentId,
-      );
-      targetSection.controls.splice(
-        parentIndex + 1,
-        0,
-        hitfill as unknown as (typeof targetSection.controls)[number],
-      );
-      setDraft(next);
-      historyRef.current.push(next);
-      markDirty(next);
-      setSelectedControlId(newId);
-      setSelectedSectionId(null);
+      const next = mutate((doc) => addHitfill(doc, parentId) ?? doc);
+      if (!next) return;
+      const found = findControl(next, parentId);
+      const section = found?.section;
+      const idx = section?.controls.findIndex((c) => c.id === parentId) ?? -1;
+      const newControl = section?.controls[idx + 1];
+      if (newControl) {
+        setSelectedControlId(newControl.id);
+        setSelectedSectionId(null);
+      }
     },
-    [draft, markDirty],
+    [mutate],
   );
+
   const deleteControlRef = useRef(handleDeleteControl);
   useEffect(() => {
     deleteControlRef.current = handleDeleteControl;
@@ -500,49 +516,43 @@ function EditorApp() {
 
   const handleMoveControl = useCallback(
     (controlId: string, direction: 'up' | 'down') => {
-      if (!draft) return;
-      const found = findControl(draft, controlId);
-      if (!found) return;
-      const fromIndex = found.section.controls.findIndex(
-        (c) => c.id === controlId,
-      );
-      const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
-      if (toIndex < 0 || toIndex >= found.section.controls.length) return;
-      const next = moveControl(draft, found.section.id, fromIndex, toIndex);
-      setDraft(next);
-      historyRef.current.push(next);
-      markDirty(next);
+      mutate((doc) => {
+        const found = findControl(doc, controlId);
+        if (!found) return doc;
+        const fromIndex = found.section.controls.findIndex(
+          (c) => c.id === controlId,
+        );
+        const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+        if (toIndex < 0 || toIndex >= found.section.controls.length) {
+          return doc;
+        }
+        return moveControl(doc, found.section.id, fromIndex, toIndex);
+      });
     },
-    [draft, markDirty],
+    [mutate],
   );
 
   const handleReorderControl = useCallback(
     (sectionId: string, fromIndex: number, toIndex: number) => {
-      if (!draft) return;
-      const next = moveControl(draft, sectionId, fromIndex, toIndex);
-      if (next === draft) return;
-      setDraft(next);
-      historyRef.current.push(next);
-      markDirty(next);
+      mutate((doc) => moveControl(doc, sectionId, fromIndex, toIndex));
     },
-    [draft, markDirty],
+    [mutate],
   );
 
   const handleAddControl = useCallback(
     (result: AddControlResult) => {
-      if (!draft) return;
-      const next = cloneDocument(draft);
-      const section = next.sections.find((s) => s.id === result.sectionId);
-      if (!section) return;
-      section.controls.push(result.control);
-      setDraft(next);
-      historyRef.current.push(next);
-      markDirty(next);
+      const next = mutate((doc) => {
+        const section = doc.sections.find((s) => s.id === result.sectionId);
+        if (!section) return doc;
+        section.controls.push(result.control);
+        return doc;
+      });
+      if (!next) return;
       setSelectedControlId(result.control.id);
       setSelectedSectionId(null);
       setAddDialogSection(null);
     },
-    [draft, markDirty],
+    [mutate],
   );
 
   // Lock/Detach toggles
@@ -562,20 +572,12 @@ function EditorApp() {
     [draft],
   );
 
-  // New Layout dialog
-  const [newLayoutName, setNewLayoutName] = useState('');
-  const [newLayoutBase, setNewLayoutBase] = useState('blank');
-  const [newLayoutError, setNewLayoutError] = useState<string | null>(null);
-
-  const handleCreateNew = useCallback(
+  // Create + select a layout (shared by New layout and fork dialogs)
+  const createAndSelectLayout = useCallback(
     async (name: string, baseId: string | null) => {
-      if (!name.trim()) return;
-      const id = name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, '-');
+      const id = slugifyId(name);
       let doc: LayoutDocument;
-      if (baseId && baseId !== 'blank') {
+      if (baseId) {
         const base = await getAdminLayout(baseId);
         doc = cloneDocument(base as LayoutDocument);
         doc.id = id;
@@ -594,22 +596,50 @@ function EditorApp() {
           assets: [],
         };
       }
-      try {
-        await createAdminLayout(doc);
-        setNewLayoutDialogOpen(false);
-        setNewLayoutName('');
-        setNewLayoutError(null);
-        const state = await getAdminState();
-        setLayouts(state.layouts);
-        // Select the new layout
-        await handleSelectLayout(id);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Creation failed.';
-        setNewLayoutError(message);
-      }
+      await createAdminLayout(doc);
+      const state = await getAdminState();
+      setLayouts(state.layouts);
+      await handleSelectLayout(id);
     },
     [handleSelectLayout],
+  );
+
+  const handleForkConfirm = useCallback(async () => {
+    if (!draft || !forkName.trim()) return;
+    setForkBusy(true);
+    setForkError(null);
+    try {
+      await createAndSelectLayout(forkName, draft.id);
+      setForkOpen(false);
+    } catch (error) {
+      setForkError(
+        error instanceof Error ? error.message : 'Failed to duplicate layout.',
+      );
+    } finally {
+      setForkBusy(false);
+    }
+  }, [draft, forkName, createAndSelectLayout]);
+
+  // New Layout dialog
+  const [newLayoutName, setNewLayoutName] = useState('');
+  const [newLayoutBase, setNewLayoutBase] = useState('blank');
+  const [newLayoutError, setNewLayoutError] = useState<string | null>(null);
+
+  const handleCreateNew = useCallback(
+    async (name: string, baseId: string | null) => {
+      if (!name.trim()) return;
+      setNewLayoutError(null);
+      try {
+        await createAndSelectLayout(name, baseId);
+        setNewLayoutDialogOpen(false);
+        setNewLayoutName('');
+      } catch (error) {
+        setNewLayoutError(
+          error instanceof Error ? error.message : 'Creation failed.',
+        );
+      }
+    },
+    [createAndSelectLayout],
   );
 
   if (!draft) {
@@ -621,7 +651,7 @@ function EditorApp() {
   }
 
   const shellClass = [
-    'grid min-h-dvh min-w-0 overflow-hidden bg-background text-foreground transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
+    'grid h-dvh min-w-0 overflow-hidden bg-background text-foreground transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
     'grid-rows-[auto_minmax(0,1fr)]',
     leftCollapsed && rightCollapsed
       ? 'grid-cols-[36px_minmax(0,1fr)_36px] max-lg:grid-cols-1'
@@ -637,49 +667,67 @@ function EditorApp() {
   return (
     <TooltipProvider delay={100}>
       <div className={shellClass}>
-        <div className="col-span-full border-b border-border bg-background px-4 py-3 max-lg:col-span-1">
-          <LayoutHeader
-            layouts={layouts}
-            currentId={draft.id}
-            currentName={draft.name}
-            isBuiltin={currentBuiltin}
-            isDefault={currentDefault}
-            dirty={dirty}
-            canUndo={historyRef.current.canUndo}
-            canRedo={historyRef.current.canRedo}
-            hasErrors={errors.length > 0}
-            onSelectLayout={handleSelectLayout}
-            onNewLayout={handleNewLayout}
-            onRename={handleRename}
-            onDelete={handleDelete}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            onDiscard={handleDiscard}
-            onSave={handleSave}
-            onBack={handleBack}
-          />
-        </div>
-        {error && (
-          <div
-            className="col-span-full flex items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-            role="alert"
-          >
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              className="shrink-0 rounded px-2 py-0.5 text-xs hover:bg-destructive/10"
-              aria-label="Dismiss error"
-            >
-              ✕
-            </button>
+        <div className="col-span-full flex flex-col">
+          <div className="border-b border-border bg-background px-4 py-3 max-lg:col-span-1">
+            <LayoutHeader
+              layouts={layouts}
+              currentId={draft.id}
+              currentName={draft.name}
+              isBuiltin={currentBuiltin}
+              isDefault={currentDefault}
+              dirty={dirty}
+              canUndo={historyRef.current.canUndo}
+              canRedo={historyRef.current.canRedo}
+              hasErrors={errors.length > 0}
+              onSelectLayout={handleSelectLayout}
+              onNewLayout={handleNewLayout}
+              onRename={handleRename}
+              onDelete={handleDelete}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onDiscard={handleDiscard}
+              onSave={handleSave}
+              onBack={handleBack}
+              onDuplicate={requestFork}
+            />
           </div>
-        )}
+          {error && (
+            <div
+              className="mx-4 my-3 flex items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="shrink-0 rounded px-2 py-0.5 text-xs hover:bg-destructive/10 hover:cursor-pointer"
+                aria-label="Dismiss error"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {readOnly && (
+            <div className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+              <span>
+                Built-in layout · Read-only. Duplicate to make changes.
+              </span>
+              <button
+                type="button"
+                onClick={requestFork}
+                className="shrink-0 rounded bg-amber-500/20 px-2.5 py-1 text-xs font-medium hover:bg-amber-500/30 hover:cursor-pointer"
+              >
+                Duplicate to edit
+              </button>
+            </div>
+          )}
+        </div>
 
         <div
           className={
             leftCollapsed
-              ? 'relative flex min-h-[320px] items-center justify-center overflow-hidden border-r border-border bg-muted max-lg:min-h-9 max-lg:h-9'
+              ? 'relative flex min-h-[320px] items-center justify-center overflow-hidden border-r border-border bg-card max-lg:min-h-9 max-lg:h-9'
               : 'relative flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-background max-lg:border-r-0 max-lg:border-b h-full'
           }
         >
@@ -690,7 +738,7 @@ function EditorApp() {
                   render={
                     <button
                       type="button"
-                      className="flex size-full min-h-[200px] items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground max-lg:min-h-9 max-lg:h-9 cursor-pointer"
+                      className="flex size-full min-h-[200px] items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground hover:bg-accent/40 hover:text-foreground max-lg:min-h-9 max-lg:h-9 cursor-pointer"
                       onClick={() => setLeftCollapsed(false)}
                       aria-label="Expand sections"
                     >
@@ -753,7 +801,7 @@ function EditorApp() {
         <div
           className={
             rightCollapsed
-              ? 'relative flex min-h-[320px] items-center justify-center overflow-hidden border-l border-border bg-muted max-lg:min-h-9 max-lg:h-9 max-lg:border-l-0 max-lg:border-t'
+              ? 'relative flex min-h-[320px] items-center justify-center overflow-hidden border-l border-border bg-card max-lg:min-h-9 max-lg:h-9 max-lg:border-l-0 max-lg:border-t'
               : 'relative flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-border bg-background max-lg:border-l-0 max-lg:border-t h-full'
           }
         >
@@ -764,7 +812,7 @@ function EditorApp() {
                   render={
                     <button
                       type="button"
-                      className="flex size-full min-h-[200px] items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground max-lg:min-h-9 max-lg:h-9 cursor-pointer"
+                      className="flex size-full min-h-[200px] items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground hover:bg-accent/40 hover:text-foreground max-lg:min-h-9 max-lg:h-9 cursor-pointer"
                       onClick={() => setRightCollapsed(false)}
                       aria-label="Expand inspector"
                     >
@@ -804,6 +852,63 @@ function EditorApp() {
           />
         )}
 
+        {pickerOpen && (
+          <LayoutPicker
+            layouts={layouts}
+            defaultId={config?.defaultLayout ?? draft.id}
+            onOpen={(id) => void handleOpenPicked(id)}
+            onCancel={handlePickerCancel}
+          />
+        )}
+
+        {/* Fork dialog */}
+        <Dialog open={forkOpen} onOpenChange={setForkOpen}>
+          <DialogContent>
+            <DialogTitle>Duplicate built-in layout</DialogTitle>
+            <DialogDescription>
+              {draft.name} is built-in and can't be edited. Make a copy to save
+              your changes.
+            </DialogDescription>
+            {forkError && (
+              <p className="rounded border border-destructive/20 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                {forkError}
+              </p>
+            )}
+            <div className="space-y-2 py-2">
+              <div>
+                <Label htmlFor="fork-name">Name</Label>
+                <Input
+                  id="fork-name"
+                  value={forkName}
+                  onChange={(event) => setForkName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void handleForkConfirm();
+                  }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                ID: <span className="font-mono">{slugifyId(forkName)}</span>
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <DialogClose
+                render={
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                }
+              />
+              <Button
+                type="button"
+                disabled={!forkName.trim() || forkBusy}
+                onClick={() => void handleForkConfirm()}
+              >
+                Duplicate &amp; edit
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* New Layout dialog */}
         <Dialog
           open={newLayoutDialogOpen}
@@ -828,7 +933,10 @@ function EditorApp() {
                   onChange={(event) => setNewLayoutName(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter')
-                      void handleCreateNew(newLayoutName, newLayoutBase);
+                      void handleCreateNew(
+                        newLayoutName,
+                        newLayoutBase === 'blank' ? null : newLayoutBase,
+                      );
                   }}
                 />
               </div>
@@ -866,7 +974,10 @@ function EditorApp() {
                 type="button"
                 disabled={!newLayoutName.trim()}
                 onClick={() =>
-                  void handleCreateNew(newLayoutName, newLayoutBase)
+                  void handleCreateNew(
+                    newLayoutName,
+                    newLayoutBase === 'blank' ? null : newLayoutBase,
+                  )
                 }
               >
                 Create

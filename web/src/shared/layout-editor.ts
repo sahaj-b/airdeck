@@ -485,6 +485,80 @@ export function moveControl(
   return next;
 }
 
+export function deleteControl(
+  document: LayoutDocument,
+  controlId: string,
+): LayoutDocument {
+  const next = cloneDocument(document);
+  let deletedIsParent = false;
+  for (const section of next.sections) {
+    const index = section.controls.findIndex(
+      (candidate) => candidate.id === controlId,
+    );
+    if (index >= 0) {
+      const removed = section.controls[index];
+      deletedIsParent = removed.type !== 'hitfill';
+      section.controls.splice(index, 1);
+      break;
+    }
+  }
+  // cascade: if the deleted control was a parent, remove its hitfills
+  if (deletedIsParent) {
+    for (const section of next.sections) {
+      section.controls = section.controls.filter(
+        (candidate) => candidate.parentId !== controlId,
+      );
+    }
+  }
+  return next;
+}
+
+export function slugifyId(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-');
+}
+
+export function addHitfill(
+  document: LayoutDocument,
+  parentId: string,
+): LayoutDocument | null {
+  const found = findControl(document, parentId);
+  if (!found || found.control.type === 'hitfill') return null;
+  const next = cloneDocument(document);
+  const targetSection = next.sections.find((s) => s.id === found.section.id);
+  const parent = targetSection?.controls.find((c) => c.id === parentId);
+  if (!targetSection || !parent) return null;
+  const newId = nextControlId(next);
+  const hitfill: Control = {
+    id: newId,
+    type: 'hitfill',
+    geometry: clampGeometry(
+      {
+        position: {
+          x: parent.geometry.position.x + 0.04,
+          y: parent.geometry.position.y + 0.04,
+        },
+        size: { width: 0.08, height: 0.08 },
+      },
+      targetSection,
+    ),
+    label: '',
+    parentId,
+    shape: 'rect',
+  };
+  const parentIndex = targetSection.controls.findIndex(
+    (c) => c.id === parentId,
+  );
+  targetSection.controls.splice(
+    parentIndex + 1,
+    0,
+    hitfill as unknown as (typeof targetSection.controls)[number],
+  );
+  return next;
+}
+
 export function isDirty(
   draft: LayoutDocument,
   persisted: LayoutDocument,

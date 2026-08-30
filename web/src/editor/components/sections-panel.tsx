@@ -11,7 +11,7 @@ import type {
   Control,
   Document as LayoutDocument,
 } from '@/shared/generated/layout';
-import { findControl, getHitfillsOf } from '@/shared/layout-editor';
+import { getHitfillsOf } from '@/shared/layout-editor';
 
 export interface SectionsPanelProps {
   document: LayoutDocument;
@@ -425,7 +425,7 @@ function ControlRow({
       data-control-row
       data-index={index}
       className={cn(
-        'group relative flex items-center gap-1 p-1 px-1 border-b border-[color-mix(in_oklch,var(--border)_60%,transparent)] bg-[color-mix(in_oklch,var(--card)_68%,var(--background)_32%)] last:border-b-0',
+        'group relative flex items-center gap-1 px-1 border-b border-[color-mix(in_oklch,var(--border)_60%,transparent)] bg-[color-mix(in_oklch,var(--card)_68%,var(--background)_32%)] last:border-b-0',
         isDragging && 'opacity-50',
       )}
       onMouseEnter={() => onHover?.(control.id)}
@@ -460,7 +460,7 @@ function ControlRow({
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex h-7 min-w-0 flex-1 items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2 text-left text-[13px] font-normal cursor-pointer transition-colors',
+          'flex h-8 min-w-0 flex-1 items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2 text-left text-[13px] font-normal cursor-pointer transition-colors',
           selected
             ? 'bg-accent text-accent-foreground font-medium border border-border'
             : isPeer && !selected
@@ -472,18 +472,22 @@ function ControlRow({
                   : 'bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground',
         )}
       >
-        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+        <span className="min-w-0 flex-1 flex items-center overflow-hidden text-left">
           {isHitfill ? (
             <>
-              <span>Hitfill</span>
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                Hitfill
+              </span>
               {parentHint && (
-                <span className="ml-1 text-[11px] text-muted-foreground">
+                <span className="ml-1 shrink-0 text-[11px] leading-none text-muted-foreground">
                   → {parentHint}
                 </span>
               )}
             </>
           ) : (
-            control.label || control.id
+            <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+              {control.label || control.id}
+            </span>
           )}
         </span>
       </button>

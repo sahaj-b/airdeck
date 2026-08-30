@@ -73,17 +73,17 @@ export function QRCard({ state }: QRCardProps) {
         <CardTitle className="text-lg">Scan to join</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid items-center gap-6 md:grid-cols-[256px_1fr]">
+        <div className="grid items-center gap-6 md:grid-cols-[320px_1fr]">
           <button
             type="button"
             onClick={() => setZoomed(true)}
             aria-label="Show the join QR code fullscreen"
             aria-expanded={zoomed}
-            className="mx-auto grid aspect-square w-full max-w-[256px] place-items-center rounded-xl border bg-white p-2 transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none hover:ring-2 hover:ring-ring/60 md:mx-0"
+            className="mx-auto grid aspect-square w-full max-w-[320px] place-items-center rounded-xl border bg-white p-3 transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none hover:ring-2 hover:ring-ring/60 md:mx-0"
           >
             <QRCodeSVG
               value={advertisedJoinURL}
-              size={240}
+              size={300}
               marginSize={1}
               level="M"
               bgColor="#ffffff"

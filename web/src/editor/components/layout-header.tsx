@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Copy,
   Pencil,
   Plus,
   Redo2,
@@ -59,6 +60,7 @@ export interface LayoutHeaderProps {
   onDiscard: () => void;
   onSave: () => Promise<void>;
   onBack: () => void;
+  onDuplicate: () => void;
 }
 
 export function LayoutHeader(props: LayoutHeaderProps) {
@@ -108,7 +110,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
             render={
               <button
                 type="button"
-                className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground hover:cursor-pointer"
                 onClick={props.onBack}
                 aria-label="Back to dashboard"
               >
@@ -284,34 +286,56 @@ export function LayoutHeader(props: LayoutHeaderProps) {
           />
           <TooltipContent side="bottom">Discard unsaved changes</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger>
-            <span className="inline-flex">
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className="header-btn-compact gap-1.5 shadow-sm"
-                disabled={
-                  !props.dirty || props.hasErrors || persistenceDisabled
-                }
-                onClick={() => void props.onSave()}
-              >
-                <Save className="size-3.5" />
-                <span className="header-btn-text">Save</span>
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {props.hasErrors
-              ? 'Fix validation errors before saving'
-              : persistenceDisabled
-                ? 'Built-in layouts are read-only — use New layout to clone'
-                : !props.dirty
-                  ? 'No changes to save'
-                  : 'Save this layout'}
-          </TooltipContent>
-        </Tooltip>
+        {props.isBuiltin ? (
+          <Tooltip>
+            <TooltipTrigger>
+              <span className="inline-flex">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="header-btn-compact gap-1.5 shadow-sm"
+                  onClick={props.onDuplicate}
+                >
+                  <Copy className="size-3.5" />
+                  <span className="header-btn-text">Duplicate to edit</span>
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Make an editable copy of this built-in layout
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger>
+              <span className="inline-flex">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="header-btn-compact gap-1.5 shadow-sm"
+                  disabled={
+                    !props.dirty || props.hasErrors || persistenceDisabled
+                  }
+                  onClick={() => void props.onSave()}
+                >
+                  <Save className="size-3.5" />
+                  <span className="header-btn-text">Save</span>
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {props.hasErrors
+                ? 'Fix validation errors before saving'
+                : persistenceDisabled
+                  ? 'Built-in layouts are read-only — use New layout to clone'
+                  : !props.dirty
+                    ? 'No changes to save'
+                    : 'Save this layout'}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

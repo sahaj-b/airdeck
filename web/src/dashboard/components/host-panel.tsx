@@ -120,8 +120,21 @@ export function HostPanel({
     onSave({ defaultLayout: value });
   }
 
+  function handleGraceCommit(): void {
+    onSave({ gracePeriodSeconds });
+  }
+
   return (
     <div className="space-y-4">
+      <LayoutCard
+        defaultLayout={defaultLayout}
+        layouts={state.layouts}
+        playerCount={state.players.length}
+        onLayoutChange={handleDefaultLayoutChange}
+        onApplyLayoutToAll={onApplyLayoutToAll}
+        onReloadLayouts={onReloadLayouts}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Settings</CardTitle>
@@ -129,13 +142,10 @@ export function HostPanel({
         <CardContent className="space-y-6">
           <GeneralSection
             acceptingJoins={state.acceptingJoins}
-            defaultLayout={defaultLayout}
-            layouts={state.layouts}
-            playerCount={state.players.length}
+            gracePeriodSeconds={gracePeriodSeconds}
             onJoinsChange={onJoinsChange}
-            onLayoutChange={handleDefaultLayoutChange}
-            onApplyLayoutToAll={onApplyLayoutToAll}
-            onReloadLayouts={onReloadLayouts}
+            onGraceChange={setGracePeriodSeconds}
+            onGraceCommit={handleGraceCommit}
           />
 
           <Separator />
@@ -146,7 +156,6 @@ export function HostPanel({
             advertisedHostSelect={advertisedHostSelect}
             customHost={customHost}
             advertisedPort={advertisedPort}
-            gracePeriodSeconds={gracePeriodSeconds}
             advertisedCandidates={state.advertisedCandidates}
             autoLabel={autoLabel}
             onBindChange={setBind}
@@ -167,7 +176,6 @@ export function HostPanel({
               advertisedHostRef.current = v.trim();
             }}
             onAdvertisedPortChange={setAdvertisedPort}
-            onGraceChange={setGracePeriodSeconds}
             onSave={save}
           />
         </CardContent>
@@ -190,24 +198,98 @@ export function HostPanel({
   );
 }
 
-function GeneralSection({
-  acceptingJoins,
+function LayoutCard({
   defaultLayout,
   layouts,
   playerCount,
-  onJoinsChange,
   onLayoutChange,
   onApplyLayoutToAll,
   onReloadLayouts,
 }: {
-  acceptingJoins: boolean;
   defaultLayout: string;
   layouts: AdminState['layouts'];
   playerCount: number;
-  onJoinsChange: (v: boolean) => void;
   onLayoutChange: (v: string | null) => void;
   onApplyLayoutToAll: (id: string) => void;
   onReloadLayouts: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Layout</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Label htmlFor="default-layout" className="shrink-0 text-sm">
+              Default
+            </Label>
+            <Select value={defaultLayout} onValueChange={onLayoutChange}>
+              <SelectTrigger id="default-layout" className="ml-auto w-[200px]">
+                <SelectValue placeholder="Select layout" />
+              </SelectTrigger>
+              <SelectContent>
+                {layouts.map((layout) => (
+                  <SelectItem key={layout.id} value={layout.id}>
+                    {layout.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            New phones join with this.
+          </p>
+        </div>
+        {playerCount > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onApplyLayoutToAll(defaultLayout)}
+            className="w-full justify-center"
+          >
+            {playerCount === 1
+              ? 'Apply to 1 player'
+              : `Apply to all ${playerCount} players`}
+          </Button>
+        )}
+        <div className="flex gap-2">
+          <a
+            href="/editor"
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'flex-1 justify-center gap-1.5',
+            )}
+          >
+            <Pencil className="size-3.5" />
+            Edit layouts
+          </a>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onReloadLayouts}
+            className="flex-1 justify-center"
+          >
+            Reload layouts
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GeneralSection({
+  acceptingJoins,
+  gracePeriodSeconds,
+  onJoinsChange,
+  onGraceChange,
+  onGraceCommit,
+}: {
+  acceptingJoins: boolean;
+  gracePeriodSeconds: number;
+  onJoinsChange: (v: boolean) => void;
+  onGraceChange: (v: number) => void;
+  onGraceCommit: () => void;
 }) {
   return (
     <section className="space-y-3">
@@ -232,57 +314,31 @@ function GeneralSection({
 
       <div className="space-y-1">
         <div className="flex items-center gap-3">
-          <Label htmlFor="default-layout-top" className="shrink-0 text-sm">
-            Layout
+          <Label htmlFor="grace-period" className="shrink-0 text-sm">
+            Grace period
           </Label>
-          <Select value={defaultLayout} onValueChange={onLayoutChange}>
-            <SelectTrigger
-              id="default-layout-top"
-              className="ml-auto w-[200px]"
-            >
-              <SelectValue placeholder="Select layout" />
-            </SelectTrigger>
-            <SelectContent>
-              {layouts.map((layout) => (
-                <SelectItem key={layout.id} value={layout.id}>
-                  {layout.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="ml-auto flex w-[200px] items-center gap-1.5">
+            <Input
+              id="grace-period"
+              type="number"
+              min={1}
+              max={60}
+              value={String(gracePeriodSeconds)}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v))
+                  onGraceChange(Math.min(60, Math.max(1, v)));
+              }}
+              onBlur={onGraceCommit}
+              className="flex-1 tabular-nums"
+            />
+            <span className="text-xs text-muted-foreground">s</span>
+          </div>
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          New phones join with this. Existing players keep theirs.
+          How long to keep a disconnected slot reserved.
         </p>
       </div>
-      {playerCount > 0 && (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onApplyLayoutToAll(defaultLayout)}
-          className="w-full justify-center"
-        >
-          Apply to all {playerCount} players
-        </Button>
-      )}
-      <a
-        href="/editor"
-        className={cn(
-          buttonVariants({ variant: 'outline', size: 'default' }),
-          'w-full justify-center gap-1.5',
-        )}
-      >
-        <Pencil className="size-3.5" />
-        Edit layouts
-      </a>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onReloadLayouts}
-        className="w-full justify-center"
-      >
-        Reload layouts
-      </Button>
     </section>
   );
 }
@@ -293,7 +349,6 @@ function NetworkSection({
   advertisedHostSelect,
   customHost,
   advertisedPort,
-  gracePeriodSeconds,
   advertisedCandidates,
   autoLabel,
   onBindChange,
@@ -301,7 +356,6 @@ function NetworkSection({
   onHostSelectChange,
   onCustomHostChange,
   onAdvertisedPortChange,
-  onGraceChange,
   onSave,
 }: {
   bind: string;
@@ -309,7 +363,6 @@ function NetworkSection({
   advertisedHostSelect: string;
   customHost: string;
   advertisedPort: string;
-  gracePeriodSeconds: number;
   advertisedCandidates: string[];
   autoLabel: string;
   onBindChange: (v: string) => void;
@@ -317,7 +370,6 @@ function NetworkSection({
   onHostSelectChange: (v: string | null) => void;
   onCustomHostChange: (v: string) => void;
   onAdvertisedPortChange: (v: string) => void;
-  onGraceChange: (v: number) => void;
   onSave: (e: React.FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -419,33 +471,6 @@ function NetworkSection({
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
             0 = use listening port.
-          </p>
-        </div>
-
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <Label htmlFor="grace-period" className="shrink-0 text-sm">
-              Grace period
-            </Label>
-            <div className="ml-auto flex w-[200px] items-center gap-1.5">
-              <Input
-                id="grace-period"
-                type="number"
-                min={1}
-                max={60}
-                value={String(gracePeriodSeconds)}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  if (Number.isFinite(v))
-                    onGraceChange(Math.min(60, Math.max(1, v)));
-                }}
-                className="flex-1 tabular-nums"
-              />
-              <span className="text-xs text-muted-foreground">s</span>
-            </div>
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            How long to keep a disconnected slot reserved.
           </p>
         </div>
 
