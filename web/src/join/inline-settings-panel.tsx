@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -48,6 +51,8 @@ export function InlineSettingsPanel({
   const gyroTarget = useStore(store, (s) => s.gyroTarget);
   const gyroMode = useStore(store, (s) => s.gyroMode);
   const [skin, setSkinLocal] = useState(() => getSkin());
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => {
     const unsub = store.subscribe((state) => {
@@ -66,6 +71,8 @@ export function InlineSettingsPanel({
   };
 
   const hapticsAvailable = feedback.hapticsAvailable;
+  const personalLayouts = opts.personalLayouts ?? [];
+  const hostLayouts = opts.layouts;
 
   return (
     <div className="space-y-5 min-w-0 max-w-full overflow-x-hidden">
@@ -82,14 +89,144 @@ export function InlineSettingsPanel({
             <SelectValue placeholder="Select layout" />
           </SelectTrigger>
           <SelectContent>
-            {opts.layouts.map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.name}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectLabel>Host layouts</SelectLabel>
+              {hostLayouts.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            {personalLayouts.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>My edits</SelectLabel>
+                {personalLayouts.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
           </SelectContent>
         </Select>
+        {personalLayouts.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            {personalLayouts.map((pl) => (
+              <div
+                key={pl.id}
+                className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1.5"
+              >
+                <span className="flex-1 truncate text-xs">{pl.name}</span>
+                {renameId === pl.id ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      className="h-6 w-24 text-xs"
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          opts.onRenamePersonal?.(pl.id, renameValue);
+                          setRenameId(null);
+                        }
+                        if (e.key === 'Escape') setRenameId(null);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => {
+                        opts.onRenamePersonal?.(pl.id, renameValue);
+                        setRenameId(null);
+                      }}
+                    >
+                      Ok
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setRenameId(null)}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-xs"
+                      onClick={() => opts.onEditPersonal?.(pl.id)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-xs"
+                      onClick={() => {
+                        setRenameId(pl.id);
+                        setRenameValue(pl.name);
+                      }}
+                    >
+                      Rename
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-xs"
+                      onClick={() => opts.onPublishPersonal?.(pl.id)}
+                      disabled={!!opts.publishState}
+                    >
+                      Publish
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-xs"
+                      aria-label="Delete"
+                      onClick={() => {
+                        if (window.confirm(`Delete "${pl.name}"?`))
+                          opts.onDeletePersonal?.(pl.id);
+                      }}
+                    >
+                      🗑️
+                    </Button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => opts.onEditPersonal?.('__new_from_current')}
+        >
+          Edit current layout
+        </Button>
       </div>
+      {opts.publishState && (
+        <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+          <p className="font-medium">
+            Publishing &apos;{opts.publishState.name}&apos; — waiting for host
+            approval... {opts.publishState.remaining}s
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => opts.onCancelPublish?.()}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="space-y-2">
         <Label>Skin</Label>
         <Select value={skin} onValueChange={(v) => v && handleSkinChange(v)}>

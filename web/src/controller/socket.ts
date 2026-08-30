@@ -2,6 +2,7 @@ import type {
   Capabilities,
   ErrorMessage,
   LayoutMessage,
+  PublishResult,
   Rumble,
   ServerMessage,
   Welcome,
@@ -48,6 +49,7 @@ export interface ControllerSocketOptions {
   onError?: (error: ErrorMessage) => void;
   onRumble?: (rumble: Rumble) => void;
   onPing?: (rttMs: number) => void;
+  onPublishResult?: (result: PublishResult) => void;
   onReconnect?: () => void;
   onClose?: () => void;
 }
@@ -175,6 +177,29 @@ export class ControllerSocket {
     }
     if (!isRecord(parsed) || typeof parsed.type !== 'string') {
       this.reportError('invalid_message', 'The host sent an invalid message.');
+      return;
+    }
+    // handle publish.result before ServerMessage narrowing (it is not in the hand-written ServerMessage union)
+    if (isRecord(parsed) && parsed.type === 'publish.result') {
+      const result = parsed as unknown as PublishResult;
+      const validStatus = new Set([
+        'accepted',
+        'declined',
+        'expired',
+        'cancelled',
+      ]);
+      if (
+        typeof result.id === 'string' &&
+        typeof result.status === 'string' &&
+        validStatus.has(result.status)
+      ) {
+        this.options.onPublishResult?.(result);
+      } else {
+        this.reportError(
+          'invalid_message',
+          'The host sent an invalid publish result.',
+        );
+      }
       return;
     }
     const message = parsed as ServerMessage;

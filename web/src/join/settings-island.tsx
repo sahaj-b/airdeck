@@ -23,6 +23,13 @@ export interface MountOptions {
   gyroStatus?: GyroStatus;
   gyroLiveX?: number;
   gyroLiveY?: number;
+  personalLayouts?: { id: string; name: string }[];
+  publishState?: { id: string; name: string; remaining: number } | null;
+  onEditPersonal?: (id: string) => void;
+  onDeletePersonal?: (id: string) => void;
+  onRenamePersonal?: (id: string, newName: string) => void;
+  onPublishPersonal?: (id: string) => void;
+  onCancelPublish?: () => void;
 }
 
 export interface SettingsIsland {

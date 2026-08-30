@@ -13,6 +13,8 @@ import { ControllerSocket, SELECTED_LAYOUT_KEY } from '../controller/socket';
 import { InputStateStore } from '../controller/state';
 import { bindTap } from '../controller/tap';
 import type { Welcome } from '../shared/contracts';
+import type { LayoutDocument } from '../shared/layout';
+import { DEFAULT_LAYOUT, validateLayout } from '../shared/layout';
 import { getSkin, initSkin, setSkin } from '../skins/loader';
 import './join.css';
 import {
@@ -30,6 +32,11 @@ import {
   textField,
   updateCapabilityMessage,
 } from './dom-helpers';
+import {
+  deletePersonalLayout,
+  loadPersonalLayouts,
+  renamePersonalLayout,
+} from './personal-layouts';
 import { settingsStore } from './settings-store';
 import {
   getSessionCode,
@@ -415,13 +422,233 @@ function showController(options: {
 
   let availableLayouts: { id: string; name: string }[] = [];
   let currentLayoutId = '';
+  let currentLayoutDoc: LayoutDocument = DEFAULT_LAYOUT;
+  let playerId = '';
   let connectionText = CONNECTION_LABELS.connecting;
   let pingText = '—';
   let island: import('./settings-island').SettingsIsland | undefined;
   let islandLoading = false;
+  let phoneEditorActive = false;
+  let publishState: { id: string; name: string; remaining: number } | null =
+    null;
+  let publishTimer: number | undefined;
+  let pendingPublishId: string | null = null;
 
   const capabilityMessages = options.capabilities.currentStatus.messages;
   const capabilityNotes = capabilityMessages.join(' ');
+
+  const getPersonalList = (): { id: string; name: string }[] =>
+    Object.values(loadPersonalLayouts()).map((d) => ({
+      id: d.id,
+      name: d.name,
+    }));
+
+  const isPersonalLayout = (id: string): boolean => {
+    try {
+      return !!loadPersonalLayouts()[id];
+    } catch {
+      return false;
+    }
+  };
+
+  const renderLocalLayout = (doc: LayoutDocument) => {
+    activeRenderer?.destroy();
+    activeRenderer = renderLayout(host, doc, { state, feedback, chrome });
+    currentLayoutDoc = doc;
+    currentLayoutId = doc.id;
+    writeStorage(SELECTED_LAYOUT_KEY, doc.id);
+    syncGyroLock();
+    if (island && !island.isDestroyed())
+      island.update({
+        selectedLayout: currentLayoutId,
+        layouts: availableLayouts,
+        personalLayouts: getPersonalList(),
+      });
+  };
+
+  const clearPublishTimer = () => {
+    if (publishTimer !== undefined) {
+      window.clearInterval(publishTimer);
+      publishTimer = undefined;
+    }
+  };
+
+  const setPublishState = (next: typeof publishState) => {
+    publishState = next;
+    if (island && !island.isDestroyed()) island.update({ publishState });
+  };
+
+  const startPublishCountdown = (id: string, docName: string) => {
+    let remaining = 60;
+    setPublishState({ id, name: docName, remaining });
+    clearPublishTimer();
+    publishTimer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearPublishTimer();
+        setPublishState(null);
+        pendingPublishId = null;
+        return;
+      }
+      if (publishState) setPublishState({ ...publishState, remaining });
+    }, 1000);
+  };
+
+  const handleSelectLayout = (id: string) => {
+    if (!id || id === currentLayoutId) return;
+    if (isPersonalLayout(id)) {
+      const doc = loadPersonalLayouts()[id];
+      if (doc && validateLayout(doc)) {
+        renderLocalLayout(doc);
+        updateStatus('Controller ready.');
+      }
+      return;
+    }
+    if (socket.selectLayout(id)) updateStatus('Loading layout...');
+  };
+
+  const handleEditPersonal = async (editId: string) => {
+    let docToEdit: LayoutDocument | undefined;
+    if (editId === '__new_from_current') {
+      docToEdit = currentLayoutDoc;
+    } else {
+      docToEdit = loadPersonalLayouts()[editId];
+      if (!docToEdit) docToEdit = currentLayoutDoc;
+    }
+    // Close settings drawer while editing to avoid overlapping overlays
+    if (island && !island.isDestroyed()) {
+      island.unmount();
+    }
+    phoneEditorActive = true;
+    try {
+      const { mountPhoneEditor } = await import('./phone-editor-island');
+      // Ensure sender exists
+      const sender = activeSender;
+      if (!sender || !activeRenderer) {
+        phoneEditorActive = false;
+        return;
+      }
+      const overlayHost = document.createElement('div');
+      overlayHost.id = 'phone-editor-host';
+      overlayHost.style.position = 'fixed';
+      overlayHost.style.inset = '0';
+      overlayHost.style.zIndex = '50';
+      document.body.append(overlayHost);
+      const handle = mountPhoneEditor(overlayHost, {
+        document: docToEdit,
+        sender,
+        state,
+        renderer: activeRenderer,
+        hostLayoutIds: availableLayouts.map((l) => l.id),
+        onSave: (nextDoc) => {
+          overlayHost.remove();
+          phoneEditorActive = false;
+          renderLocalLayout(nextDoc);
+          // refresh personal list in settings if reopened
+          if (island && !island.isDestroyed())
+            island.update({
+              personalLayouts: getPersonalList(),
+              selectedLayout: nextDoc.id,
+            });
+        },
+        onCancel: () => {
+          overlayHost.remove();
+          phoneEditorActive = false;
+          // restore previous doc renderer already reverted in island cancel
+        },
+      });
+      // island handle auto-cleans on save/cancel; guard visibility neutralize via phoneEditorActive flag
+      void handle;
+    } catch (err) {
+      console.error('Failed to load phone editor', err);
+      phoneEditorActive = false;
+    }
+  };
+
+  const handleDeletePersonal = (id: string) => {
+    deletePersonalLayout(id);
+    const list = getPersonalList();
+    // if deleted was current, fallback to default host layout or first available
+    if (currentLayoutId === id) {
+      const fallback = availableLayouts[0];
+      if (fallback) handleSelectLayout(fallback.id);
+      else renderLocalLayout(DEFAULT_LAYOUT);
+    }
+    if (island && !island.isDestroyed())
+      island.update({ personalLayouts: list, selectedLayout: currentLayoutId });
+  };
+
+  const handleRenamePersonal = (id: string, newName: string) => {
+    const slug = newName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (availableLayouts.some((l) => l.id === slug)) {
+      updateStatus(`"${newName.trim()}" collides with a host layout.`);
+      setTimeout(() => updateStatus(null), 3000);
+      return;
+    }
+    const result = renamePersonalLayout(id, newName);
+    if (result.error) {
+      updateStatus(result.error);
+      setTimeout(() => updateStatus(null), 3000);
+      console.warn(result.error);
+      return;
+    }
+    const list = getPersonalList();
+    if (currentLayoutId === id) currentLayoutId = result.nextId;
+    if (island && !island.isDestroyed())
+      island.update({ personalLayouts: list, selectedLayout: currentLayoutId });
+    // if renamed current personal doc, re-render with new id/name doc
+    const docs = loadPersonalLayouts();
+    if (docs[result.nextId] && currentLayoutId === result.nextId) {
+      renderLocalLayout(docs[result.nextId]);
+    }
+  };
+
+  const handlePublishPersonal = async (id: string) => {
+    const doc = loadPersonalLayouts()[id];
+    if (!doc || !playerId) return;
+    try {
+      const res = await fetch('/api/layouts/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId, document: doc }),
+      });
+      if (res.status !== 202) {
+        const body = await res.json().catch(() => ({}));
+        const msg = (body as { error?: string }).error ?? 'Publish failed.';
+        updateStatus(msg);
+        return;
+      }
+      const body = (await res.json()) as { id: string; status: string };
+      pendingPublishId = body.id;
+      startPublishCountdown(body.id, doc.name);
+    } catch (err) {
+      console.error('Publish failed', err);
+      updateStatus('Publish failed.');
+    }
+  };
+
+  const handleCancelPublish = async () => {
+    if (!pendingPublishId) {
+      clearPublishTimer();
+      setPublishState(null);
+      return;
+    }
+    const id = pendingPublishId;
+    pendingPublishId = null;
+    clearPublishTimer();
+    setPublishState(null);
+    try {
+      await fetch(`/api/layouts/publish/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // ignore
+    }
+  };
 
   const updateStatus = (transient: string | null): void => {
     const full = transient ?? CONNECTION_LABELS[socket.state];
@@ -449,6 +676,8 @@ function showController(options: {
         island.update({
           layouts: availableLayouts,
           selectedLayout: currentLayoutId,
+          personalLayouts: getPersonalList(),
+          publishState,
           connectionText,
           pingText,
           gyro,
@@ -468,11 +697,15 @@ function showController(options: {
         feedback,
         capabilityNotes,
         layouts: availableLayouts,
+        personalLayouts: getPersonalList(),
         selectedLayout: currentLayoutId,
-        onSelectLayout: (id) => {
-          if (!id || id === currentLayoutId) return;
-          if (socket.selectLayout(id)) updateStatus('Loading layout...');
-        },
+        publishState,
+        onSelectLayout: handleSelectLayout,
+        onEditPersonal: handleEditPersonal,
+        onDeletePersonal: handleDeletePersonal,
+        onRenamePersonal: handleRenamePersonal,
+        onPublishPersonal: handlePublishPersonal,
+        onCancelPublish: handleCancelPublish,
         connectionText,
         pingText,
         gyro,
@@ -512,6 +745,7 @@ function showController(options: {
     document.removeEventListener('keydown', onShellKeyDown);
     unbindGearTap();
     fullscreen.cleanup();
+    clearPublishTimer();
     unsubFeedback();
     unsubGyroLock();
     gyro.destroy();
@@ -529,7 +763,11 @@ function showController(options: {
   const socket = new ControllerSocket({
     sessionCode: options.sessionCode,
     displayName: options.displayName,
-    selectedLayout: readStorage(SELECTED_LAYOUT_KEY) ?? undefined,
+    selectedLayout: (() => {
+      const stored = readStorage(SELECTED_LAYOUT_KEY) ?? undefined;
+      if (stored && isPersonalLayout(stored)) return undefined;
+      return stored;
+    })(),
     capabilities: () => options.capabilities.capabilities,
     onStateChange: (nextState) => {
       updateStatus(nextState === 'active' ? null : null);
@@ -559,26 +797,74 @@ function showController(options: {
       activeSender?.setInputRate(welcome.targetInputRate);
       applyWelcome(welcome, slot, name, shell);
       availableLayouts = welcome.availableLayouts;
+      playerId = welcome.playerId;
+      const stored = readStorage(SELECTED_LAYOUT_KEY);
+      if (stored && isPersonalLayout(stored)) {
+        const personalDoc = loadPersonalLayouts()[stored];
+        if (personalDoc && validateLayout(personalDoc)) {
+          currentLayoutId = stored;
+          currentLayoutDoc = personalDoc;
+          renderLocalLayout(personalDoc);
+          if (island && !island.isDestroyed())
+            island.update({
+              layouts: availableLayouts,
+              personalLayouts: getPersonalList(),
+              selectedLayout: currentLayoutId,
+            });
+          return;
+        }
+      }
       currentLayoutId = welcome.selectedLayout;
       if (island && !island.isDestroyed())
         island.update({
           layouts: availableLayouts,
+          personalLayouts: getPersonalList(),
           selectedLayout: currentLayoutId,
         });
     },
     onLayout: (layout, diagnostic) => {
+      // if current selection is personal, don't overwrite it with host layout pushes (only when host changes default or reassigned)
+      // However if host sends layout that matches current host selection, we should render it.
+      // For simplicity, if current is personal, ignore host layout messages unless diagnostic indicates reassignment? spec says layout update does not push new layout to currently playing phones, while deleting selected layout sends default. So host layout push is only for active host selection changes, but personal should remain.
+      if (isPersonalLayout(currentLayoutId)) {
+        // Only update if host explicitly moved player to a different host layout via dashboard roster assign
+        // That would come as welcome.selectedLayout change? For now ignore pure host layout pushes when personal is active
+        // but keep availableLayouts updated via welcome. Diagnostic path handled.
+        updateStatus(diagnostic ?? 'Controller ready.');
+        return;
+      }
       activeRenderer?.destroy();
       activeRenderer = renderLayout(host, layout, {
         state,
         feedback,
         chrome,
       });
+      currentLayoutDoc = layout;
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
       syncGyroLock();
       if (island && !island.isDestroyed())
         island.update({ selectedLayout: currentLayoutId });
       updateStatus(diagnostic ?? 'Controller ready.');
+    },
+    onPublishResult: (result) => {
+      clearPublishTimer();
+      // only handle pending id match
+      if (pendingPublishId && result.id !== pendingPublishId) return;
+      pendingPublishId = null;
+      publishState = null;
+      if (island && !island.isDestroyed())
+        island.update({ publishState: null });
+      const message =
+        result.status === 'accepted'
+          ? `Publish accepted (${result.id}).`
+          : result.status === 'declined'
+            ? `Publish declined.`
+            : result.status === 'expired'
+              ? `Publish expired.`
+              : `Publish cancelled.`;
+      updateStatus(message);
+      setTimeout(() => updateStatus(null), 3000);
     },
     onError: (message) => {
       if (
@@ -615,6 +901,12 @@ function showController(options: {
   activeSocket = socket;
 
   const neutralize = (): void => {
+    if (phoneEditorActive) {
+      activeRenderer?.cancelPointers();
+      gyro.handleVisibilityHidden();
+      state.reset();
+      return;
+    }
     const wasRunning = activeSender?.isRunning ?? false;
     if (wasRunning) activeSender?.stop();
     activeRenderer?.cancelPointers();
