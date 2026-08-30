@@ -256,9 +256,9 @@ export function LayoutCanvas({
   const viewportSizeLabel = `${Math.round(viewport.width)} × ${Math.round(viewport.height)}`;
 
   return (
-    <section className="editor-canvas-panel">
-      <div className="editor-canvas-toolbar">
-        <div className="editor-canvas-toolbar__sliders">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background gap-2">
+      <div className="flex flex-wrap items-center gap-3 rounded-[10px] border bg-card p-2 px-2.5 min-h-11 max-lg:gap-2 max-lg:p-1.5">
+        <div className="flex flex-1 min-w-[160px] items-center gap-3">
           <ViewportSlider
             label="W"
             value={viewport.width}
@@ -274,7 +274,7 @@ export function LayoutCanvas({
             onChange={(height) => setViewport((v) => ({ ...v, height }))}
           />
         </div>
-        <div className="editor-canvas-toolbar__presets">
+        <div className="flex items-center gap-1 shrink-0">
           {PRESETS.map((preset) => (
             <Tooltip key={preset.id}>
               <TooltipTrigger
@@ -313,7 +313,9 @@ export function LayoutCanvas({
             </Tooltip>
           ))}
         </div>
-        <span className="editor-canvas-toolbar__size">{viewportSizeLabel}</span>
+        <span className="ml-auto font-mono text-xs font-medium tracking-wide text-muted-foreground whitespace-nowrap">
+          {viewportSizeLabel}
+        </span>
       </div>
 
       <div

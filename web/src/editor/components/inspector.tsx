@@ -95,7 +95,7 @@ export function Inspector({
   }, [errors, selectedControl, selectedSectionId]);
 
   return (
-    <section className="editor-panel editor-inspector">
+    <section className="flex min-h-0 w-full flex-col gap-4 bg-transparent p-2 overflow-y-auto overscroll-contain">
       <div className="mb-3 flex items-center gap-2">
         {onCollapse && (
           <Tooltip>
@@ -309,7 +309,7 @@ function SectionFields({
   return (
     <div className="space-y-3 border-t border-border pt-4">
       <h3 className="text-xs font-semibold text-foreground">Section</h3>
-      <div className="editor-geometry-card space-y-3">
+      <div className="rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5 space-y-3">
         <NumberField
           label="Width"
           labelWidth="w-20"
@@ -332,7 +332,7 @@ function SectionFields({
           onChange={updateMinWidth}
         />
       </div>
-      <p className="editor-geometry-help">
+      <p className="text-[11px] leading-[1.4] text-muted-foreground">
         Width in viewport-height units. Center fills remaining width.
       </p>
     </div>
@@ -663,8 +663,8 @@ function GeometrySection({
         </Tooltip>
       </div>
 
-      <div className="editor-geometry-card">
-        <div className="editor-geometry-grid">
+      <div className="rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5">
+        <div className="grid grid-cols-2 gap-2">
           <NumberField
             label="X"
             value={control.geometry.position.x}
@@ -742,7 +742,7 @@ function GeometrySection({
           </p>
         )}
       </div>
-      <p className="editor-geometry-help">
+      <p className="text-[11px] leading-[1.4] text-muted-foreground">
         X and Y are relative to the center of the section, in viewport-height
         fractions. W and H are size in the same units.
       </p>

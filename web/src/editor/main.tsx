@@ -614,18 +614,22 @@ function EditorApp() {
 
   if (!draft) {
     return (
-      <div className="editor-shell">
-        <div className="col-span-3 p-6 text-sm text-muted-foreground">
-          Loading layout…
-        </div>
+      <div className="grid min-h-dvh place-items-center bg-background p-6">
+        <div className="text-sm text-muted-foreground">Loading layout…</div>
       </div>
     );
   }
 
   const shellClass = [
-    'editor-shell',
-    leftCollapsed ? 'editor-shell--left-collapsed' : '',
-    rightCollapsed ? 'editor-shell--right-collapsed' : '',
+    'grid min-h-dvh min-w-0 overflow-hidden bg-background text-foreground transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
+    'grid-rows-[auto_minmax(0,1fr)]',
+    leftCollapsed && rightCollapsed
+      ? 'grid-cols-[36px_minmax(0,1fr)_36px] max-lg:grid-cols-1'
+      : leftCollapsed
+        ? 'grid-cols-[36px_minmax(0,1fr)_280px] max-xl:grid-cols-[36px_minmax(0,1fr)_240px] max-lg:grid-cols-1'
+        : rightCollapsed
+          ? 'grid-cols-[260px_minmax(0,1fr)_36px] max-xl:grid-cols-[220px_minmax(0,1fr)_36px] max-lg:grid-cols-1'
+          : 'grid-cols-[260px_minmax(0,1fr)_280px] max-xl:grid-cols-[220px_minmax(0,1fr)_240px] max-lg:grid-cols-1',
   ]
     .filter(Boolean)
     .join(' ');
@@ -633,26 +637,28 @@ function EditorApp() {
   return (
     <TooltipProvider delay={100}>
       <div className={shellClass}>
-        <LayoutHeader
-          layouts={layouts}
-          currentId={draft.id}
-          currentName={draft.name}
-          isBuiltin={currentBuiltin}
-          isDefault={currentDefault}
-          dirty={dirty}
-          canUndo={historyRef.current.canUndo}
-          canRedo={historyRef.current.canRedo}
-          hasErrors={errors.length > 0}
-          onSelectLayout={handleSelectLayout}
-          onNewLayout={handleNewLayout}
-          onRename={handleRename}
-          onDelete={handleDelete}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          onDiscard={handleDiscard}
-          onSave={handleSave}
-          onBack={handleBack}
-        />
+        <div className="col-span-full border-b border-border bg-background px-4 py-3 max-lg:col-span-1">
+          <LayoutHeader
+            layouts={layouts}
+            currentId={draft.id}
+            currentName={draft.name}
+            isBuiltin={currentBuiltin}
+            isDefault={currentDefault}
+            dirty={dirty}
+            canUndo={historyRef.current.canUndo}
+            canRedo={historyRef.current.canRedo}
+            hasErrors={errors.length > 0}
+            onSelectLayout={handleSelectLayout}
+            onNewLayout={handleNewLayout}
+            onRename={handleRename}
+            onDelete={handleDelete}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onDiscard={handleDiscard}
+            onSave={handleSave}
+            onBack={handleBack}
+          />
+        </div>
         {error && (
           <div
             className="col-span-full flex items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -673,8 +679,8 @@ function EditorApp() {
         <div
           className={
             leftCollapsed
-              ? 'editor-side editor-side--collapsed'
-              : 'editor-side editor-side--left'
+              ? 'relative flex min-h-[320px] items-center justify-center overflow-hidden border-r border-border bg-muted max-lg:min-h-9 max-lg:h-9'
+              : 'relative flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-background max-lg:border-r-0 max-lg:border-b h-full'
           }
         >
           {leftCollapsed ? (
@@ -684,7 +690,7 @@ function EditorApp() {
                   render={
                     <button
                       type="button"
-                      className="editor-collapse-strip"
+                      className="flex size-full min-h-[200px] items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground max-lg:min-h-9 max-lg:h-9 cursor-pointer"
                       onClick={() => setLeftCollapsed(false)}
                       aria-label="Expand sections"
                     >
@@ -727,24 +733,28 @@ function EditorApp() {
           )}
         </div>
 
-        <LayoutCanvas
-          document={draft}
-          selectedControlId={selectedControlId}
-          selectedSectionId={selectedSectionId}
-          hoveredControlId={hoveredControlId}
-          hoveredSectionId={hoveredSectionId}
-          onSelectControl={setSelectedControlId}
-          onSelectSection={(id) => setSelectedSectionId(id as SectionId | null)}
-          onHoverSection={(id) => setHoveredSectionId(id as SectionId | null)}
-          onDraftChange={handleDraftChange}
-          locks={locks}
-        />
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background p-2.5 max-lg:p-2 gap-2">
+          <LayoutCanvas
+            document={draft}
+            selectedControlId={selectedControlId}
+            selectedSectionId={selectedSectionId}
+            hoveredControlId={hoveredControlId}
+            hoveredSectionId={hoveredSectionId}
+            onSelectControl={setSelectedControlId}
+            onSelectSection={(id) =>
+              setSelectedSectionId(id as SectionId | null)
+            }
+            onHoverSection={(id) => setHoveredSectionId(id as SectionId | null)}
+            onDraftChange={handleDraftChange}
+            locks={locks}
+          />
+        </div>
 
         <div
           className={
             rightCollapsed
-              ? 'editor-side editor-side--collapsed editor-side--right-collapsed'
-              : 'editor-side editor-side--right'
+              ? 'relative flex min-h-[320px] items-center justify-center overflow-hidden border-l border-border bg-muted max-lg:min-h-9 max-lg:h-9 max-lg:border-l-0 max-lg:border-t'
+              : 'relative flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-border bg-background max-lg:border-l-0 max-lg:border-t h-full'
           }
         >
           {rightCollapsed ? (
@@ -754,7 +764,7 @@ function EditorApp() {
                   render={
                     <button
                       type="button"
-                      className="editor-collapse-strip"
+                      className="flex size-full min-h-[200px] items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground max-lg:min-h-9 max-lg:h-9 cursor-pointer"
                       onClick={() => setRightCollapsed(false)}
                       aria-label="Expand inspector"
                     >

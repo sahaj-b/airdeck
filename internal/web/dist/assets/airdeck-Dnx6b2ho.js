@@ -1,6 +1,7 @@
 var e=`/* Default airdeck skin. Dark, high-contrast, matching the dashboard and join
    UI palette. Every rule is scoped to html[data-skin="airdeck"] so it only
-   fires when active. Add more skins as sibling files in this directory. */
+   fires when active. Uses darker shadcn tokens (background/card/border)
+   but keeps controls a touch lighter than the frame for contrast. */
 
 html[data-skin="airdeck"] {
   color-scheme: dark;
@@ -21,30 +22,36 @@ html[data-skin="airdeck"] .controller-shell {
 html[data-skin="airdeck"] .controller-frame {
   border: 1px solid var(--border);
   border-radius: clamp(0.8rem, 3vw, 1.8rem);
-  background: var(--card);
+  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
   box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 2%),
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 8px 32px rgb(0 0 0 / 35%),
     0 1rem 3rem rgb(0 0 0 / 20%);
 }
 
 html[data-skin="airdeck"] .controller-control {
-  border: 2px solid var(--ring);
+  border: 1px solid color-mix(in oklch, var(--border) 45%, var(--ring) 55%);
   border-radius: 0.55rem;
   padding: 0.3rem;
-  background: var(--muted);
+  background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
   color: var(--foreground);
   font-weight: 800;
   letter-spacing: 0.04em;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
 }
 
 html[data-skin="airdeck"] .controller-control:hover,
 html[data-skin="airdeck"] .dpad-direction:hover {
-  border-color: var(--foreground);
+  border-color: color-mix(in oklch, var(--border) 55%, var(--foreground) 45%);
 }
 
 html[data-skin="airdeck"] .controller-control.is-pressed {
   border-color: var(--slot-accent);
-  background: color-mix(in srgb, var(--slot-accent) 32%, var(--muted));
+  background: color-mix(
+    in srgb,
+    var(--slot-accent) 28%,
+    color-mix(in oklch, var(--card) 38%, var(--muted) 62%)
+  );
 }
 
 html[data-skin="airdeck"]
@@ -53,25 +60,30 @@ html[data-skin="airdeck"]
 }
 
 html[data-skin="airdeck"] .control-joystick {
+  border: 1px solid color-mix(in oklch, var(--border) 45%, var(--ring) 55%);
   border-radius: 50%;
   background: radial-gradient(
     circle at 42% 34%,
-    color-mix(in srgb, var(--muted) 80%, white),
-    var(--muted) 72%
+    color-mix(
+      in oklch,
+      color-mix(in oklch, var(--card) 38%, var(--muted) 62%) 88%,
+      white 12%
+    ),
+    color-mix(in oklch, var(--card) 38%, var(--muted) 62%) 72%
   );
-  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 45%);
+  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 32%);
 }
 
 html[data-skin="airdeck"] .control-joystick::after {
   border: 2px solid var(--slot-accent);
-  background: var(--muted);
+  background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
 }
 
 html[data-skin="airdeck"] .dpad-direction {
-  border: 2px solid var(--ring);
+  border: 1px solid color-mix(in oklch, var(--border) 45%, var(--ring) 55%);
   border-radius: 12%;
   padding: 0;
-  background: var(--muted);
+  background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
   color: var(--muted-foreground);
 }
 
@@ -80,7 +92,11 @@ html[data-skin="airdeck"] .controller-dpad[data-direction="right"] .dpad-right,
 html[data-skin="airdeck"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="airdeck"] .controller-dpad[data-direction="left"] .dpad-left {
   border-color: var(--slot-accent);
-  background: color-mix(in srgb, var(--slot-accent) 32%, var(--muted));
+  background: color-mix(
+    in srgb,
+    var(--slot-accent) 28%,
+    color-mix(in oklch, var(--card) 38%, var(--muted) 62%)
+  );
   color: var(--slot-accent);
 }
 
@@ -99,18 +115,19 @@ html[data-skin="airdeck"] .controller-name {
 
 html[data-skin="airdeck"] .controller-status {
   border: 1px solid var(--border);
-  background: var(--secondary);
-  color: var(--secondary-foreground);
+  background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
+  color: var(--card-foreground);
 }
 
 html[data-skin="airdeck"] .icon-button {
   border: 1px solid var(--border);
-  background: var(--secondary);
-  color: var(--secondary-foreground);
+  background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
+  color: var(--card-foreground);
 }
 
 html[data-skin="airdeck"] .icon-button:hover {
-  border-color: var(--ring);
+  border-color: color-mix(in oklch, var(--border) 55%, var(--foreground) 45%);
+  background: color-mix(in oklch, var(--card) 76%, var(--muted) 24%);
   color: var(--foreground);
 }
 
@@ -132,8 +149,8 @@ html[data-skin="airdeck"] .settings-row input[type="checkbox"] {
 }
 
 html[data-skin="airdeck"] .controller-layout-picker {
-  border: 1px solid var(--input);
-  background: var(--secondary);
+  border: 1px solid var(--border);
+  background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
   color: var(--foreground);
 }
 
@@ -146,8 +163,8 @@ html[data-skin="airdeck"] .settings-capabilities {
 }
 
 html[data-skin="airdeck"] .orientation-message {
-  border: 1px solid var(--input);
-  background: var(--secondary);
-  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
 }
 `;export{e as default};

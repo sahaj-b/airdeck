@@ -18,7 +18,6 @@ import {
   resizeControl,
   updateControlGeometry,
 } from '../shared/layout-editor';
-import './phone-editor.css';
 import { useInteractGeometry } from '../editor/use-interact-geometry';
 import {
   loadPersonalLayouts,
@@ -125,7 +124,7 @@ function PhoneEditorIsland({
     if (!gesturable) return;
     const inst = gesturable({
       ignoreFrom:
-        '.phone-editor-hit, .phone-editor-overlay-handles, .phone-editor-bar, .phone-editor-onboarding',
+        '[data-phone-hit], [data-phone-handles], [data-phone-bar], [data-phone-onboarding]',
       listeners: {
         start() {
           startZoom = zoomRef.current.zoom;
@@ -386,22 +385,26 @@ function PhoneEditorIsland({
   return (
     <div
       ref={overlayRef}
-      className="phone-editor-overlay"
+      className="phone-editor-overlay fixed inset-0 z-40 touch-none select-none"
+      data-phone-overlay
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) setSelectedId(null);
       }}
     >
-      <div className="phone-editor-bar">
+      <div
+        className="phone-editor-bar absolute top-0 left-0 right-0 h-7 flex items-center gap-1.5 px-1.5 bg-black/70 backdrop-blur-md z-10 pointer-events-auto"
+        data-phone-bar
+      >
         <button
           type="button"
-          className="phone-editor-back"
+          className="grid place-items-center size-7 shrink-0 border-0 bg-transparent text-white text-base cursor-pointer hover:bg-white/10 rounded"
           aria-label="Cancel"
           onClick={handleBack}
         >
           ←
         </button>
         <input
-          className={`phone-editor-name${nameError ? ' error' : ''}`}
+          className={`flex-1 min-w-0 bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
           value={name}
           onChange={(e) => {
             setName(e.target.value);
@@ -411,7 +414,7 @@ function PhoneEditorIsland({
         />
         <button
           type="button"
-          className="phone-editor-link-btn"
+          className="rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-white text-[11px] cursor-pointer disabled:opacity-40"
           aria-label="Undo"
           onClick={handleUndo}
           disabled={!historyRef.current.canUndo}
@@ -421,7 +424,7 @@ function PhoneEditorIsland({
         </button>
         <button
           type="button"
-          className="phone-editor-link-btn"
+          className="rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-white text-[11px] cursor-pointer disabled:opacity-40"
           aria-label="Redo"
           onClick={handleRedo}
           disabled={!historyRef.current.canRedo}
@@ -432,7 +435,7 @@ function PhoneEditorIsland({
         {zoom !== 1 && (
           <button
             type="button"
-            className="phone-editor-link-btn"
+            className="rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-white text-[11px] cursor-pointer"
             onClick={() => {
               zoomRef.current = { zoom: 1, pan: { x: 0, y: 0 } };
               if (canvasWrapRef.current) {
@@ -446,7 +449,7 @@ function PhoneEditorIsland({
         )}
         <button
           type="button"
-          className="phone-editor-save"
+          className="h-[22px] w-[50px] shrink-0 rounded-md border border-white/20 bg-white text-black text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90"
           onClick={handleSave}
         >
           {loadPersonalLayouts()[originalIdRef.current] ? 'Update' : 'Save'}
@@ -454,17 +457,8 @@ function PhoneEditorIsland({
       </div>
       {nameError && (
         <div
-          style={{
-            position: 'absolute',
-            top: '28px',
-            left: 0,
-            right: 0,
-            background: 'rgba(239,68,68,0.9)',
-            color: 'white',
-            fontSize: '11px',
-            padding: '2px 8px',
-            zIndex: 11,
-          }}
+          className="absolute top-7 left-0 right-0 bg-red-500/90 text-white text-[11px] px-2 py-0.5 z-[11]"
+          style={{ background: 'rgba(239,68,68,0.9)' }}
         >
           {nameError}
         </div>
@@ -472,7 +466,8 @@ function PhoneEditorIsland({
 
       <div
         ref={canvasWrapRef}
-        className="phone-editor-canvas-wrap"
+        className="absolute inset-x-0 bottom-0 top-7 origin-top-left will-change-transform pointer-events-none"
+        data-phone-canvas-wrap
         style={
           zoom !== 1
             ? {
@@ -490,11 +485,19 @@ function PhoneEditorIsland({
               <button
                 type="button"
                 key={rc.control.id}
+                data-phone-hit
                 className={
-                  'phone-editor-hit' +
-                  (isSelected ? ' selected' : '') +
-                  (isHitfill ? ' hit-only' : '') +
-                  (isPeer && !isSelected ? ' peer' : '')
+                  'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
+                  (isSelected
+                    ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] '
+                    : isHitfill
+                      ? 'border-dashed border-white/35 bg-white/[0.06] opacity-35 '
+                      : 'border-transparent ') +
+                  (isPeer && !isSelected
+                    ? '!border-dashed !border-[rgb(250_204_21/0.95)] !bg-[rgb(250_204_21/0.12)] ' +
+                      (isHitfill ? '!bg-[rgb(250_204_21/0.14)] ' : '')
+                    : '') +
+                  (isSelected && isHitfill ? '!opacity-60 ' : '')
                 }
                 style={{
                   left: rc.visual.left,
@@ -511,16 +514,17 @@ function PhoneEditorIsland({
                 {isSelected && (
                   <div
                     ref={selectedRef}
-                    className="phone-editor-overlay-handles"
+                    className="absolute inset-0 pointer-events-auto touch-none"
+                    data-phone-handles
                   >
-                    <span className="phone-editor-handle tl" />
-                    <span className="phone-editor-handle tr" />
-                    <span className="phone-editor-handle bl" />
-                    <span className="phone-editor-handle br" />
-                    <div className="phone-editor-float">
+                    <span className="phone-editor-handle tl absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none top-[-4px] left-[-4px]" />
+                    <span className="phone-editor-handle tr absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none top-[-4px] right-[-4px]" />
+                    <span className="phone-editor-handle bl absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none bottom-[-4px] left-[-4px]" />
+                    <span className="phone-editor-handle br absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none bottom-[-4px] right-[-4px]" />
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md text-[11px] text-white whitespace-nowrap pointer-events-auto">
                       <button
                         type="button"
-                        className="phone-editor-link-btn"
+                        className="rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-white text-[11px] cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
                           setLocks((prev) => {
@@ -552,7 +556,8 @@ function PhoneEditorIsland({
 
       {showOnboarding && (
         <div
-          className="phone-editor-onboarding"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/80 backdrop-blur-md border border-white/10 rounded-[10px] p-3 px-3.5 text-white text-xs leading-relaxed max-w-[280px] text-center pointer-events-auto"
+          data-phone-onboarding
           role="dialog"
           aria-label="Editor tips"
         >
@@ -561,7 +566,11 @@ function PhoneEditorIsland({
             <br />
             Pinch to zoom, 2-finger tap undo, 3-finger tap redo.
           </p>
-          <button type="button" onClick={dismissOnboarding}>
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-white/20 bg-white px-2.5 py-1 text-black text-xs cursor-pointer hover:bg-white/90"
+            onClick={dismissOnboarding}
+          >
             Got it
           </button>
         </div>

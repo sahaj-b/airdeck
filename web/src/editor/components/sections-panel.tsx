@@ -79,7 +79,7 @@ export function SectionsPanel({
   }, [document, hoveredControlId]);
 
   return (
-    <div className="editor-panel flex min-h-0 w-full flex-col gap-4 p-0 overflow-y-auto">
+    <div className="flex min-h-0 w-full flex-col gap-4 p-0 overflow-y-auto bg-transparent">
       <div className="p-2 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-xs font-medium text-muted-foreground px-2">
@@ -254,13 +254,17 @@ function SectionCard({
   return (
     <div
       className={cn(
-        'editor-section-card',
-        isSectionSelected && 'editor-section-card--selected',
+        'rounded-[10px] border bg-card overflow-hidden',
+        isSectionSelected && 'border-border',
       )}
     >
       <button
         type="button"
-        className="editor-section-card__header w-full text-left cursor-pointer hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+        className={cn(
+          'flex w-full items-center justify-between gap-2 px-3 py-2 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+          'bg-[color-mix(in_oklch,var(--card)_84%,white_6%)] border-b border-border hover:bg-accent',
+          isSectionSelected && 'bg-accent',
+        )}
         onClick={() => onSelectSection?.(section.id)}
         onMouseEnter={() => onHoverSection?.(section.id)}
         onMouseLeave={() => onHoverSection?.(null)}
@@ -269,8 +273,10 @@ function SectionCard({
         aria-pressed={isSectionSelected}
         aria-label={`Select section ${section.id}`}
       >
-        <span className="editor-section-card__title">{section.id}</span>
-        <span className="editor-section-card__meta">
+        <span className="text-[13px] font-medium capitalize text-foreground">
+          {section.id}
+        </span>
+        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
           w {section.relativeWidth.toFixed(2)}
         </span>
       </button>
@@ -278,7 +284,7 @@ function SectionCard({
       <div className="relative">
         <ul
           ref={listRef}
-          className="editor-control-list"
+          className="relative flex w-full min-w-0 flex-col gap-0 list-none m-0 p-0 bg-[color-mix(in_oklch,var(--card)_68%,var(--background)_32%)]"
           data-section={section.id}
         >
           {section.controls.length === 0 && (
@@ -419,20 +425,8 @@ function ControlRow({
       data-control-row
       data-index={index}
       className={cn(
-        'editor-control-row group',
-        selected && 'editor-control-row--selected',
-        isPeer && !selected && 'editor-control-row--peer',
-        isHoveredPeer &&
-          !selected &&
-          !isPeer &&
-          'editor-control-row--hover-peer',
-        isHovered &&
-          !selected &&
-          !isPeer &&
-          !isHoveredPeer &&
-          'editor-control-row--hovered',
-        isDragging && 'editor-control-row--dragging',
-        isHitfill && 'editor-control-row--hitfill',
+        'group relative flex items-center gap-1 p-1 px-1 border-b border-[color-mix(in_oklch,var(--border)_60%,transparent)] bg-[color-mix(in_oklch,var(--card)_68%,var(--background)_32%)] last:border-b-0',
+        isDragging && 'opacity-50',
       )}
       onMouseEnter={() => onHover?.(control.id)}
       onMouseLeave={() => onHover?.(null)}
@@ -445,7 +439,7 @@ function ControlRow({
 
       <button
         type="button"
-        className="editor-control-row__drag-handle"
+        className="flex items-center justify-center size-4 shrink-0 rounded text-muted-foreground opacity-0 group-hover:opacity-70 hover:opacity-100 hover:bg-muted cursor-grab active:cursor-grabbing touch-none transition-opacity duration-120"
         aria-label={`Drag to reorder ${control.label || control.id}`}
         onPointerDown={onDragStart}
         onKeyDown={(e) => {
@@ -465,14 +459,20 @@ function ControlRow({
       <button
         type="button"
         onClick={onSelect}
-        className="editor-control-row__button"
+        className={cn(
+          'flex h-7 min-w-0 flex-1 items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2 text-left text-[13px] font-normal cursor-pointer transition-colors',
+          selected
+            ? 'bg-accent text-accent-foreground font-medium border border-border'
+            : isPeer && !selected
+              ? 'bg-[rgb(250_204_21/0.12)] text-foreground hover:bg-[rgb(250_204_21/0.18)]'
+              : isHoveredPeer && !selected && !isPeer
+                ? 'bg-[rgb(250_204_21/0.18)] text-foreground border border-[rgb(250_204_21/0.35)]'
+                : isHovered && !selected && !isPeer && !isHoveredPeer
+                  ? 'bg-accent text-accent-foreground'
+                  : 'bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground',
+        )}
       >
-        <span
-          className={cn(
-            'editor-control-row__label',
-            isHitfill && 'editor-control-row__label--hitfill',
-          )}
-        >
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
           {isHitfill ? (
             <>
               <span>Hitfill</span>
@@ -488,7 +488,7 @@ function ControlRow({
         </span>
       </button>
 
-      <div className="editor-control-row__actions">
+      <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex group-focus-within:flex items-center gap-0.5 bg-transparent p-0">
         <Tooltip>
           <TooltipTrigger
             render={

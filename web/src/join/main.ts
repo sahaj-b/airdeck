@@ -16,7 +16,6 @@ import type { Welcome } from '../shared/contracts';
 import type { LayoutDocument } from '../shared/layout';
 import { DEFAULT_LAYOUT, validateLayout } from '../shared/layout';
 import { getSkin, initSkin, setSkin } from '../skins/loader';
-import './join.css';
 import {
   CONNECTION_LABELS,
   DEFAULT_NAME_PATTERN,
@@ -93,33 +92,54 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   removeJoinFullscreenHandler = undefined;
 
   const panel = document.createElement('section');
-  panel.className = 'join-screen';
+  panel.className =
+    'flex min-h-[100dvh] min-h-[100svh] flex-col items-center justify-center gap-6 overflow-y-auto bg-background p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[max(1.25rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] [-webkit-overflow-scrolling:touch] [@media(max-height:440px)]:p-2.5 [@media(orientation:landscape)_and_(max-height:620px)]:justify-start [@media(orientation:landscape)_and_(max-height:620px)]:gap-4 [@media(orientation:landscape)_and_(max-height:620px)]:p-3';
   const brand = document.createElement('div');
-  brand.className = 'join-brand';
+  brand.className = 'flex w-full shrink-0 justify-center';
   const brandLogo = document.createElement('img');
   brandLogo.src = '/airdeck.svg';
   brandLogo.alt = 'Airdeck';
-  brandLogo.className = 'join-brand-logo';
+  brandLogo.className =
+    'block h-9 w-auto max-w-[70vw] sm:h-[2.65rem] [@media(orientation:landscape)_and_(max-height:620px)]:h-7';
   brandLogo.width = 266;
   brandLogo.height = 48;
   brand.append(brandLogo);
   const content = document.createElement('div');
-  content.className = 'join-panel';
+  content.className =
+    'w-full max-w-[30rem] shrink-0 rounded-[var(--radius)] border bg-card p-6 text-card-foreground shadow-sm [@media(max-height:560px)]:p-[1.15rem] [@media(max-height:440px)]:p-4 [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:max-w-[54rem] [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:px-6 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:max-w-[38rem]';
   panel.append(brand, content);
 
   const heading = document.createElement('h1');
   heading.textContent = 'Join a session';
+  heading.className =
+    'm-0 font-heading text-[1.55rem] font-semibold leading-none tracking-[-0.025em] [@media(max-height:440px)]:text-[1.3rem] [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:text-[1.5rem] [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:text-[1.3rem]';
   const intro = document.createElement('p');
-  intro.className = 'join-intro';
+  intro.className = 'hidden';
   intro.textContent =
     'Enter the session code if your host uses one. Keep this page open while you play.';
 
   const fullscreen = buildFullscreenButton();
-  fullscreen.button.classList.add('join-fullscreen');
+  // override controller's absolute positioning -> static centered button
+  fullscreen.button.classList.add(
+    '!static',
+    '!translate-x-0',
+    'mx-auto',
+    'mt-4',
+    'border',
+    'bg-secondary',
+    'text-secondary-foreground',
+    '[@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:col-span-full',
+  );
+  // ensure static wins even without !important fallback
+  fullscreen.button.style.position = 'static';
+  fullscreen.button.style.transform = 'none';
+  fullscreen.button.style.left = 'auto';
+  fullscreen.button.style.bottom = 'auto';
   removeJoinFullscreenHandler = fullscreen.cleanup;
 
   const form = document.createElement('form');
-  form.className = 'join-form';
+  form.className =
+    'mt-5 grid gap-4 [@media(max-height:560px)]:mt-4 [@media(max-height:560px)]:gap-3 [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:grid-cols-[0.92fr_1.08fr] [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:items-start [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:gap-x-7 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:gap-[0.65rem] [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:mt-[0.9rem]';
   form.noValidate = true;
   const urlCode = getSessionCode();
   const hasUrlCode = urlCode !== '';
@@ -130,14 +150,15 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
     urlCode,
     'Enter the 4-digit code',
   );
-  codeField.input.className = 'join-code';
+  // textField already applied Tailwind + mono tracking for code input
   codeField.input.inputMode = 'numeric';
   codeField.input.maxLength = 4;
   codeField.input.pattern = '[0-9]{4}';
   if (shouldHideCode) codeField.wrapper.hidden = true;
   const codeToggle = document.createElement('button');
   codeToggle.type = 'button';
-  codeToggle.className = 'join-code-toggle';
+  codeToggle.className =
+    'justify-self-start -mt-1 bg-transparent px-0 py-[0.15rem] text-[0.72rem] font-normal tracking-[0.02em] text-muted-foreground underline decoration-[color-mix(in_oklch,var(--muted-foreground)_35%,transparent)] underline-offset-[3px] hover:text-foreground hover:decoration-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:rounded-sm cursor-pointer';
   codeToggle.textContent = 'Enter code manually';
   codeToggle.setAttribute('aria-expanded', 'false');
   codeToggle.setAttribute('aria-controls', 'code');
@@ -159,9 +180,12 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
 
   const storeState = settingsStore.getState();
   const preferences = document.createElement('fieldset');
-  preferences.className = 'join-preferences';
+  preferences.className =
+    'm-0 grid gap-2.5 rounded-[calc(var(--radius)-2px)] border bg-transparent p-3 px-[0.85rem] [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:grid-cols-2 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:gap-x-3 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:gap-y-1.5 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:p-2.5';
   const legend = document.createElement('legend');
   legend.textContent = 'Local feedback';
+  legend.className =
+    'px-1.5 text-foreground text-[0.8rem] font-medium leading-none';
   preferences.append(legend);
   const rumble = checkboxField('rumble', 'Game rumble', storeState.rumble);
   const sound = checkboxField('sound', 'Button sounds', storeState.sound);
@@ -183,27 +207,34 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   );
 
   const capabilityMessage = document.createElement('p');
-  capabilityMessage.className = 'join-capabilities';
+  capabilityMessage.className =
+    'm-0 text-muted-foreground text-[0.78rem] leading-[1.4]';
   capabilityMessage.setAttribute('role', 'status');
   capabilityMessage.setAttribute('aria-live', 'polite');
   const error = document.createElement('p');
-  error.className = 'join-error';
+  error.className = 'm-0 text-destructive text-[0.78rem] leading-[1.4]';
   error.setAttribute('role', 'alert');
   error.textContent = errorMessage;
   if (!errorMessage) error.hidden = true;
 
   const submit = document.createElement('button');
-  submit.className = 'join-submit';
+  submit.className =
+    'flex h-10 w-full items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent bg-primary px-4 text-primary-foreground text-[0.9rem] font-medium cursor-pointer hover:bg-[color-mix(in_oklch,var(--primary)_90%,black)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 [@media(max-height:560px)]:h-[2.35rem] [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:h-[2.3rem] [@media(orientation:landscape)_and_(max-height:620px)_and_(min-width:700px)]:mt-[0.15rem]';
   submit.type = 'submit';
   submit.textContent = 'Join';
 
   // left/right split: left holds branding + inputs where empty space was,
   // right holds options + action so Join is always shown in landscape
   const left = document.createElement('div');
-  left.className = 'join-left';
+  left.className =
+    'grid gap-[0.85rem] content-start [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:grid-cols-2 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:gap-x-3 [@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:gap-y-2.5';
+  // heading spans full width when left becomes 2-col on compact landscape
+  heading.classList.add(
+    '[@media(orientation:landscape)_and_(max-height:500px)_and_(max-width:699px)]:col-span-full',
+  );
   left.append(heading, intro, codeField.wrapper, codeToggle, nameField.wrapper);
   const right = document.createElement('div');
-  right.className = 'join-right';
+  right.className = 'grid gap-[0.85rem] content-start';
   right.append(preferences, capabilityMessage, error, submit);
   form.append(left, right);
   content.append(form, fullscreen.button);
