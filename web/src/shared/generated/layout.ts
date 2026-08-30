@@ -55,6 +55,7 @@ export interface Document {
 export interface Summary {
   id: string;
   name: string;
+  builtin: boolean;
 }
 export interface Library {
 }

@@ -40,6 +40,52 @@ export function getAdminState(): Promise<AdminState> {
   return request<AdminState>('/api/admin/state');
 }
 
+export function getAdminLayout(id: string): Promise<unknown> {
+  return request<unknown>(`/api/admin/layouts/${encodeURIComponent(id)}`);
+}
+
+export function createAdminLayout(doc: unknown): Promise<unknown> {
+  return request<unknown>('/api/admin/layouts', {
+    method: 'POST',
+    body: JSON.stringify(doc),
+  });
+}
+
+export function updateAdminLayout(id: string, doc: unknown): Promise<unknown> {
+  return request<unknown>(`/api/admin/layouts/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(doc),
+  });
+}
+
+export function deleteAdminLayout(id: string): Promise<AdminState> {
+  return request<AdminState>(`/api/admin/layouts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function reloadAdminLayouts(): Promise<AdminState> {
+  return request<AdminState>('/api/admin/layouts/reload', { method: 'POST' });
+}
+
+export function acceptPublish(
+  id: string,
+): Promise<{ status: string; id: string }> {
+  return request<{ status: string; id: string }>(
+    `/api/admin/layouts/publish/${encodeURIComponent(id)}/accept`,
+    { method: 'POST' },
+  );
+}
+
+export function declinePublish(
+  id: string,
+): Promise<{ status: string; id: string }> {
+  return request<{ status: string; id: string }>(
+    `/api/admin/layouts/publish/${encodeURIComponent(id)}/decline`,
+    { method: 'POST' },
+  );
+}
+
 export function newSession(): Promise<AdminState> {
   return request<AdminState>('/api/admin/session/new', { method: 'POST' });
 }
@@ -61,9 +107,7 @@ export function updateSettings(update: SettingsUpdate): Promise<AdminState> {
 export function kickPlayer(id: string): Promise<AdminState> {
   return request<AdminState>(
     `/api/admin/players/${encodeURIComponent(id)}/kick`,
-    {
-      method: 'POST',
-    },
+    { method: 'POST' },
   );
 }
 

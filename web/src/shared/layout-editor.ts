@@ -16,7 +16,7 @@ export const FACE_BINDINGS = new Set<Command>([
   'north',
 ] as Command[]);
 
-export interface BindingLabel {
+interface BindingLabel {
   command: Command;
   xbox: string;
   playstation: string;
@@ -132,14 +132,6 @@ export function getBindingLabel(command: Command): string {
   return BINDING_LABELS[command]?.dual ?? command;
 }
 
-export function getBindingMeta(command: string): BindingLabel | undefined {
-  return BINDING_LABELS[command];
-}
-
-export function getAllBindingLabels(): BindingLabel[] {
-  return Object.values(BINDING_LABELS);
-}
-
 export function getAllowedBindings(type: Control['type']): Command[] {
   switch (type) {
     case 'joystick':
@@ -191,34 +183,6 @@ export function findControl(
     if (control) return { control, section };
   }
   return undefined;
-}
-
-export function authoredBounds(
-  geometry: Geometry,
-  section: Section,
-): { left: number; right: number; top: number; bottom: number } {
-  const contentWidth = section.relativeWidth;
-  const centerX = contentWidth / 2;
-  const centerY = 0.5;
-  const left = centerX + geometry.position.x - geometry.size.width / 2;
-  const right = left + geometry.size.width;
-  const top = centerY + geometry.position.y - geometry.size.height / 2;
-  const bottom = top + geometry.size.height;
-  return { left, right, top, bottom };
-}
-
-export function isGeometryInsideSection(
-  geometry: Geometry,
-  section: Section,
-): boolean {
-  const bounds = authoredBounds(geometry, section);
-  const epsilon = 1e-9;
-  return (
-    bounds.left >= -epsilon &&
-    bounds.right <= section.relativeWidth + epsilon &&
-    bounds.top >= -epsilon &&
-    bounds.bottom <= 1 + epsilon
-  );
 }
 
 export function clampGeometry(geometry: Geometry, section: Section): Geometry {
@@ -284,23 +248,6 @@ export function clampResize(
     size: { width, height },
   };
   return clampGeometry(next, section);
-}
-
-export function resolvedBounds(
-  geometry: Geometry,
-  sectionRect: { left: number; top: number; width: number; height: number },
-  viewportHeight: number,
-): { left: number; top: number; width: number; height: number } {
-  const width = geometry.size.width * viewportHeight;
-  const height = geometry.size.height * viewportHeight;
-  const centerX = sectionRect.left + sectionRect.width / 2;
-  const centerY = sectionRect.top + sectionRect.height / 2;
-  return {
-    left: centerX + geometry.position.x * viewportHeight - width / 2,
-    top: centerY + geometry.position.y * viewportHeight - height / 2,
-    width,
-    height,
-  };
 }
 
 // Section divider clamping. Left/right widths are in height units.
@@ -405,7 +352,7 @@ export function moveLinkedGroup(
   return next;
 }
 
-export function resizeLinkedGroup(
+export function resizeControl(
   document: LayoutDocument,
   controlId: string,
   deltaWidth: number,

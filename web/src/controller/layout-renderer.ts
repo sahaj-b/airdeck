@@ -11,6 +11,7 @@ import {
   type ResolvedControl,
   type ResolvedSection,
   resolveLayout,
+  type Viewport,
 } from './layout-resolver';
 import { type PointerFeedback, PointerInput } from './pointer-input';
 import type { InputStateStore } from './state';
@@ -21,11 +22,12 @@ export interface LayoutRendererOptions {
   orientation?: Orientation;
   assetBasePath?: string;
   chrome?: HTMLElement;
+  interactive?: boolean;
 }
 
 export interface RenderedLayout {
   root: HTMLElement;
-  pointerInput: PointerInput;
+  pointerInput: PointerInput | null;
   setOrientation(orientation: Orientation): void;
   setGyroLocked(target: 'leftStick' | 'rightStick' | null): void;
   updateGyroThumb(
@@ -35,6 +37,7 @@ export interface RenderedLayout {
   ): void;
   cancelPointers(): void;
   destroy(): void;
+  update(nextDocument: LayoutDocument, viewport?: Viewport): void;
 }
 
 interface RenderedControl {
@@ -57,10 +60,13 @@ export function renderLayout(
   document: LayoutDocument,
   options: LayoutRendererOptions,
 ): RenderedLayout {
-  const layout = validateLayout(document) ? document : DEFAULT_LAYOUT;
+  let layout = validateLayout(document) ? document : DEFAULT_LAYOUT;
   const ownerDocument = container.ownerDocument;
   const view = ownerDocument.defaultView;
-  const pointerInput = new PointerInput(options.state, options.feedback);
+  const interactive = options.interactive !== false;
+  const pointerInput = interactive
+    ? new PointerInput(options.state, options.feedback)
+    : null;
   const root = ownerDocument.createElement('div');
   root.className = 'controller-layout';
   root.dataset.layoutId = layout.id;
@@ -77,10 +83,11 @@ export function renderLayout(
   orientationMessage.setAttribute('role', 'status');
   orientationMessage.textContent =
     'Rotate your phone to landscape to use this controller.';
-  // Fullscreen escape hatch: can retrigger orientation lock where supported.
-  const fallbackFullscreen = buildFullscreenButton();
-  orientationMessage.append(fallbackFullscreen.button);
   root.append(orientationMessage);
+  const fallbackFullscreen = interactive ? buildFullscreenButton() : null;
+  if (interactive && fallbackFullscreen) {
+    orientationMessage.append(fallbackFullscreen.button);
+  }
 
   const renderedSections: RenderedSection[] = [];
   const assetBasePath = options.assetBasePath ?? '/assets';
@@ -111,7 +118,7 @@ export function renderLayout(
     composition.append(sectionElement);
   }
 
-  if (options.chrome) {
+  if (options.chrome && interactive) {
     options.chrome.classList.add('controller-runtime-chrome');
     const centerIndex = 1;
     renderedSections[centerIndex]?.element.append(options.chrome);
@@ -119,70 +126,99 @@ export function renderLayout(
 
   container.replaceChildren(root);
 
+  const cleanups: (() => void)[] = [];
+
   // Must be capture + non-passive or iOS/Android still selects/buzzes before pointerdown.
   // preventDefault on touchstart kills synthetic clicks, so buttons use pointer events (bindTap).
-  const kill = (event: Event): void => {
-    event.preventDefault();
-  };
-  const touchOpts: AddEventListenerOptions = {
-    passive: false,
-    capture: true,
-  };
-  const captureOpts: AddEventListenerOptions = { capture: true };
-  const touchEvents = [
-    'touchstart',
-    'touchmove',
-    'touchend',
-    'touchcancel',
-  ] as const;
-  const menuEvents = [
-    'contextmenu',
-    'selectstart',
-    'dragstart',
-    'copy',
-    'cut',
-    'beforeinput',
-  ] as const;
-  for (const type of touchEvents) {
-    root.addEventListener(type, kill, touchOpts);
-    container.addEventListener(type, kill, touchOpts);
-  }
-  for (const type of menuEvents) {
-    root.addEventListener(type, kill, captureOpts);
-    container.addEventListener(type, kill, captureOpts);
-  }
-  const onSelectionChange = (): void => {
-    const selection = ownerDocument.getSelection?.();
-    if (!selection || selection.rangeCount === 0 || selection.type === 'None')
-      return;
-    const anchor = selection.anchorNode;
-    const focus = selection.focusNode;
-    const inside = (node: Node | null): boolean => {
-      if (!node) return false;
-      if (root.contains(node) || container.contains(node)) return true;
-      return (
-        node instanceof Element && node.closest('.controller-shell') !== null
-      );
-    };
-    if (inside(anchor) || inside(focus)) selection.removeAllRanges();
-  };
-  ownerDocument.addEventListener('selectionchange', onSelectionChange);
-  const onDocContextMenu = (event: Event): void => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    if (
-      target.closest('.controller-shell') ||
-      root.contains(target) ||
-      container.contains(target)
-    )
+  if (interactive) {
+    const kill = (event: Event): void => {
       event.preventDefault();
-  };
-  ownerDocument.addEventListener('contextmenu', onDocContextMenu, captureOpts);
+    };
+    const touchOpts: AddEventListenerOptions = {
+      passive: false,
+      capture: true,
+    };
+    const captureOpts: AddEventListenerOptions = { capture: true };
+    const touchEvents = [
+      'touchstart',
+      'touchmove',
+      'touchend',
+      'touchcancel',
+    ] as const;
+    const menuEvents = [
+      'contextmenu',
+      'selectstart',
+      'dragstart',
+      'copy',
+      'cut',
+      'beforeinput',
+    ] as const;
+    for (const type of touchEvents) {
+      root.addEventListener(type, kill, touchOpts);
+      container.addEventListener(type, kill, touchOpts);
+      cleanups.push(() => {
+        root.removeEventListener(type, kill, touchOpts);
+        container.removeEventListener(type, kill, touchOpts);
+      });
+    }
+    for (const type of menuEvents) {
+      root.addEventListener(type, kill, captureOpts);
+      container.addEventListener(type, kill, captureOpts);
+      cleanups.push(() => {
+        root.removeEventListener(type, kill, captureOpts);
+        container.removeEventListener(type, kill, captureOpts);
+      });
+    }
+    const onSelectionChange = (): void => {
+      const selection = ownerDocument.getSelection?.();
+      if (!selection || selection.rangeCount === 0 || selection.type === 'None')
+        return;
+      const anchor = selection.anchorNode;
+      const focus = selection.focusNode;
+      const inside = (node: Node | null): boolean => {
+        if (!node) return false;
+        if (root.contains(node) || container.contains(node)) return true;
+        return (
+          node instanceof Element && node.closest('.controller-shell') !== null
+        );
+      };
+      if (inside(anchor) || inside(focus)) selection.removeAllRanges();
+    };
+    ownerDocument.addEventListener('selectionchange', onSelectionChange);
+    cleanups.push(() =>
+      ownerDocument.removeEventListener('selectionchange', onSelectionChange),
+    );
+    const onDocContextMenu = (event: Event): void => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('.controller-shell') ||
+        root.contains(target) ||
+        container.contains(target)
+      )
+        event.preventDefault();
+    };
+    ownerDocument.addEventListener(
+      'contextmenu',
+      onDocContextMenu,
+      captureOpts,
+    );
+    cleanups.push(() =>
+      ownerDocument.removeEventListener(
+        'contextmenu',
+        onDocContextMenu,
+        captureOpts,
+      ),
+    );
+  }
 
-  const applyOrientation = (orientation: Orientation): void => {
+  const applyOrientation = (
+    orientation: Orientation,
+    explicit?: Viewport,
+  ): void => {
     const geometry = resolveLayout(
       layout,
-      readViewport(composition, view),
+      explicit ?? readViewport(composition, view),
       orientation,
     );
     root.dataset.orientation = orientation;
@@ -197,7 +233,7 @@ export function renderLayout(
   view?.addEventListener('orientationchange', onViewportChange);
 
   const setGyroLocked = (target: 'leftStick' | 'rightStick' | null): void => {
-    pointerInput.setGyroLocked(target);
+    pointerInput?.setGyroLocked(target);
     for (const section of renderedSections) {
       for (const rc of section.controls) {
         if (rc.control.type === 'joystick' && rc.control.binding) {
@@ -230,27 +266,24 @@ export function renderLayout(
     setOrientation: applyOrientation,
     setGyroLocked,
     updateGyroThumb,
-    cancelPointers: () => pointerInput.clear(),
+    cancelPointers: () => pointerInput?.clear(),
     destroy: () => {
-      pointerInput.destroy();
-      fallbackFullscreen.cleanup();
+      pointerInput?.destroy();
+      fallbackFullscreen?.cleanup();
       view?.removeEventListener('resize', onViewportChange);
       view?.removeEventListener('orientationchange', onViewportChange);
-      for (const type of touchEvents) {
-        root.removeEventListener(type, kill as EventListener, touchOpts);
-        container.removeEventListener(type, kill as EventListener, touchOpts);
-      }
-      for (const type of menuEvents) {
-        root.removeEventListener(type, kill as EventListener, captureOpts);
-        container.removeEventListener(type, kill as EventListener, captureOpts);
-      }
-      ownerDocument.removeEventListener('selectionchange', onSelectionChange);
-      ownerDocument.removeEventListener(
-        'contextmenu',
-        onDocContextMenu as EventListener,
-        captureOpts,
-      );
+      for (const cleanup of cleanups) cleanup();
       root.remove();
+    },
+    update: (nextDocument: LayoutDocument, viewport?: Viewport) => {
+      const next = validateLayout(nextDocument) ? nextDocument : DEFAULT_LAYOUT;
+      layout = next;
+      root.dataset.layoutId = layout.id;
+      const size = viewport ?? readViewport(composition, view);
+      applyOrientation(
+        size.width < size.height ? 'portrait' : 'landscape',
+        size,
+      );
     },
   };
 }
@@ -260,7 +293,7 @@ function renderControl(
   control: Control,
   layout: LayoutDocument,
   assetBasePath: string,
-  pointerInput: PointerInput,
+  pointerInput: PointerInput | null,
 ): RenderedControl | undefined {
   if (control.type === 'label') {
     const label = document.createElement('span');
@@ -337,7 +370,7 @@ function renderControl(
   target.className = 'controller-hit-target';
   target.dataset.controlId = control.id;
   target.append(visual);
-  pointerInput.bind(target, control, visual);
+  pointerInput?.bind(target, control, visual);
   return { control, target, visual };
 }
 

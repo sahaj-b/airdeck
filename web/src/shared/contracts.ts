@@ -73,6 +73,12 @@ export interface PendingPublishRequest {
   phoneName: string;
 }
 
+export interface AdminLayoutSummary {
+  id: string;
+  name: string;
+  builtin: boolean;
+}
+
 // Hand-written composite types (not in Go, dashboard-specific)
 export type ServerMessage =
   | import('./generated/protocol').Welcome
@@ -122,6 +128,6 @@ export interface AdminState {
     inputRate: number;
     gracePeriodSeconds: number;
   };
-  layouts: import('./generated/protocol').LayoutSummary[];
+  layouts: AdminLayoutSummary[];
   players: PlayerSnapshot[];
 }

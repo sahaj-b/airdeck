@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from 'react';
-import type { AdminState } from '../shared/contracts';
+import type { AdminState, PendingPublishRequest } from '../shared/contracts';
 import {
   type AdminEvent,
+  acceptPublish,
+  declinePublish,
   getAdminState,
   kickPlayer,
   movePlayer,
   newSession,
+  reloadAdminLayouts,
   type SettingsUpdate,
   setAllPlayerLayouts,
   setJoins,
@@ -13,8 +16,11 @@ import {
   updateSettings,
 } from './api';
 
+const PUBLISH_TTL_MS = 60_000;
+
 export interface AdminSnapshot {
   state: AdminState | null;
+  pendingPublishes: PendingPublishRequest[];
   loading: boolean;
   connected: boolean;
   error: string | null;
@@ -23,6 +29,7 @@ export interface AdminSnapshot {
 export class AdminStore {
   private snapshot: AdminSnapshot = {
     state: null,
+    pendingPublishes: [],
     loading: true,
     connected: false,
     error: null,
@@ -31,6 +38,7 @@ export class AdminStore {
   private socket: WebSocket | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private stopped = false;
+  private publishTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -131,6 +139,76 @@ export class AdminStore {
     await this.runAction(setAllPlayerLayouts(layoutId));
   }
 
+  async reloadLayouts(): Promise<void> {
+    try {
+      this.setSnapshot({ error: null });
+      this.setSnapshot({ state: await reloadAdminLayouts() });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'The host rejected that action.';
+      this.setSnapshot({ error: message });
+      throw error;
+    }
+  }
+
+  async acceptPublishRequest(id: string): Promise<void> {
+    try {
+      this.setSnapshot({ error: null });
+      await acceptPublish(id);
+      this.removePending(id);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'The host rejected that action.';
+      this.setSnapshot({ error: message });
+      throw error;
+    }
+  }
+
+  async declinePublishRequest(id: string): Promise<void> {
+    try {
+      this.setSnapshot({ error: null });
+      await declinePublish(id);
+      this.removePending(id);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'The host rejected that action.';
+      this.setSnapshot({ error: message });
+      throw error;
+    }
+  }
+
+  private removePending(id: string): void {
+    const timer = this.publishTimers.get(id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.publishTimers.delete(id);
+    this.setSnapshot({
+      pendingPublishes: this.snapshot.pendingPublishes.filter(
+        (entry) => entry.id !== id,
+      ),
+    });
+  }
+
+  private addPending(entry: PendingPublishRequest): void {
+    const existing = this.snapshot.pendingPublishes.some(
+      (candidate) => candidate.id === entry.id,
+    );
+    if (existing) return;
+    this.setSnapshot({
+      pendingPublishes: [...this.snapshot.pendingPublishes, entry],
+    });
+    const timer = setTimeout(() => {
+      this.publishTimers.delete(entry.id);
+      this.removePending(entry.id);
+    }, PUBLISH_TTL_MS);
+    this.publishTimers.set(entry.id, timer);
+  }
+
   private async runAction(action: Promise<AdminState>): Promise<void> {
     try {
       this.setSnapshot({ error: null });
@@ -149,6 +227,10 @@ export class AdminStore {
     if (typeof data !== 'string') return;
     try {
       const message: unknown = JSON.parse(data);
+      if (isPendingPublish(message)) {
+        this.addPending(message);
+        return;
+      }
       if (isAdminState(message)) {
         this.setSnapshot({ state: message, loading: false });
       } else if (isAdminEvent(message)) {
@@ -196,6 +278,17 @@ function isAdminEvent(value: unknown): value is AdminEvent {
     isRecord(value) &&
     typeof value.type === 'string' &&
     isAdminState(value.state)
+  );
+}
+
+function isPendingPublish(value: unknown): value is PendingPublishRequest {
+  return (
+    isRecord(value) &&
+    value.type === 'layout.publish.pending' &&
+    typeof value.id === 'string' &&
+    typeof value.phoneId === 'string' &&
+    typeof value.phoneName === 'string' &&
+    isRecord(value.document)
   );
 }
 

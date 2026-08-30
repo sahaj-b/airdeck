@@ -65,8 +65,9 @@ type Document struct {
 }
 
 type Summary struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Builtin bool   `json:"builtin"`
 }
 
 type Library struct {
@@ -131,7 +132,8 @@ func (l *Library) Summaries() []Summary {
 	defer l.mu.RUnlock()
 	out := make([]Summary, 0, len(l.docs))
 	for _, doc := range l.docs {
-		out = append(out, Summary{ID: doc.ID, Name: doc.Name})
+		_, builtin := l.builtins[doc.ID]
+		out = append(out, Summary{ID: doc.ID, Name: doc.Name, Builtin: builtin})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

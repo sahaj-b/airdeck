@@ -26,6 +26,7 @@ interface HostPanelProps {
   onNewSession: () => void;
   onSave: (update: SettingsUpdate) => void;
   onApplyLayoutToAll: (layoutId: string) => void;
+  onReloadLayouts: () => void;
 }
 
 export function HostPanel({
@@ -34,6 +35,7 @@ export function HostPanel({
   onNewSession,
   onSave,
   onApplyLayoutToAll,
+  onReloadLayouts,
 }: HostPanelProps) {
   const [bind, setBind] = useState(state.config.bind);
   const [port, setPort] = useState(String(state.config.port));
@@ -159,6 +161,7 @@ export function HostPanel({
             onJoinsChange={onJoinsChange}
             onLayoutChange={handleDefaultLayoutChange}
             onApplyLayoutToAll={onApplyLayoutToAll}
+            onReloadLayouts={onReloadLayouts}
           />
 
           <Separator />
@@ -221,6 +224,7 @@ function GeneralSection({
   onJoinsChange,
   onLayoutChange,
   onApplyLayoutToAll,
+  onReloadLayouts,
 }: {
   acceptingJoins: boolean;
   defaultLayout: string;
@@ -229,6 +233,7 @@ function GeneralSection({
   onJoinsChange: (v: boolean) => void;
   onLayoutChange: (v: string | null) => void;
   onApplyLayoutToAll: (id: string) => void;
+  onReloadLayouts: () => void;
 }) {
   return (
     <section className="space-y-3">
@@ -286,6 +291,14 @@ function GeneralSection({
           Apply to all {playerCount} players
         </Button>
       )}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onReloadLayouts}
+        className="w-full justify-center"
+      >
+        Reload layouts
+      </Button>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
+import { PublishApprovalBanner } from '@/editor/components/publish-approval-banner';
 import { AdminStore, useAdminSnapshot } from './admin-store';
 import type { SettingsUpdate } from './api';
 import { ErrorScreen } from './components/error-screen';
@@ -53,6 +54,10 @@ function Dashboard() {
   const onApplyLayoutToAll = useCallback((layoutId: string) => {
     void store.setAllLayouts(layoutId).catch(() => undefined);
   }, []);
+  const onReloadLayouts = useCallback(
+    () => run(() => store.reloadLayouts()),
+    [run],
+  );
 
   if (snapshot.loading && !snapshot.state) return <LoadingScreen />;
   if (!snapshot.state)
@@ -81,11 +86,19 @@ function Dashboard() {
               HOST
             </span>
           </h1>
-          {!snapshot.connected && (
-            <span className="text-sm font-medium tracking-[0.14em] text-amber-600 uppercase dark:text-amber-400">
-              Reconnecting
-            </span>
-          )}
+          <div className="flex items-center gap-4">
+            {!snapshot.connected && (
+              <span className="text-sm font-medium tracking-[0.14em] text-amber-600 uppercase dark:text-amber-400">
+                Reconnecting
+              </span>
+            )}
+            <a
+              href="/editor"
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Edit layouts
+            </a>
+          </div>
         </header>
 
         {snapshot.error && (
@@ -96,6 +109,8 @@ function Dashboard() {
             {snapshot.error}
           </div>
         )}
+
+        <PublishApprovalBanner store={store} />
 
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-6">
@@ -115,6 +130,7 @@ function Dashboard() {
             onNewSession={onNewSession}
             onSave={onSaveSettings}
             onApplyLayoutToAll={onApplyLayoutToAll}
+            onReloadLayouts={onReloadLayouts}
           />
         </div>
       </div>
