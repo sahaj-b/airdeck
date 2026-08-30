@@ -90,17 +90,7 @@ export const settingsStore = createStore<SettingsStore>()(
     }),
     {
       name: 'airdeck.settings.v1',
-      version: 2,
-      migrate: (persisted, version) => {
-        const state = persisted as Partial<SettingsState>;
-        if (version < 2) {
-          if (state.joystickPressMs == null)
-            state.joystickPressMs = DEFAULTS.joystickPressMs;
-          if (state.joystickEdgeMs == null)
-            state.joystickEdgeMs = DEFAULTS.joystickEdgeMs;
-        }
-        return state as SettingsState;
-      },
+      version: 1,
     },
   ),
 );

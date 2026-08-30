@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
+import '../controller/controller.css';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,22 +28,33 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   createAdminLayout,
   deleteAdminLayout,
   getAdminLayout,
   getAdminState,
-  reloadAdminLayouts,
   updateAdminLayout,
 } from '@/dashboard/api';
 import type { AdminLayoutSummary } from '@/shared/contracts';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import { validateLayoutDetailed } from '@/shared/layout';
 import {
+  clampGeometry,
   cloneDocument,
+  duplicateControl,
+  findControl,
+  isDefaultLocked,
   isDirty,
   LayoutHistory,
+  nextControlId,
   type SectionId,
 } from '@/shared/layout-editor';
+import { getSkin, initSkin } from '../skins/loader';
 import {
   AddControlDialog,
   type AddControlResult,
@@ -42,10 +62,17 @@ import {
 import { Inspector } from './components/inspector';
 import { LayoutCanvas } from './components/layout-canvas';
 import { LayoutHeader } from './components/layout-header';
-import { duplicateControl, SectionsPanel } from './components/sections-panel';
+import { SectionsPanel } from './components/sections-panel';
 import './editor.css';
 
 function EditorApp() {
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-skin', getSkin());
+    } catch {}
+    initSkin();
+  }, []);
+
   const [layouts, setLayouts] = useState<AdminLayoutSummary[]>([]);
   const [config, setConfig] = useState<{ defaultLayout: string } | null>(null);
   const [draft, setDraft] = useState<LayoutDocument | null>(null);
@@ -57,18 +84,64 @@ function EditorApp() {
     null,
   );
   const [locks, setLocks] = useState<Record<string, boolean>>({});
-  const [detachedIds, setDetachedIds] = useState<Set<string>>(new Set());
   const [addDialogSection, setAddDialogSection] = useState<SectionId | null>(
     null,
   );
   const [newLayoutDialogOpen, setNewLayoutDialogOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [backOpen, setBackOpen] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('airdeck.editor.leftCollapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [rightCollapsed, setRightCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('airdeck.editor.rightCollapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const historyRef = useRef<LayoutHistory>(new LayoutHistory(50));
+  const persistedRef = useRef<LayoutDocument | null>(null);
 
-  const dirty = useMemo(
-    () => draft !== null && persisted !== null && isDirty(draft, persisted),
-    [draft, persisted],
-  );
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'airdeck.editor.leftCollapsed',
+        leftCollapsed ? '1' : '0',
+      );
+    } catch {}
+  }, [leftCollapsed]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'airdeck.editor.rightCollapsed',
+        rightCollapsed ? '1' : '0',
+      );
+    } catch {}
+  }, [rightCollapsed]);
+
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    persistedRef.current = persisted;
+  }, [persisted]);
+
+  const markDirty = useCallback((next: LayoutDocument | null) => {
+    if (!next || !persistedRef.current) {
+      setDirty(false);
+      return;
+    }
+    setDirty(isDirty(next, persistedRef.current));
+  }, []);
+
+  const markDirtyOptimistic = useCallback(() => {
+    if (persistedRef.current) setDirty(true);
+  }, []);
 
   const errors = useMemo(
     () => (draft ? validateLayoutDetailed(draft).errors : []),
@@ -103,6 +176,7 @@ function EditorApp() {
         setDraft(cloneDocument(doc as LayoutDocument));
         setPersisted(cloneDocument(doc as LayoutDocument));
         historyRef.current.reset(doc as LayoutDocument);
+        setDirty(false);
       } catch {
         // leave empty state for local dev without host
       }
@@ -132,16 +206,25 @@ function EditorApp() {
         event.preventDefault();
         if (event.shiftKey) {
           const next = historyRef.current.redo();
-          if (next) setDraft(next);
+          if (next) {
+            setDraft(next);
+            markDirty(next);
+          }
         } else {
           const previous = historyRef.current.undo();
-          if (previous) setDraft(previous);
+          if (previous) {
+            setDraft(previous);
+            markDirty(previous);
+          }
         }
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
         event.preventDefault();
         const next = historyRef.current.redo();
-        if (next) setDraft(next);
+        if (next) {
+          setDraft(next);
+          markDirty(next);
+        }
       }
       if (event.key === 'Delete' && selectedControlId) {
         deleteControlRef.current(selectedControlId);
@@ -153,15 +236,20 @@ function EditorApp() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedControlId]);
+  }, [selectedControlId, markDirty]);
 
-  // Draft change helper
+  // Draft change helper: optimistic dirty during drag, precise on commit
   const handleDraftChange = useCallback(
     (next: LayoutDocument, commit: boolean) => {
       setDraft(next);
-      if (commit) historyRef.current.push(next);
+      if (commit) {
+        historyRef.current.push(next);
+        markDirty(next);
+      } else {
+        markDirtyOptimistic();
+      }
     },
-    [],
+    [markDirty, markDirtyOptimistic],
   );
 
   const handleSelectLayout = useCallback(async (id: string) => {
@@ -170,12 +258,13 @@ function EditorApp() {
       setDraft(cloneDocument(doc as LayoutDocument));
       setPersisted(cloneDocument(doc as LayoutDocument));
       historyRef.current.reset(doc as LayoutDocument);
+      setDirty(false);
       setSelectedControlId(null);
       setSelectedSectionId(null);
       setLocks({});
-      setDetachedIds(new Set());
+      setError(null);
     } catch {
-      setToast('Failed to load layout.');
+      setError('Failed to load layout.');
     }
   }, []);
 
@@ -192,6 +281,7 @@ function EditorApp() {
       setDraft(next);
       setPersisted(cloneDocument(next));
       historyRef.current.push(next);
+      setDirty(false);
       const state = await getAdminState();
       setLayouts(state.layouts);
     },
@@ -214,21 +304,6 @@ function EditorApp() {
     }
   }, [draft, config, handleSelectLayout]);
 
-  const handleReload = useCallback(async () => {
-    await reloadAdminLayouts();
-    const state = await getAdminState();
-    setLayouts(state.layouts);
-    // Reload current doc
-    if (draft) {
-      const doc = await getAdminLayout(draft.id);
-      if (doc) {
-        setDraft(cloneDocument(doc as LayoutDocument));
-        setPersisted(cloneDocument(doc as LayoutDocument));
-        historyRef.current.reset(doc as LayoutDocument);
-      }
-    }
-  }, [draft]);
-
   const handleSave = useCallback(async () => {
     if (!draft || !persisted) return;
     if (errors.length > 0) return;
@@ -241,42 +316,67 @@ function EditorApp() {
       }
       setPersisted(cloneDocument(draft));
       historyRef.current.push(draft);
+      setDirty(false);
       const state = await getAdminState();
       setLayouts(state.layouts);
-      setToast(`Saved "${draft.name}" — assign it from the roster.`);
-      setTimeout(() => setToast(null), 3000);
+      setError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Save failed.';
-      setToast(message);
-      setTimeout(() => setToast(null), 3000);
+      setError(message);
     }
   }, [draft, persisted, errors, layouts]);
 
   const handleDiscard = useCallback(() => {
     if (!persisted) return;
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    if (dirty) {
+      setDiscardOpen(true);
+      return;
+    }
     setDraft(cloneDocument(persisted));
     historyRef.current.reset(persisted);
+    setDirty(false);
     setSelectedControlId(null);
     setSelectedSectionId(null);
   }, [persisted, dirty]);
 
+  const confirmDiscard = useCallback(() => {
+    if (!persisted) return;
+    setDraft(cloneDocument(persisted));
+    historyRef.current.reset(persisted);
+    setDirty(false);
+    setSelectedControlId(null);
+    setSelectedSectionId(null);
+    setDiscardOpen(false);
+  }, [persisted]);
+
   const handleUndo = useCallback(() => {
     const previous = historyRef.current.undo();
-    if (previous) setDraft(previous);
-  }, []);
+    if (previous) {
+      setDraft(previous);
+      markDirty(previous);
+    }
+  }, [markDirty]);
 
   const handleRedo = useCallback(() => {
     const next = historyRef.current.redo();
-    if (next) setDraft(next);
-  }, []);
+    if (next) {
+      setDraft(next);
+      markDirty(next);
+    }
+  }, [markDirty]);
 
   const handleBack = useCallback(() => {
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    if (dirty) {
+      setBackOpen(true);
+      return;
+    }
     window.location.href = '/dashboard';
   }, [dirty]);
 
-  // Control CRUD
+  const confirmBack = useCallback(() => {
+    window.location.href = '/dashboard';
+  }, []);
+
   // Control CRUD
   const handleDuplicateControl = useCallback(
     (controlId: string) => {
@@ -284,28 +384,99 @@ function EditorApp() {
       const next = duplicateControl(draft, controlId);
       setDraft(next);
       historyRef.current.push(next);
+      markDirty(next);
     },
-    [draft],
+    [draft, markDirty],
   );
 
   const handleDeleteControl = useCallback(
     (controlId: string) => {
       if (!draft) return;
       const next = cloneDocument(draft);
+      let deletedIsParent = false;
       for (const section of next.sections) {
         const index = section.controls.findIndex(
           (candidate) => candidate.id === controlId,
         );
         if (index >= 0) {
+          const removed = section.controls[index];
+          deletedIsParent = removed.type !== 'hitfill';
           section.controls.splice(index, 1);
           break;
         }
       }
+      // cascade: if deleted was a parent, delete its hitfills
+      if (deletedIsParent) {
+        for (const section of next.sections) {
+          section.controls = section.controls.filter(
+            (candidate) => candidate.parentId !== controlId,
+          );
+        }
+      }
       setDraft(next);
       historyRef.current.push(next);
+      markDirty(next);
       if (selectedControlId === controlId) setSelectedControlId(null);
+      // if selected was a hitfill of deleted parent, also clear selection if it was removed?
+      if (draft) {
+        const stillExists = next.sections.some((s) =>
+          s.controls.some((c) => c.id === selectedControlId),
+        );
+        if (!stillExists) setSelectedControlId(null);
+      }
     },
-    [draft, selectedControlId],
+    [draft, selectedControlId, markDirty],
+  );
+
+  const handleAddHitfill = useCallback(
+    (parentId: string) => {
+      if (!draft) return;
+      const found = findControl(draft, parentId);
+      if (!found) return;
+      if (found.control.type === 'hitfill') return;
+      const next = cloneDocument(draft);
+      const targetSection = next.sections.find(
+        (s) => s.id === found.section.id,
+      );
+      if (!targetSection) return;
+      const parentControl = targetSection.controls.find(
+        (c) => c.id === parentId,
+      );
+      if (!parentControl) return;
+      const newId = nextControlId(next);
+      const offsetPos = {
+        x: parentControl.geometry.position.x + 0.04,
+        y: parentControl.geometry.position.y + 0.04,
+      };
+      const rawGeom = {
+        position: offsetPos,
+        size: { width: 0.08, height: 0.08 },
+      };
+      const clamped = clampGeometry(rawGeom, targetSection);
+      const hitfill = {
+        id: newId,
+        type: 'hitfill' as const,
+        geometry: clamped,
+        label: '',
+        parentId,
+        shape: 'rect' as const,
+      };
+      // insert after parent for visibility
+      const parentIndex = targetSection.controls.findIndex(
+        (c) => c.id === parentId,
+      );
+      targetSection.controls.splice(
+        parentIndex + 1,
+        0,
+        hitfill as unknown as (typeof targetSection.controls)[number],
+      );
+      setDraft(next);
+      historyRef.current.push(next);
+      markDirty(next);
+      setSelectedControlId(newId);
+      setSelectedSectionId(null);
+    },
+    [draft, markDirty],
   );
   const deleteControlRef = useRef(handleDeleteControl);
   useEffect(() => {
@@ -331,8 +502,9 @@ function EditorApp() {
       }
       setDraft(next);
       historyRef.current.push(next);
+      markDirty(next);
     },
-    [draft],
+    [draft, markDirty],
   );
 
   const handleAddControl = useCallback(
@@ -344,31 +516,30 @@ function EditorApp() {
       section.controls.push(result.control);
       setDraft(next);
       historyRef.current.push(next);
+      markDirty(next);
       setSelectedControlId(result.control.id);
       setSelectedSectionId(null);
       setAddDialogSection(null);
     },
-    [draft],
+    [draft, markDirty],
   );
 
   // Lock/Detach toggles
-  const handleToggleLock = useCallback((id: string) => {
-    setLocks((prev) => {
-      const next = { ...prev };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-  }, []);
-
-  const handleToggleDetach = useCallback((id: string) => {
-    setDetachedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const handleToggleLock = useCallback(
+    (id: string) => {
+      setLocks((prev) => {
+        const effective =
+          prev[id] ??
+          (() => {
+            if (!draft) return false;
+            const entry = findControl(draft, id);
+            return entry ? isDefaultLocked(entry.control) : false;
+          })();
+        return { ...prev, [id]: !effective };
+      });
+    },
+    [draft],
+  );
 
   // New Layout dialog
   const [newLayoutName, setNewLayoutName] = useState('');
@@ -392,7 +563,7 @@ function EditorApp() {
         doc = {
           id,
           name: name.trim(),
-          schemaVersion: 1,
+          schemaVersion: 2,
           defaultOrientation: 'landscape',
           sections: [
             { id: 'left', relativeWidth: 0.86, controls: [] },
@@ -430,149 +601,276 @@ function EditorApp() {
     );
   }
 
+  const shellClass = [
+    'editor-shell',
+    leftCollapsed ? 'editor-shell--left-collapsed' : '',
+    rightCollapsed ? 'editor-shell--right-collapsed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="editor-shell">
-      <LayoutHeader
-        layouts={layouts}
-        currentId={draft.id}
-        currentName={draft.name}
-        isBuiltin={currentBuiltin}
-        isDefault={currentDefault}
-        dirty={dirty}
-        canUndo={historyRef.current.canUndo}
-        canRedo={historyRef.current.canRedo}
-        hasErrors={errors.length > 0}
-        onSelectLayout={handleSelectLayout}
-        onNewLayout={handleNewLayout}
-        onRename={handleRename}
-        onDelete={handleDelete}
-        onReload={handleReload}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onDiscard={handleDiscard}
-        onSave={handleSave}
-        onBack={handleBack}
-      />
-
-      <SectionsPanel
-        document={draft}
-        selectedControlId={selectedControlId}
-        onSelectControl={setSelectedControlId}
-        onAddControl={(sectionId) =>
-          setAddDialogSection(sectionId as SectionId | null)
-        }
-        onDuplicateControl={handleDuplicateControl}
-        onDeleteControl={handleDeleteControl}
-        onMoveControl={handleMoveControl}
-      />
-
-      <LayoutCanvas
-        document={draft}
-        selectedControlId={selectedControlId}
-        onSelectControl={setSelectedControlId}
-        onSelectSection={(id) => setSelectedSectionId(id as SectionId | null)}
-        onDraftChange={handleDraftChange}
-        locks={locks}
-        detached={detachedIds}
-        onToggleDetach={handleToggleDetach}
-      />
-
-      <Inspector
-        document={draft}
-        selectedControlId={selectedControlId}
-        selectedSectionId={selectedSectionId}
-        onDraftChange={handleDraftChange}
-        errors={errors}
-        locks={locks}
-        onToggleLock={handleToggleLock}
-        detached={detachedIds}
-        onToggleDetach={handleToggleDetach}
-      />
-
-      {addDialogSection && (
-        <AddControlDialog
-          open
-          document={draft}
-          sectionId={addDialogSection}
-          onOpenChange={(open) => {
-            if (!open) setAddDialogSection(null);
-          }}
-          onAdd={handleAddControl}
+    <TooltipProvider delay={100}>
+      <div className={shellClass}>
+        <LayoutHeader
+          layouts={layouts}
+          currentId={draft.id}
+          currentName={draft.name}
+          isBuiltin={currentBuiltin}
+          isDefault={currentDefault}
+          dirty={dirty}
+          canUndo={historyRef.current.canUndo}
+          canRedo={historyRef.current.canRedo}
+          hasErrors={errors.length > 0}
+          onSelectLayout={handleSelectLayout}
+          onNewLayout={handleNewLayout}
+          onRename={handleRename}
+          onDelete={handleDelete}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onDiscard={handleDiscard}
+          onSave={handleSave}
+          onBack={handleBack}
         />
-      )}
-
-      {/* New Layout dialog */}
-      <Dialog open={newLayoutDialogOpen} onOpenChange={setNewLayoutDialogOpen}>
-        <DialogContent>
-          <DialogTitle>New layout</DialogTitle>
-          <DialogDescription>
-            Create a blank layout or clone an existing one.
-          </DialogDescription>
-          {newLayoutError && (
-            <p className="rounded bg-red-900/20 px-2 py-1.5 text-xs text-red-400">
-              {newLayoutError}
-            </p>
-          )}
-          <div className="space-y-3 py-2">
-            <div>
-              <Label htmlFor="new-layout-name">Name</Label>
-              <Input
-                id="new-layout-name"
-                value={newLayoutName}
-                onChange={(event) => setNewLayoutName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter')
-                    void handleCreateNew(newLayoutName, newLayoutBase);
-                }}
-              />
-            </div>
-            <div>
-              <Label htmlFor="new-layout-base">Base</Label>
-              <Select
-                value={newLayoutBase}
-                onValueChange={(value) => {
-                  if (value) setNewLayoutBase(value);
-                }}
-              >
-                <SelectTrigger id="new-layout-base" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="blank">Blank</SelectItem>
-                  {layouts.map((layout) => (
-                    <SelectItem key={layout.id} value={layout.id}>
-                      {layout.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <DialogClose
-              render={
-                <Button type="button" variant="outline">
-                  Cancel
-                </Button>
-              }
-            />
-            <Button
+        {error && (
+          <div
+            className="col-span-full flex items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            role="alert"
+          >
+            <span>{error}</span>
+            <button
               type="button"
-              disabled={!newLayoutName.trim()}
-              onClick={() => void handleCreateNew(newLayoutName, newLayoutBase)}
+              onClick={() => setError(null)}
+              className="shrink-0 rounded px-2 py-0.5 text-xs hover:bg-destructive/10"
+              aria-label="Dismiss error"
             >
-              Create
-            </Button>
+              ✕
+            </button>
           </div>
-        </DialogContent>
-      </Dialog>
+        )}
 
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-white px-4 py-2 text-sm text-black shadow-lg">
-          {toast}
+        <div
+          className={
+            leftCollapsed
+              ? 'editor-side editor-side--collapsed'
+              : 'editor-side editor-side--left'
+          }
+        >
+          {leftCollapsed ? (
+            <TooltipProvider delay={100}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="editor-collapse-strip"
+                      onClick={() => setLeftCollapsed(false)}
+                      aria-label="Expand sections"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  }
+                />
+                <TooltipContent side="right">
+                  Expand sections panel
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <SectionsPanel
+              document={draft}
+              selectedControlId={selectedControlId}
+              onSelectControl={setSelectedControlId}
+              onAddControl={(sectionId) =>
+                setAddDialogSection(sectionId as SectionId | null)
+              }
+              onMoveControl={handleMoveControl}
+              onCollapse={() => setLeftCollapsed(true)}
+            />
+          )}
         </div>
-      )}
-    </div>
+
+        <LayoutCanvas
+          document={draft}
+          selectedControlId={selectedControlId}
+          onSelectControl={setSelectedControlId}
+          onSelectSection={(id) => setSelectedSectionId(id as SectionId | null)}
+          onDraftChange={handleDraftChange}
+          locks={locks}
+        />
+
+        <div
+          className={
+            rightCollapsed
+              ? 'editor-side editor-side--collapsed editor-side--right-collapsed'
+              : 'editor-side editor-side--right'
+          }
+        >
+          {rightCollapsed ? (
+            <TooltipProvider delay={100}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="editor-collapse-strip"
+                      onClick={() => setRightCollapsed(false)}
+                      aria-label="Expand inspector"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                  }
+                />
+                <TooltipContent side="left">Expand inspector</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <Inspector
+              document={draft}
+              selectedControlId={selectedControlId}
+              selectedSectionId={selectedSectionId}
+              onDraftChange={handleDraftChange}
+              errors={errors}
+              locks={locks}
+              onToggleLock={handleToggleLock}
+              onCollapse={() => setRightCollapsed(true)}
+              onDuplicateControl={handleDuplicateControl}
+              onDeleteControl={handleDeleteControl}
+              onAddHitfill={handleAddHitfill}
+            />
+          )}
+        </div>
+
+        {addDialogSection && (
+          <AddControlDialog
+            open
+            document={draft}
+            sectionId={addDialogSection}
+            onOpenChange={(open) => {
+              if (!open) setAddDialogSection(null);
+            }}
+            onAdd={handleAddControl}
+          />
+        )}
+
+        {/* New Layout dialog */}
+        <Dialog
+          open={newLayoutDialogOpen}
+          onOpenChange={setNewLayoutDialogOpen}
+        >
+          <DialogContent>
+            <DialogTitle>New layout</DialogTitle>
+            <DialogDescription>
+              Create a blank layout or clone an existing one.
+            </DialogDescription>
+            {newLayoutError && (
+              <p className="rounded bg-red-900/20 px-2 py-1.5 text-xs text-red-400">
+                {newLayoutError}
+              </p>
+            )}
+            <div className="space-y-3 py-2">
+              <div>
+                <Label htmlFor="new-layout-name">Name</Label>
+                <Input
+                  id="new-layout-name"
+                  value={newLayoutName}
+                  onChange={(event) => setNewLayoutName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter')
+                      void handleCreateNew(newLayoutName, newLayoutBase);
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-layout-base">Base</Label>
+                <Select
+                  value={newLayoutBase}
+                  onValueChange={(value) => {
+                    if (value) setNewLayoutBase(value);
+                  }}
+                >
+                  <SelectTrigger id="new-layout-base" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="blank">Blank</SelectItem>
+                    {layouts.map((layout) => (
+                      <SelectItem key={layout.id} value={layout.id}>
+                        {layout.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <DialogClose
+                render={
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                }
+              />
+              <Button
+                type="button"
+                disabled={!newLayoutName.trim()}
+                onClick={() =>
+                  void handleCreateNew(newLayoutName, newLayoutBase)
+                }
+              >
+                Create
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
+          <AlertDialogContent>
+            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Discard unsaved changes? This cannot be undone.
+            </AlertDialogDescription>
+            <div className="flex justify-end gap-2 pt-2">
+              <AlertDialogCancel
+                render={
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                }
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirmDiscard}
+              >
+                Discard
+              </Button>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={backOpen} onOpenChange={setBackOpen}>
+          <AlertDialogContent>
+            <AlertDialogTitle>Leave editor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Leave without saving?
+            </AlertDialogDescription>
+            <div className="flex justify-end gap-2 pt-2">
+              <AlertDialogCancel
+                render={
+                  <Button type="button" variant="outline">
+                    Stay
+                  </Button>
+                }
+              />
+              <Button type="button" variant="destructive" onClick={confirmBack}>
+                Leave
+              </Button>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </TooltipProvider>
   );
 }
 

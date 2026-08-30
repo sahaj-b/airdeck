@@ -21,7 +21,7 @@ func TestLayoutCRUDLoopback(t *testing.T) {
 
 	// Create
 	doc := layout.Document{
-		ID: "my-edit", Name: "My edit", SchemaVersion: 1, DefaultOrientation: "landscape",
+		ID: "my-edit", Name: "My edit", SchemaVersion: 2, DefaultOrientation: "landscape",
 		Sections: []layout.Section{
 			{ID: "left", RelativeWidth: 0.86, Controls: []layout.Control{}},
 			{ID: "center", RelativeWidth: 0.5, Controls: []layout.Control{}},
@@ -135,7 +135,7 @@ func TestPublishPendingAndAccept(t *testing.T) {
 
 	// Publish a layout from phone (public endpoint)
 	doc := layout.Document{
-		ID: "my-publish", Name: "My publish", SchemaVersion: 1, DefaultOrientation: "landscape",
+		ID: "my-publish", Name: "My publish", SchemaVersion: 2, DefaultOrientation: "landscape",
 		Sections: []layout.Section{
 			{ID: "left", RelativeWidth: 0.86, Controls: []layout.Control{}},
 			{ID: "center", RelativeWidth: 0.5, Controls: []layout.Control{}},
@@ -257,7 +257,7 @@ func TestPublishPendingAndAccept(t *testing.T) {
 		t.Fatalf("decline result = %+v", declineResult)
 	}
 	// Ensure cancel works: publish again then cancel via DELETE
-	publishBody, _ = json.Marshal(map[string]any{"playerId": playerID, "document": map[string]any{"id": "cancel-test", "name": "Cancel", "schemaVersion": 1, "defaultOrientation": "landscape", "sections": []any{map[string]any{"id": "left", "relativeWidth": 0.86, "controls": []any{}}, map[string]any{"id": "center", "relativeWidth": 0.5, "controls": []any{}}, map[string]any{"id": "right", "relativeWidth": 0.94, "controls": []any{}}}, "assets": []any{}}})
+	publishBody, _ = json.Marshal(map[string]any{"playerId": playerID, "document": map[string]any{"id": "cancel-test", "name": "Cancel", "schemaVersion": 2, "defaultOrientation": "landscape", "sections": []any{map[string]any{"id": "left", "relativeWidth": 0.86, "controls": []any{}}, map[string]any{"id": "center", "relativeWidth": 0.5, "controls": []any{}}, map[string]any{"id": "right", "relativeWidth": 0.94, "controls": []any{}}}, "assets": []any{}}})
 	req = httptest.NewRequest(http.MethodPost, "/api/layouts/publish", bytes.NewReader(publishBody))
 	req.RemoteAddr = "127.0.0.1:1234"
 	rec = httptest.NewRecorder()

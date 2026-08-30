@@ -23,7 +23,7 @@
       "maxLength": 80
     },
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "defaultOrientation": {
       "enum": ["landscape", "portrait"]
@@ -149,14 +149,14 @@
     "control": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "geometry", "label", "visible"],
+      "required": ["id", "type", "geometry", "label"],
       "properties": {
         "id": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
         },
         "type": {
-          "enum": ["button", "dpad", "joystick", "trigger", "label", "image"]
+          "enum": ["button", "dpad", "joystick", "trigger", "label", "image", "hitfill"]
         },
         "geometry": { "$ref": "#/$defs/geometry" },
         "shape": {
@@ -167,10 +167,10 @@
           "type": "string",
           "maxLength": 40
         },
-        "visible": { "type": "boolean" },
-        "hitOnly": {
-          "type": "boolean",
-          "description": "When true, creates a touch hit target but no visible element. Use for invisible filler areas that route touches to a binding."
+        "parentId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "description": "Required for hitfill, must reference a non-hitfill control in the same section."
         },
         "binding": { "$ref": "#/$defs/binding" },
         "bindings": {
@@ -188,7 +188,32 @@
           "type": "string",
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "then": { "required": ["parentId"] },
+          "else": { "not": { "required": ["parentId"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "then": {
+            "properties": {
+              "binding": false,
+              "bindings": false,
+              "asset": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "then": {
+            "properties": {
+              "shape": { "enum": ["rect"] }
+            }
+          }
+        }
+      ]
     },
     "relativeWidth": {
       "type": "number",

@@ -43,7 +43,7 @@ func TestSaveLoadIsAtomicAndPrivate(t *testing.T) {
 	}
 }
 
-func TestLoadMigratesVersionZeroAndRejectsFuture(t *testing.T) {
+func TestLoadRejectsFutureAndLegacyVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	legacy := map[string]any{"version": 0, "port": 7001}
@@ -51,12 +51,8 @@ func TestLoadMigratesVersionZeroAndRejectsFuture(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Version != CurrentVersion || cfg.Bind != "0.0.0.0" || cfg.InputRate != 60 {
-		t.Fatalf("migration failed: %+v", cfg)
+	if _, err := Load(path); err == nil {
+		t.Fatal("legacy version 0 should be rejected")
 	}
 	future := map[string]any{"version": CurrentVersion + 1}
 	data, _ = json.Marshal(future)
@@ -94,13 +90,6 @@ func TestGracePeriodDefault(t *testing.T) {
 	cfg := Defaults()
 	if cfg.GracePeriodSeconds != 5 {
 		t.Fatalf("grace period default = %d, want 5", cfg.GracePeriodSeconds)
-	}
-}
-
-func TestGracePeriodMigratesFromZero(t *testing.T) {
-	cfg := migrate(Config{Version: 0, GracePeriodSeconds: 0})
-	if cfg.GracePeriodSeconds != 5 {
-		t.Fatalf("grace period after migration = %d, want 5", cfg.GracePeriodSeconds)
 	}
 }
 

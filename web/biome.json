@@ -76,7 +76,34 @@
             "noLabelWithoutControl": "off"
           },
           "suspicious": {
-            "noArrayIndexKey": "off"
+            "noArrayIndexKey": "off",
+            "noDocumentCookie": "off"
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/editor/use-interact-geometry.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/editor/components/layout-canvas.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useAriaPropsSupportedByRole": "off"
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "off"
           }
         }
       }

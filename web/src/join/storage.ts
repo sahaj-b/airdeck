@@ -3,13 +3,6 @@ export function readBoolean(key: string, fallback: boolean): boolean {
   return value === null ? fallback : value === 'true';
 }
 
-function readNumber(key: string, fallback: number): number {
-  const value = readStorage(key);
-  if (value === null) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 export function readStorage(key: string): string | null {
   try {
     return localStorage.getItem(key);

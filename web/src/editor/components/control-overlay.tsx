@@ -2,17 +2,13 @@ import { cn } from '@/lib/utils';
 
 export interface ControlOverlayProps {
   selected: boolean;
-  hitOnly?: boolean;
-  linked?: boolean;
-  onToggleLink?: () => void;
+  isHitfill?: boolean;
   className?: string;
 }
 
 export function ControlOverlay({
   selected,
-  hitOnly,
-  linked,
-  onToggleLink,
+  isHitfill,
   className,
 }: ControlOverlayProps) {
   if (!selected) return null;
@@ -20,7 +16,7 @@ export function ControlOverlay({
     <div
       className={cn(
         'editor-control-overlay',
-        hitOnly && 'editor-hit-only',
+        isHitfill && 'editor-hit-only',
         className,
       )}
     >
@@ -31,23 +27,6 @@ export function ControlOverlay({
         <span className="editor-handle editor-handle-bl" />
         <span className="editor-handle editor-handle-br" />
       </div>
-      {linked !== undefined && (
-        <div className="editor-link-indicator">
-          <span className="editor-link-badge">
-            {linked ? '⛓️ Linked' : 'Detached'}
-          </span>
-          {onToggleLink && (
-            <button
-              type="button"
-              className="editor-link-toggle"
-              onClick={onToggleLink}
-            >
-              {linked ? 'Detach' : 'Link'}
-            </button>
-          )}
-        </div>
-      )}
-      {hitOnly && <span className="editor-hitonly-badge">hitOnly</span>}
     </div>
   );
 }

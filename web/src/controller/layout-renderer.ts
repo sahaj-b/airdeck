@@ -28,7 +28,7 @@ export interface LayoutRendererOptions {
 export interface RenderedLayout {
   root: HTMLElement;
   pointerInput: PointerInput | null;
-  setOrientation(orientation: Orientation): void;
+  setOrientation(orientation: Orientation, viewport?: Viewport): void;
   setGyroLocked(target: 'leftStick' | 'rightStick' | null): void;
   updateGyroThumb(
     target: 'leftStick' | 'rightStick',
@@ -101,7 +101,6 @@ export function renderLayout(
       controls: [],
     };
     for (const control of section.controls) {
-      if (!control.visible && !control.hitOnly) continue;
       const rendered = renderControl(
         ownerDocument,
         control,
@@ -317,6 +316,30 @@ function renderControl(
     return { control, visual: image };
   }
 
+  if (control.type === 'hitfill') {
+    const parent = layout.sections
+      .flatMap((section) => section.controls)
+      .find((candidate) => candidate.id === control.parentId);
+    const binding = parent?.binding ?? '';
+    const filler = document.createElement('div');
+    filler.className = 'controller-control';
+    filler.dataset.controlId = control.id;
+    if (binding) filler.dataset.command = binding;
+    filler.classList.add('hit-only');
+    filler.setAttribute('aria-hidden', 'true');
+    const target = document.createElement('div');
+    target.className = 'controller-hit-target';
+    target.dataset.controlId = control.id;
+    if (binding) target.dataset.command = binding;
+    target.append(filler);
+    const effectiveControl = {
+      ...control,
+      binding: binding as Control['binding'],
+    } as Control;
+    pointerInput?.bind(target, effectiveControl, filler);
+    return { control, target, visual: filler };
+  }
+
   let visual: HTMLElement;
   if (control.type === 'dpad') {
     const dpad = document.createElement('div');
@@ -332,11 +355,6 @@ function renderControl(
       dpad.append(marker);
     }
     visual = dpad;
-  } else if (control.hitOnly) {
-    const filler = document.createElement('div');
-    filler.className = 'controller-control';
-    filler.dataset.controlId = control.id;
-    visual = filler;
   } else if (control.type === 'joystick') {
     const stick = document.createElement('button');
     stick.type = 'button';
@@ -363,8 +381,6 @@ function renderControl(
     }
     visual = button;
   }
-
-  if (control.hitOnly) visual.classList.add('hit-only');
 
   const target = document.createElement('div');
   target.className = 'controller-hit-target';
@@ -421,7 +437,7 @@ function applyResolvedGeometry(
 function applyDynamicSizing(rendered: RenderedControl, rect: PixelRect): void {
   const { control, visual } = rendered;
   if (
-    control.hitOnly ||
+    control.type === 'hitfill' ||
     control.type === 'joystick' ||
     control.type === 'dpad' ||
     control.type === 'image'

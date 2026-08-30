@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/sahaj-b/airdeck/internal/protocol"
@@ -52,8 +53,10 @@ func ValidateJSON(data []byte) (Document, error) {
 	return document, nil
 }
 
+var parentIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+
 func ValidateDocument(document Document) error {
-	if document.SchemaVersion != 1 {
+	if document.SchemaVersion != 2 {
 		return fmt.Errorf("unsupported layout schema version %d", document.SchemaVersion)
 	}
 	if document.ID == "" || document.Name == "" {
@@ -121,6 +124,34 @@ func ValidateDocument(document Document) error {
 			}
 		}
 	}
+	// Second pass: hitfill parent relation validation (requires full id map)
+	controlByID := make(map[string]Control)
+	sectionByControlID := make(map[string]string)
+	for _, section := range document.Sections {
+		for _, control := range section.Controls {
+			controlByID[control.ID] = control
+			sectionByControlID[control.ID] = section.ID
+		}
+	}
+	for _, section := range document.Sections {
+		for _, control := range section.Controls {
+			if control.Type == "hitfill" {
+				if control.ParentID == control.ID {
+					return fmt.Errorf("control %q: parentId must not be self", control.ID)
+				}
+				parent, ok := controlByID[control.ParentID]
+				if !ok {
+					return fmt.Errorf("control %q: parentId %q does not exist", control.ID, control.ParentID)
+				}
+				if sectionByControlID[control.ParentID] != section.ID {
+					return fmt.Errorf("control %q: parentId %q must be in same section", control.ID, control.ParentID)
+				}
+				if parent.Type == "hitfill" {
+					return fmt.Errorf("control %q: parentId %q must not reference another hitfill", control.ID, control.ParentID)
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -138,14 +169,41 @@ func validateSection(section Section) error {
 
 func validateControl(control Control, section Section, assetIDs map[string]struct{}) error {
 	switch control.Type {
-	case "button", "dpad", "joystick", "trigger", "label", "image":
+	case "button", "dpad", "joystick", "trigger", "label", "image", "hitfill":
 	default:
 		return fmt.Errorf("unsupported control type %q", control.Type)
 	}
-	switch control.Shape {
-	case "", "round", "rect":
-	default:
-		return fmt.Errorf("unsupported control shape %q", control.Shape)
+	isHitfill := control.Type == "hitfill"
+	if isHitfill {
+		switch control.Shape {
+		case "", "rect":
+		default:
+			return fmt.Errorf("hitfill shape must be rect, got %q", control.Shape)
+		}
+		if control.ParentID == "" {
+			return errors.New("hitfill requires parentId")
+		}
+		if !parentIDPattern.MatchString(control.ParentID) {
+			return fmt.Errorf("invalid parentId %q", control.ParentID)
+		}
+		if control.Binding != "" {
+			return errors.New("hitfill must not have a binding")
+		}
+		if control.Bindings != nil {
+			return errors.New("hitfill must not have bindings")
+		}
+		if control.Asset != "" {
+			return errors.New("hitfill must not have an asset")
+		}
+	} else {
+		switch control.Shape {
+		case "", "round", "rect":
+		default:
+			return fmt.Errorf("unsupported control shape %q", control.Shape)
+		}
+		if control.ParentID != "" {
+			return errors.New("only hitfill controls may have parentId")
+		}
 	}
 	if err := validateGeometry(control.Geometry, section, "geometry"); err != nil {
 		return err

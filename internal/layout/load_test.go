@@ -13,10 +13,10 @@ func baseDoc() Document {
 	minCenter := 0.38
 	minRight := 0.67
 	return Document{
-		ID: "user-layout", Name: "User Layout", SchemaVersion: 1, DefaultOrientation: "landscape",
+		ID: "user-layout", Name: "User Layout", SchemaVersion: 2, DefaultOrientation: "landscape",
 		Sections: []Section{
 			{ID: "left", RelativeWidth: 0.86, RelativeMinWidth: &minLeft, Controls: []Control{{
-				ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
+				ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",
 			}}},
 			{ID: "center", RelativeWidth: 0.5, RelativeMinWidth: &minCenter, Controls: []Control{}},
 			{ID: "right", RelativeWidth: 0.94, RelativeMinWidth: &minRight, Controls: []Control{}},
@@ -46,7 +46,7 @@ func TestLoadUserSkipsMalformedAndUnsafePresets(t *testing.T) {
 		t.Fatal(err)
 	}
 	future := baseDoc()
-	future.SchemaVersion = 2
+	future.SchemaVersion = 3
 	writeDoc(t, filepath.Join(dir, "future.json"), future)
 	traversal := baseDoc()
 	traversal.Assets[0].Path = "../escape.png"

@@ -1,7 +1,7 @@
 {
   "id": "xbox-default",
   "name": "Xbox default",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "defaultOrientation": "landscape",
   "sections": [
     {
@@ -23,7 +23,6 @@
             }
           },
           "label": "LT",
-          "visible": true,
           "binding": "leftTrigger",
           "shape": "rect"
         },
@@ -41,7 +40,6 @@
             }
           },
           "label": "LB",
-          "visible": true,
           "binding": "leftShoulder",
           "shape": "rect"
         },
@@ -59,7 +57,6 @@
             }
           },
           "label": "Left stick",
-          "visible": true,
           "binding": "leftStick",
           "shape": "round"
         },
@@ -77,31 +74,12 @@
             }
           },
           "label": "D-pad",
-          "visible": true,
           "bindings": {
             "up": "dpadUp",
             "down": "dpadDown",
             "left": "dpadLeft",
             "right": "dpadRight"
           }
-        },
-        {
-          "id": "ls-click",
-          "type": "button",
-          "geometry": {
-            "position": {
-              "x": -0.15,
-              "y": 0.43
-            },
-            "size": {
-              "width": 0.12,
-              "height": 0.08
-            }
-          },
-          "label": "L3",
-          "visible": false,
-          "binding": "leftStick",
-          "shape": "round"
         }
       ]
     },
@@ -124,7 +102,6 @@
             }
           },
           "label": "Back",
-          "visible": true,
           "binding": "back",
           "shape": "round"
         },
@@ -142,26 +119,7 @@
             }
           },
           "label": "Start",
-          "visible": true,
           "binding": "start",
-          "shape": "round"
-        },
-        {
-          "id": "guide",
-          "type": "button",
-          "geometry": {
-            "position": {
-              "x": 0,
-              "y": -0.42
-            },
-            "size": {
-              "width": 0.1,
-              "height": 0.05
-            }
-          },
-          "label": "Guide",
-          "visible": false,
-          "binding": "guide",
           "shape": "round"
         }
       ]
@@ -185,7 +143,6 @@
             }
           },
           "label": "RT",
-          "visible": true,
           "binding": "rightTrigger",
           "shape": "rect"
         },
@@ -203,7 +160,6 @@
             }
           },
           "label": "RB",
-          "visible": true,
           "binding": "rightShoulder",
           "shape": "rect"
         },
@@ -221,13 +177,12 @@
             }
           },
           "label": "Right stick",
-          "visible": true,
           "binding": "rightStick",
           "shape": "round"
         },
         {
           "id": "xyab-fill-n",
-          "type": "button",
+          "type": "hitfill",
           "geometry": {
             "position": {
               "x": 0.1175,
@@ -239,14 +194,12 @@
             }
           },
           "label": "",
-          "visible": false,
-          "hitOnly": true,
-          "binding": "north",
+          "parentId": "north",
           "shape": "rect"
         },
         {
           "id": "xyab-fill-s",
-          "type": "button",
+          "type": "hitfill",
           "geometry": {
             "position": {
               "x": 0.1175,
@@ -258,14 +211,12 @@
             }
           },
           "label": "",
-          "visible": false,
-          "hitOnly": true,
-          "binding": "south",
+          "parentId": "south",
           "shape": "rect"
         },
         {
           "id": "xyab-fill-w",
-          "type": "button",
+          "type": "hitfill",
           "geometry": {
             "position": {
               "x": 0.085,
@@ -277,14 +228,12 @@
             }
           },
           "label": "",
-          "visible": false,
-          "hitOnly": true,
-          "binding": "west",
+          "parentId": "west",
           "shape": "rect"
         },
         {
           "id": "xyab-fill-e",
-          "type": "button",
+          "type": "hitfill",
           "geometry": {
             "position": {
               "x": 0.15,
@@ -296,9 +245,7 @@
             }
           },
           "label": "",
-          "visible": false,
-          "hitOnly": true,
-          "binding": "east",
+          "parentId": "east",
           "shape": "rect"
         },
         {
@@ -315,7 +262,6 @@
             }
           },
           "label": "Y",
-          "visible": true,
           "binding": "north",
           "shape": "round"
         },
@@ -333,7 +279,6 @@
             }
           },
           "label": "X",
-          "visible": true,
           "binding": "west",
           "shape": "round"
         },
@@ -351,7 +296,6 @@
             }
           },
           "label": "B",
-          "visible": true,
           "binding": "east",
           "shape": "round"
         },
@@ -369,26 +313,7 @@
             }
           },
           "label": "A",
-          "visible": true,
           "binding": "south",
-          "shape": "round"
-        },
-        {
-          "id": "rs-click",
-          "type": "button",
-          "geometry": {
-            "position": {
-              "x": -0.22,
-              "y": 0.46
-            },
-            "size": {
-              "width": 0.12,
-              "height": 0.08
-            }
-          },
-          "label": "R3",
-          "visible": false,
-          "binding": "rightStick",
           "shape": "round"
         }
       ]

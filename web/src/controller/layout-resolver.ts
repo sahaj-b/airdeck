@@ -68,7 +68,6 @@ export function resolveLayout(
 
     const controls: ResolvedControl[] = [];
     for (const control of section.controls) {
-      if (!control.visible && !control.hitOnly) continue;
       controls.push(resolveControl(control, section.id, content, reference));
     }
     sections.push({ section, rect, content, reference, controls });

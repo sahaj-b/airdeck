@@ -111,6 +111,16 @@
   opacity: 0.35;
 }
 
+.phone-editor-hit.peer {
+  border: 2px dashed rgb(250 204 21 / 0.95);
+  background: rgb(250 204 21 / 0.12);
+}
+
+.phone-editor-hit.peer.hit-only {
+  border: 2px dashed rgb(250 204 21 / 0.9);
+  background: rgb(250 204 21 / 0.14);
+}
+
 .phone-editor-overlay-handles {
   position: absolute;
   inset: 0;

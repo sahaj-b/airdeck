@@ -100,17 +100,7 @@ export class AdminStore {
   }
 
   async saveSettings(update: SettingsUpdate): Promise<void> {
-    try {
-      this.setSnapshot({ error: null });
-      this.setSnapshot({ state: await updateSettings(update) });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'The host rejected that action.';
-      this.setSnapshot({ error: message });
-      throw error;
-    }
+    await this.runAction(updateSettings(update));
     const state = this.snapshot.state;
     if (state) {
       const currentPort = window.location.port;
@@ -140,17 +130,7 @@ export class AdminStore {
   }
 
   async reloadLayouts(): Promise<void> {
-    try {
-      this.setSnapshot({ error: null });
-      this.setSnapshot({ state: await reloadAdminLayouts() });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'The host rejected that action.';
-      this.setSnapshot({ error: message });
-      throw error;
-    }
+    await this.runAction(reloadAdminLayouts());
   }
 
   async acceptPublishRequest(id: string): Promise<void> {

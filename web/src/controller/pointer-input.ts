@@ -35,7 +35,6 @@ export interface PointerFeedback {
 
 export const JOYSTICK_BOUNDARY_THRESHOLD = 0.98;
 export const JOYSTICK_REARM_THRESHOLD = 0.85;
-const JOYSTICK_EDGE_VIBRATION_FALLBACK_MS = 35;
 
 interface PointerOwnership {
   target: HTMLElement;

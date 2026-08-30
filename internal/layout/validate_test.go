@@ -24,14 +24,14 @@ func baseSection(id string, width float64) Section {
 	return Section{
 		ID: id, RelativeWidth: width, RelativeMinWidth: &m,
 		Controls: []Control{{
-			ID: id + "-btn", Type: "button", Geometry: baseGeometry(), Label: "A", Visible: true, Binding: "south",
+			ID: id + "-btn", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",
 		}},
 	}
 }
 
 func baseDocument() Document {
 	return Document{
-		ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape",
+		ID: "test", Name: "Test", SchemaVersion: 2, DefaultOrientation: "landscape",
 		Sections: []Section{
 			baseSection("left", 0.86),
 			baseSection("center", 0.5),
@@ -62,7 +62,7 @@ func TestValidateRejectsUnsafeAndDuplicateDocuments(t *testing.T) {
 	duplicate.Position.X = 0.2
 	// duplicate control id within same doc (left-btn already exists, reuse)
 	base.Sections[0].Controls = append(base.Sections[0].Controls, Control{
-		ID: "left-btn", Type: "button", Geometry: duplicate, Label: "B", Visible: true, Binding: "east",
+		ID: "left-btn", Type: "button", Geometry: duplicate, Label: "B", Binding: "east",
 	})
 	if err := ValidateDocument(base); err == nil {
 		t.Fatal("duplicate control id was accepted")
@@ -74,7 +74,7 @@ func TestValidateRejectsIncompleteDPad(t *testing.T) {
 	doc.Sections[0].Controls = []Control{{
 		ID: "dpad", Type: "dpad", Geometry: Geometry{
 			Position: Point{}, Size: Size{Width: 0.5, Height: 0.5},
-		}, Label: "D-pad", Visible: true, Bindings: &DPadBindings{Up: "dpadUp"},
+		}, Label: "D-pad", Bindings: &DPadBindings{Up: "dpadUp"},
 	}}
 	if err := ValidateDocument(doc); err == nil {
 		t.Fatal("incomplete d-pad was accepted")
@@ -112,7 +112,7 @@ func TestValidateControlShapesAndUnlockedJoystick(t *testing.T) {
 		doc.Sections[0].Controls = []Control{{
 			ID: "stick", Type: "joystick", Geometry: Geometry{
 				Position: Point{}, Size: size,
-			}, Label: "Left stick", Visible: true, Binding: "leftStick", Shape: shape,
+			}, Label: "Left stick", Binding: "leftStick", Shape: shape,
 		}}
 		return doc
 	}
@@ -142,7 +142,7 @@ func TestValidateControlShapesAndUnlockedJoystick(t *testing.T) {
 
 func TestValidateRejectsLegacyFields(t *testing.T) {
 	// JSON with legacy aspectRatio should be rejected by schema
-	raw := `{"id":"test","name":"Test","schemaVersion":1,"defaultOrientation":"landscape","sections":[{"id":"left","aspectRatio":0.86,"minWidth":0.65,"maxWidth":0.86,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"center","aspectRatio":0.5,"minWidth":0.38,"maxWidth":4,"flexGrow":1,"flexShrink":1,"protected":false,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"right","aspectRatio":0.94,"minWidth":0.67,"maxWidth":0.94,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]}],"assets":[]}`
+	raw := `{"id":"test","name":"Test","schemaVersion":2,"defaultOrientation":"landscape","sections":[{"id":"left","aspectRatio":0.86,"minWidth":0.65,"maxWidth":0.86,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"center","aspectRatio":0.5,"minWidth":0.38,"maxWidth":4,"flexGrow":1,"flexShrink":1,"protected":false,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"right","aspectRatio":0.94,"minWidth":0.67,"maxWidth":0.94,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]}],"assets":[]}`
 	if _, err := ValidateJSON([]byte(raw)); err == nil {
 		t.Fatal("legacy fields were accepted by schema")
 	}

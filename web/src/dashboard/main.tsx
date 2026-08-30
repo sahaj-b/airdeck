@@ -1,7 +1,10 @@
+import { Pencil } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
+import { buttonVariants } from '@/components/ui/button-variants';
 import { PublishApprovalBanner } from '@/editor/components/publish-approval-banner';
+import { cn } from '@/lib/utils';
 import { AdminStore, useAdminSnapshot } from './admin-store';
 import type { SettingsUpdate } from './api';
 import { ErrorScreen } from './components/error-screen';
@@ -94,8 +97,12 @@ function Dashboard() {
             )}
             <a
               href="/editor"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'sm' }),
+                'gap-1.5',
+              )}
             >
+              <Pencil className="size-3.5" />
               Edit layouts
             </a>
           </div>

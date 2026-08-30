@@ -36,22 +36,9 @@ export function checkboxField(
   return { wrapper, input };
 }
 
-function settingsRow(labelText: string, value: HTMLElement): HTMLDivElement {
-  const row = document.createElement('div');
-  row.className = 'settings-row';
-  const label = document.createElement('span');
-  label.textContent = labelText;
-  row.append(label, value);
-  return row;
-}
-
 export function showError(element: HTMLElement, message: string): void {
   element.hidden = false;
   element.textContent = message;
-}
-
-function formatVibration(ms: number): string {
-  return ms > 0 ? `${ms} ms` : 'Off';
 }
 
 export function updateCapabilityMessage(

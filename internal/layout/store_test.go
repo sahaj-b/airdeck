@@ -165,5 +165,5 @@ func TestLibraryCreateConflict(t *testing.T) {
 
 func marshalDoc(doc Document) ([]byte, error) {
 	// helper to marshal without validation
-	return []byte(`{"id":"` + doc.ID + `","name":"` + doc.Name + `","schemaVersion":1,"defaultOrientation":"landscape","sections":[{"id":"left","relativeWidth":0.86,"controls":[]},{"id":"center","relativeWidth":0.5,"controls":[]},{"id":"right","relativeWidth":0.94,"controls":[]}],"assets":[]}`), nil
+	return []byte(`{"id":"` + doc.ID + `","name":"` + doc.Name + `","schemaVersion":2,"defaultOrientation":"landscape","sections":[{"id":"left","relativeWidth":0.86,"controls":[]},{"id":"center","relativeWidth":0.5,"controls":[]},{"id":"right","relativeWidth":0.94,"controls":[]}],"assets":[]}`), nil
 }

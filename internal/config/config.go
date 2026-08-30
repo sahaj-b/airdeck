@@ -39,37 +39,10 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
-	if cfg.Version > CurrentVersion {
-		return Config{}, fmt.Errorf("config version %d is newer than supported version %d", cfg.Version, CurrentVersion)
-	}
-	cfg = migrate(cfg)
 	if err := Validate(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
-}
-
-func migrate(cfg Config) Config {
-	if cfg.Version == 0 {
-		cfg.Version = CurrentVersion
-	}
-	defaults := Defaults()
-	if cfg.Bind == "" {
-		cfg.Bind = defaults.Bind
-	}
-	if cfg.Port == 0 {
-		cfg.Port = defaults.Port
-	}
-	if cfg.InputRate == 0 {
-		cfg.InputRate = defaults.InputRate
-	}
-	if cfg.DefaultLayout == "" {
-		cfg.DefaultLayout = defaults.DefaultLayout
-	}
-	if cfg.GracePeriodSeconds == 0 {
-		cfg.GracePeriodSeconds = defaults.GracePeriodSeconds
-	}
-	return cfg
 }
 
 func Validate(cfg Config) error {

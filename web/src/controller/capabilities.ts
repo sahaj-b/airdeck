@@ -141,11 +141,7 @@ export class CapabilityManager {
   }
 
   private readonly handleVisibilityChange = (): void => {
-    if (
-      !this.joined ||
-      !this.wakeLockEnabled ||
-      this.currentDocument.visibilityState !== 'visible'
-    ) {
+    if (!this.joined || !this.wakeLockEnabled || this.currentDocument.hidden) {
       return;
     }
     if (this.status.wakeLock) void this.requestWakeLock();

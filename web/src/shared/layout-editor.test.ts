@@ -6,53 +6,97 @@ import {
   clampGeometry,
   clampResize,
   clampSectionDivider,
+  findControl,
   getBindingLabel,
-  getLinkedGroup,
+  getHitfillsOf,
   isDefaultLocked,
   LayoutHistory,
-  moveLinkedGroup,
+  moveParentWithHitfills,
   pixelsToHeightUnits,
+  updateControlGeometry,
 } from './layout-editor';
 
 const base = xboxDefault as unknown as LayoutDocument;
 
 describe('layout-editor helpers', () => {
-  it('groups XYAB face button with its hitOnly fillers as one history entry', () => {
+  it('groups hitfill with its parent as one history entry and moves both', () => {
     const history = new LayoutHistory(50);
     history.reset(base);
-    const south = base.sections[2].controls.find(
-      (candidate: { id: string }) => candidate.id === 'south',
-    );
-    if (!south) throw new Error('south missing');
-    const group = getLinkedGroup(base, 'south');
-    expect(group).toContain('south');
-    // xbox default has fillers per face binding but only one per binding
-    expect(group.length).toBeGreaterThan(1);
+    const hitfills = getHitfillsOf(base, 'south');
+    expect(hitfills).toContain('xyab-fill-s');
+    expect(hitfills.length).toBe(1);
 
-    const moved = moveLinkedGroup(base, 'south', 0.02, 0.02);
+    const southBefore = base.sections[2].controls.find((c) => c.id === 'south');
+    if (!southBefore) throw new Error('south missing');
+    const fillerBefore = base.sections[2].controls.find(
+      (c) => c.id === 'xyab-fill-s',
+    );
+    if (!fillerBefore) throw new Error('filler missing');
+    const moved = moveParentWithHitfills(base, 'south', 0.02, 0.02);
     history.push(moved);
     expect(history.size).toBe(2);
     expect(history.canUndo).toBe(true);
+
+    const southAfter = moved.sections[2].controls.find((c) => c.id === 'south');
+    if (!southAfter) throw new Error('south missing');
+    const fillerAfter = moved.sections[2].controls.find(
+      (c) => c.id === 'xyab-fill-s',
+    );
+    if (!fillerAfter) throw new Error('filler missing');
+    expect(southAfter.geometry.position.x).not.toBe(
+      southBefore.geometry.position.x,
+    );
+    expect(fillerAfter.geometry.position.x).not.toBe(
+      fillerBefore.geometry.position.x,
+    );
+    // both moved by same delta (clamped individually but within bounds)
+    expect(
+      fillerAfter.geometry.position.x - fillerBefore.geometry.position.x,
+    ).toBeCloseTo(0.02, 5);
+
     const undone = history.undo();
     expect(undone?.id).toBe(base.id);
     expect(history.canRedo).toBe(true);
     const redone = history.redo();
     expect(
-      redone?.sections[2].controls.find(
-        (candidate: { id: string }) => candidate.id === 'south',
-      )?.geometry.position.x,
-    ).toBe(
-      moved.sections[2].controls.find(
-        (candidate: { id: string }) => candidate.id === 'south',
-      )?.geometry.position.x,
+      redone?.sections[2].controls.find((c) => c.id === 'south')?.geometry
+        .position.x,
+    ).toBe(southAfter.geometry.position.x);
+  });
+
+  it('dragging hitfill moves only itself, not parent', () => {
+    const hitfillId = 'xyab-fill-s';
+    const foundHitfill = findControl(base, hitfillId);
+    if (!foundHitfill) throw new Error('hitfill missing');
+    const movedHitfill = updateControlGeometry(
+      base,
+      hitfillId,
+      clampDrag(
+        foundHitfill.control.geometry,
+        0.03,
+        0.03,
+        foundHitfill.section,
+      ),
+    );
+    const southBefore = base.sections[2].controls.find((c) => c.id === 'south');
+    if (!southBefore) throw new Error('south missing');
+    const southAfter = movedHitfill.sections[2].controls.find(
+      (c) => c.id === 'south',
+    );
+    if (!southAfter) throw new Error('south missing');
+    expect(southAfter.geometry.position.x).toBe(
+      southBefore.geometry.position.x,
+    );
+    expect(southAfter.geometry.position.y).toBe(
+      southBefore.geometry.position.y,
     );
   });
 
-  it('caps history at 50 entries and treats group move as one', () => {
+  it('caps history at 50 entries and treats parent+hitfills move as one', () => {
     const history = new LayoutHistory(5);
     history.reset(base);
     for (let index = 0; index < 10; index += 1) {
-      const next = moveLinkedGroup(
+      const next = moveParentWithHitfills(
         history.current() as LayoutDocument,
         'south',
         0.01,
@@ -61,7 +105,6 @@ describe('layout-editor helpers', () => {
       history.push(next);
     }
     expect(history.size).toBe(5);
-    // walk back to oldest retained
     let steps = 0;
     while (history.canUndo) {
       history.undo();
@@ -79,7 +122,6 @@ describe('layout-editor helpers', () => {
     expect(isDefaultLocked(control)).toBe(true);
 
     const clamped = clampDrag(control.geometry, 5, 5, section);
-    // Should stay inside bounds
     expect(clamped.position.x).toBeLessThan(2);
     expect(clamped.position.y).toBeLessThan(2);
 

@@ -1,5 +1,7 @@
+import { Pencil } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/button';
+import { buttonVariants } from '../../components/ui/button-variants';
 import {
   Card,
   CardContent,
@@ -17,6 +19,7 @@ import {
 } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
 import { Switch } from '../../components/ui/switch';
+import { cn } from '../../lib/utils';
 import type { AdminState } from '../../shared/contracts';
 import type { SettingsUpdate } from '../api';
 
@@ -59,75 +62,46 @@ export function HostPanel({
     state.config.gracePeriodSeconds,
   );
 
-  // WS pushes state at 1Hz with new object identities. Naively syncing
-  // every tick clobbers in-progress edits (e.g. Custom host input flashes
-  // then snaps back to Auto). Only sync when the server value actually
-  // changed from last synced, and preserve dirty local edits.
-  const lastServerHostRef = useRef(state.config.advertisedHost);
-  const lastServerCandidatesRef = useRef<string>('');
-  const lastServerBindRef = useRef(state.config.bind);
-  const lastServerPortRef = useRef(state.config.port);
-  const lastServerAdvertisedPortRef = useRef(state.config.advertisedPort);
-  const lastServerDefaultLayoutRef = useRef(state.config.defaultLayout);
-  const lastServerGraceRef = useRef(state.config.gracePeriodSeconds);
+  const lastServerRef = useRef(state.config);
+  const lastCandidatesRef = useRef(state.advertisedCandidates.join('|'));
 
-  // Intentional prop-to-state sync with staleness guard. Deriving during
-  // render would clobber the user's in-flight input on every 1Hz WS tick.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: prop sync with guard
   useEffect(() => {
-    const serverHost = state.config.advertisedHost;
+    const prev = lastServerRef.current;
+    const curr = state.config;
     const candidatesKey = state.advertisedCandidates.join('|');
-    const hostChanged = serverHost !== lastServerHostRef.current;
-    const candidatesChanged = candidatesKey !== lastServerCandidatesRef.current;
+    const candidatesChanged = candidatesKey !== lastCandidatesRef.current;
 
-    if (hostChanged) {
-      lastServerHostRef.current = serverHost;
-      lastServerCandidatesRef.current = candidatesKey;
-      advertisedHostRef.current = serverHost;
+    if (curr.advertisedHost !== prev.advertisedHost) {
+      lastCandidatesRef.current = candidatesKey;
+      advertisedHostRef.current = curr.advertisedHost;
       setAdvertisedHostSelect(
-        deriveHostSelect(serverHost, state.advertisedCandidates),
+        deriveHostSelect(curr.advertisedHost, state.advertisedCandidates),
       );
       setCustomHost(
-        isCustomHost(serverHost, state.advertisedCandidates) ? serverHost : '',
+        isCustomHost(curr.advertisedHost, state.advertisedCandidates)
+          ? curr.advertisedHost
+          : '',
       );
     } else if (candidatesChanged) {
-      lastServerCandidatesRef.current = candidatesKey;
-      setAdvertisedHostSelect((prev) =>
-        prev === '__custom__'
-          ? prev
-          : deriveHostSelect(serverHost, state.advertisedCandidates),
+      lastCandidatesRef.current = candidatesKey;
+      setAdvertisedHostSelect((prevSelect) =>
+        prevSelect === '__custom__'
+          ? prevSelect
+          : deriveHostSelect(curr.advertisedHost, state.advertisedCandidates),
       );
     }
 
-    if (state.config.bind !== lastServerBindRef.current) {
-      lastServerBindRef.current = state.config.bind;
-      setBind(state.config.bind);
-    }
-    if (state.config.port !== lastServerPortRef.current) {
-      lastServerPortRef.current = state.config.port;
-      setPort(String(state.config.port));
-    }
-    if (state.config.advertisedPort !== lastServerAdvertisedPortRef.current) {
-      lastServerAdvertisedPortRef.current = state.config.advertisedPort;
-      setAdvertisedPort(String(state.config.advertisedPort));
-    }
-    if (state.config.defaultLayout !== lastServerDefaultLayoutRef.current) {
-      lastServerDefaultLayoutRef.current = state.config.defaultLayout;
-      setDefaultLayout(state.config.defaultLayout);
-    }
-    if (state.config.gracePeriodSeconds !== lastServerGraceRef.current) {
-      lastServerGraceRef.current = state.config.gracePeriodSeconds;
-      setGracePeriodSeconds(state.config.gracePeriodSeconds);
-    }
-  }, [
-    state.advertisedCandidates,
-    state.config.advertisedHost,
-    state.config.advertisedPort,
-    state.config.bind,
-    state.config.defaultLayout,
-    state.config.gracePeriodSeconds,
-    state.config.port,
-  ]);
+    if (curr.bind !== prev.bind) setBind(curr.bind);
+    if (curr.port !== prev.port) setPort(String(curr.port));
+    if (curr.advertisedPort !== prev.advertisedPort)
+      setAdvertisedPort(String(curr.advertisedPort));
+    if (curr.defaultLayout !== prev.defaultLayout)
+      setDefaultLayout(curr.defaultLayout);
+    if (curr.gracePeriodSeconds !== prev.gracePeriodSeconds)
+      setGracePeriodSeconds(curr.gracePeriodSeconds);
+
+    lastServerRef.current = curr;
+  }, [state.advertisedCandidates, state.config]);
 
   function save(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -291,6 +265,16 @@ function GeneralSection({
           Apply to all {playerCount} players
         </Button>
       )}
+      <a
+        href="/editor"
+        className={cn(
+          buttonVariants({ variant: 'outline', size: 'default' }),
+          'w-full justify-center gap-1.5',
+        )}
+      >
+        <Pencil className="size-3.5" />
+        Edit layouts
+      </a>
       <Button
         type="button"
         variant="outline"
@@ -482,8 +466,7 @@ function numberValue(value: string): number {
 
 function deriveHostSelect(host: string, candidates: string[]): string {
   if (!host) return 'auto';
-  if (candidates.includes(host)) return host;
-  return '__custom__';
+  return candidates.includes(host) ? host : '__custom__';
 }
 
 function isCustomHost(host: string, candidates: string[]): boolean {

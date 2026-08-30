@@ -9,13 +9,6 @@ import type { Command } from './generated/protocol';
 export const SECTION_IDS = ['left', 'center', 'right'] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
-export const FACE_BINDINGS = new Set<Command>([
-  'south',
-  'west',
-  'east',
-  'north',
-] as Command[]);
-
 interface BindingLabel {
   command: Command;
   xbox: string;
@@ -142,6 +135,7 @@ export function getAllowedBindings(type: Control['type']): Command[] {
       return ['dpadUp', 'dpadDown', 'dpadLeft', 'dpadRight'] as Command[];
     case 'label':
     case 'image':
+    case 'hitfill':
       return [];
     default:
       return Object.keys(BINDING_LABELS) as Command[];
@@ -150,12 +144,6 @@ export function getAllowedBindings(type: Control['type']): Command[] {
 
 export function isDefaultLocked(control: Control): boolean {
   if (control.type === 'joystick' || control.type === 'dpad') return true;
-  if (
-    control.type === 'button' &&
-    control.binding &&
-    FACE_BINDINGS.has(control.binding as Command)
-  )
-    return true;
   return false;
 }
 
@@ -193,11 +181,9 @@ export function clampGeometry(geometry: Geometry, section: Section): Geometry {
   let { x, y } = geometry.position;
   let { width, height } = geometry.size;
 
-  // Clamp size first: cannot exceed section
   width = Math.min(Math.max(width, 0.01), Math.min(2, contentWidth));
   height = Math.min(Math.max(height, 0.01), Math.min(2, contentHeight));
 
-  // Ensure position keeps rect inside bounds after size clamp
   const halfW = width / 2;
   const halfH = height / 2;
   const minX = halfW - centerX;
@@ -250,8 +236,7 @@ export function clampResize(
   return clampGeometry(next, section);
 }
 
-// Section divider clamping. Left/right widths are in height units.
-// Center is auto viewport - left - right. Clamp proposed side width so center respects its min and sides stay non-negative.
+// Clamp proposed side width so center keeps its minimum.
 export function clampSectionDivider(
   document: LayoutDocument,
   side: 'left' | 'right',
@@ -265,19 +250,14 @@ export function clampSectionDivider(
   const rightCurrent = document.sections[2].relativeWidth;
   const otherWidth = side === 'left' ? rightCurrent : leftCurrent;
 
-  // Minimal side width guard: at least 0.2 height units, and at most available
   let clamped = Math.max(0.1, Math.min(proposedWidth, available - 0.1));
 
-  // Ensure center gets its minimum
   const centerWidth = available - clamped - otherWidth;
   if (centerWidth < centerMin) {
     clamped = available - otherWidth - centerMin;
   }
-  // If still negative or overflow, proportional fallback similar to resolver
   if (clamped < 0.1) clamped = 0.1;
   if (clamped + otherWidth + centerMin > available) {
-    // Need to scale sides proportionally if viewport extremely narrow
-    // Keep ratio of proposed to other
     const sideAvailable = Math.max(0, available - centerMin);
     const totalSide = clamped + otherWidth;
     if (totalSide > 0) {
@@ -317,30 +297,31 @@ export function updateControlGeometry(
   return next;
 }
 
-// XYAB filler linking: face button + hitOnly fillers sharing same binding are linked.
-export function getLinkedGroup(
+export function getHitfillsOf(
   document: LayoutDocument,
-  controlId: string,
+  parentId: string,
 ): string[] {
-  const entry = findControl(document, controlId);
-  if (!entry) return [controlId];
-  const { control, section } = entry;
-  const binding = control.binding;
-  if (!binding || !FACE_BINDINGS.has(binding as Command)) return [controlId];
-  return section.controls
-    .filter((candidate) => candidate.binding === binding)
-    .map((candidate) => candidate.id);
+  const ids: string[] = [];
+  for (const section of document.sections) {
+    for (const control of section.controls) {
+      if (control.type === 'hitfill' && control.parentId === parentId) {
+        ids.push(control.id);
+      }
+    }
+  }
+  return ids;
 }
 
-export function moveLinkedGroup(
+export function moveParentWithHitfills(
   document: LayoutDocument,
-  controlId: string,
+  parentId: string,
   deltaX: number,
   deltaY: number,
 ): LayoutDocument {
-  const group = getLinkedGroup(document, controlId);
+  const hitfillIds = getHitfillsOf(document, parentId);
+  const ids = [parentId, ...hitfillIds];
   const next = cloneDocument(document);
-  for (const id of group) {
+  for (const id of ids) {
     for (const section of next.sections) {
       const control = section.controls.find((candidate) => candidate.id === id);
       if (control) {
@@ -378,7 +359,6 @@ export function resizeControl(
   return next;
 }
 
-// Used by canvas to compute delta from pixel deltas
 export function pixelsToHeightUnits(
   deltaPx: number,
   viewportHeight: number,
@@ -387,7 +367,6 @@ export function pixelsToHeightUnits(
   return deltaPx / viewportHeight;
 }
 
-// History state machine: 50 entries, dragend granularity, group as one.
 export class LayoutHistory {
   private cap: number;
   private stack: LayoutDocument[] = [];
@@ -444,6 +423,33 @@ export class LayoutHistory {
     this.stack = [];
     this.index = -1;
   }
+}
+
+export function duplicateControl(
+  document: LayoutDocument,
+  controlId: string,
+): LayoutDocument {
+  const found = findControl(document, controlId);
+  if (!found) return document;
+  const { control, section } = found;
+  const next = cloneDocument(document);
+  const targetSection = next.sections.find((s) => s.id === section.id);
+  if (!targetSection) return document;
+  const sourceIndex = targetSection.controls.findIndex(
+    (candidate) => candidate.id === controlId,
+  );
+  if (sourceIndex < 0) return document;
+  const copy = structuredClone(control) as Control;
+  copy.id = nextControlId(next);
+  copy.geometry = {
+    position: {
+      x: control.geometry.position.x + 0.05,
+      y: control.geometry.position.y + 0.05,
+    },
+    size: { ...control.geometry.size },
+  };
+  targetSection.controls.splice(sourceIndex + 1, 0, copy);
+  return next;
 }
 
 export function nextControlId(document: LayoutDocument): string {

@@ -533,10 +533,7 @@ html[data-skin] .dpad-direction.dpad-right {
   margin: 0.75rem auto 0;
 }
 
-html[data-skin] .controller-frame {
-  border: 0 !important;
-  border-width: 0 !important;
-}
+/* Skin controls frame border — do not force-hide it here */
 
 :is(.controller-control, .controller-hit-target).gyro-locked {
   opacity: 0.45;

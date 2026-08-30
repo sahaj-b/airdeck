@@ -33,7 +33,7 @@ describe('responsive layout resolver', () => {
     const simple: LayoutDocument = {
       id: 'simple',
       name: 'Simple',
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultOrientation: 'landscape',
       sections: [
         {
@@ -49,7 +49,6 @@ describe('responsive layout resolver', () => {
                 size: { width: 0.2, height: 0.4 },
               },
               label: 'Button',
-              visible: true,
               binding: 'south',
             },
           ],
@@ -74,11 +73,11 @@ describe('responsive layout resolver', () => {
     });
   });
 
-  it('keeps hit bounds equal to visual bounds (WYSIWYG, use hitOnly fillers to expand)', () => {
+  it('keeps hit bounds equal to visual bounds (WYSIWYG, use hitfill to expand)', () => {
     const simple: LayoutDocument = {
       id: 'touch',
       name: 'Touch',
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultOrientation: 'landscape',
       sections: [
         {
@@ -92,7 +91,6 @@ describe('responsive layout resolver', () => {
               size: { width: 0.1, height: 0.1 },
             },
             label: 'Button',
-            visible: true,
             binding: 'south' as const,
           })),
         },

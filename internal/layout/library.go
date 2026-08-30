@@ -32,15 +32,14 @@ type DPadBindings struct {
 
 type Control struct {
 	ID       string           `json:"id"`
-	Type     string           `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image'"`
+	Type     string           `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image' | 'hitfill'"`
 	Geometry Geometry         `json:"geometry"`
 	Label    string           `json:"label"`
-	Visible  bool             `json:"visible"`
-	HitOnly  bool             `json:"hitOnly,omitempty"`
 	Shape    string           `json:"shape,omitempty" tstype:"'round' | 'rect'"`
 	Binding  protocol.Command `json:"binding,omitempty"`
 	Bindings *DPadBindings    `json:"bindings,omitempty"`
 	Asset    string           `json:"asset,omitempty"`
+	ParentID string           `json:"parentId,omitempty"`
 }
 
 type Section struct {
@@ -58,7 +57,7 @@ type Asset struct {
 type Document struct {
 	ID                 string    `json:"id"`
 	Name               string    `json:"name"`
-	SchemaVersion      int       `json:"schemaVersion" tstype:"1"`
+	SchemaVersion      int       `json:"schemaVersion" tstype:"2"`
 	DefaultOrientation string    `json:"defaultOrientation" tstype:"'landscape' | 'portrait'"`
 	Sections           []Section `json:"sections"`
 	Assets             []Asset   `json:"assets"`

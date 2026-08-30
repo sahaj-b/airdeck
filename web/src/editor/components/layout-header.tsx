@@ -1,3 +1,13 @@
+import {
+  ArrowLeft,
+  Pencil,
+  Plus,
+  Redo2,
+  RotateCcw,
+  Save,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
 import { useState } from 'react';
 import {
   AlertDialog,
@@ -23,6 +33,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { AdminLayoutSummary } from '@/shared/contracts';
 
 export interface LayoutHeaderProps {
@@ -39,7 +54,6 @@ export interface LayoutHeaderProps {
   onNewLayout: () => void;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
-  onReload: () => Promise<void>;
   onUndo: () => void;
   onRedo: () => void;
   onDiscard: () => void;
@@ -86,14 +100,22 @@ export function LayoutHeader(props: LayoutHeaderProps) {
   };
 
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-3">
-      <button
-        type="button"
-        className="text-sm text-white/70 transition-colors hover:text-white"
-        onClick={props.onBack}
-      >
-        ← Dashboard
-      </button>
+    <header className="editor-header flex flex-wrap items-center gap-3 border-b border-white/10 pb-3">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              onClick={props.onBack}
+              aria-label="Back to dashboard"
+            >
+              <ArrowLeft className="size-4" />
+            </button>
+          }
+        />
+        <TooltipContent side="bottom">Back to dashboard</TooltipContent>
+      </Tooltip>
 
       <div className="ml-2 flex min-w-0 items-center gap-2">
         <Select
@@ -123,105 +145,164 @@ export function LayoutHeader(props: LayoutHeaderProps) {
 
       <div className="ml-auto flex items-center gap-2">
         {props.dirty && (
-          <span className="text-xs text-amber-400" title="Unsaved changes">
-            ● Unsaved changes
-          </span>
+          <Tooltip>
+            <TooltipTrigger>
+              <span className="mr-2 cursor-default text-sm font-medium tracking-wide text-amber-400">
+                Unsaved
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Unsaved changes</TooltipContent>
+          </Tooltip>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={props.onNewLayout}
-        >
-          New
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={persistenceDisabled}
-          onClick={() => {
-            setRenameValue(props.currentName);
-            setRenameOpen(true);
-          }}
-          title={
-            persistenceDisabled
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                onClick={props.onNewLayout}
+              >
+                <Plus className="size-3.5" />
+                <span className="header-btn-text">New</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">New layout</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                disabled={persistenceDisabled}
+                onClick={() => {
+                  setRenameValue(props.currentName);
+                  setRenameOpen(true);
+                }}
+              >
+                <Pencil className="size-3.5" />
+                <span className="header-btn-text">Rename</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">
+            {persistenceDisabled
               ? 'Built-in layouts cannot be renamed'
-              : 'Rename this layout'
-          }
-        >
-          Rename
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={persistenceDisabled || props.isDefault}
-          onClick={() => setDeleteOpen(true)}
-          title={persistenceNote ?? 'Delete this layout'}
-        >
-          Delete
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void props.onReload()}
-          title="Rescan the layouts folder"
-        >
-          Reload
-        </Button>
+              : 'Rename this layout'}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                disabled={persistenceDisabled || props.isDefault}
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="size-3.5" />
+                <span className="header-btn-text">Delete</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">
+            {persistenceNote ?? 'Delete this layout'}
+          </TooltipContent>
+        </Tooltip>
 
         <div className="mx-1 h-5 w-px bg-white/10" />
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!props.canUndo}
-          onClick={props.onUndo}
-          title="Undo (Ctrl+Z)"
-        >
-          Undo
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!props.canRedo}
-          onClick={props.onRedo}
-          title="Redo (Ctrl+Shift+Z)"
-        >
-          Redo
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                disabled={!props.canUndo}
+                onClick={props.onUndo}
+              >
+                <Undo2 className="size-3.5" />
+                <span className="header-btn-text">Undo</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Undo (Ctrl+Z)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                disabled={!props.canRedo}
+                onClick={props.onRedo}
+              >
+                <Redo2 className="size-3.5" />
+                <span className="header-btn-text">Redo</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Redo (Ctrl+Shift+Z)</TooltipContent>
+        </Tooltip>
 
         <div className="mx-1 h-5 w-px bg-white/10" />
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!props.dirty}
-          onClick={props.onDiscard}
-          title="Discard unsaved changes"
-        >
-          Discard
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!props.dirty || props.hasErrors || persistenceDisabled}
-          onClick={() => void props.onSave()}
-          title={
-            props.hasErrors
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                disabled={!props.dirty}
+                onClick={props.onDiscard}
+              >
+                <RotateCcw className="size-3.5" />
+                <span className="header-btn-text">Discard</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Discard unsaved changes</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger>
+            <span className="inline-flex">
+              <Button
+                type="button"
+                size="sm"
+                className="header-btn-compact gap-1.5"
+                disabled={
+                  !props.dirty || props.hasErrors || persistenceDisabled
+                }
+                onClick={() => void props.onSave()}
+              >
+                <Save className="size-3.5" />
+                <span className="header-btn-text">Save</span>
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {props.hasErrors
               ? 'Fix validation errors before saving'
               : persistenceDisabled
-                ? 'Built-in layouts are read-only'
-                : 'Save this layout'
-          }
-        >
-          Save
-        </Button>
+                ? 'Built-in layouts are read-only — use New layout to clone'
+                : !props.dirty
+                  ? 'No changes to save'
+                  : 'Save this layout'}
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

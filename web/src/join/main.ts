@@ -198,7 +198,7 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   submit.textContent = 'Join';
 
   // left/right split: left holds branding + inputs where empty space was,
-  // right holds options + action so Join is always visible in landscape
+  // right holds options + action so Join is always shown in landscape
   const left = document.createElement('div');
   left.className = 'join-left';
   left.append(heading, intro, codeField.wrapper, codeToggle, nameField.wrapper);

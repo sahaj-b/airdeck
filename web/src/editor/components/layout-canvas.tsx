@@ -3,6 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   type RenderedLayout,
   renderLayout,
 } from '@/controller/layout-renderer';
@@ -16,10 +21,10 @@ import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import {
   clampDrag,
   clampSectionDivider,
-  FACE_BINDINGS,
   findControl,
+  getHitfillsOf,
   isDefaultLocked,
-  moveLinkedGroup,
+  moveParentWithHitfills,
   resizeControl,
   updateControlGeometry,
   updateSectionWidth,
@@ -28,15 +33,15 @@ import { useInteractGeometry } from '../use-interact-geometry';
 import { ControlOverlay } from './control-overlay';
 
 const PRESETS = [
-  { id: 'se', label: 'SE 375×667', width: 375, height: 667 },
-  { id: 'pixel', label: 'Pixel 390×844', width: 390, height: 844 },
-  { id: 'ipad', label: 'iPad 600×1024', width: 600, height: 1024 },
+  { id: 'se', label: 'SE 667×375', width: 667, height: 375 },
+  { id: 'pixel', label: 'Pixel 844×390', width: 844, height: 390 },
+  { id: 'ipad', label: 'iPad 1024×600', width: 1024, height: 600 },
 ] as const;
 
 const VIEWPORT_MIN_W = 320;
-const VIEWPORT_MAX_W = 1024;
-const VIEWPORT_MIN_H = 480;
-const VIEWPORT_MAX_H = 1200;
+const VIEWPORT_MAX_W = 1400;
+const VIEWPORT_MIN_H = 320;
+const VIEWPORT_MAX_H = 1400;
 
 export interface LayoutCanvasProps {
   document: LayoutDocument;
@@ -45,8 +50,6 @@ export interface LayoutCanvasProps {
   onSelectSection: (id: string | null) => void;
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
   locks: Record<string, boolean>;
-  detached: Set<string>;
-  onToggleDetach: (id: string) => void;
 }
 
 const emptyStore = new InputStateStore();
@@ -58,8 +61,6 @@ export function LayoutCanvas({
   onSelectSection,
   onDraftChange,
   locks,
-  detached,
-  onToggleDetach,
 }: LayoutCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
@@ -70,7 +71,7 @@ export function LayoutCanvas({
     latestRef.current = document;
   }, [document]);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
-  const [viewport, setViewport] = useState({ width: 390, height: 844 });
+  const [viewport, setViewport] = useState({ width: 844, height: 390 });
 
   useEffect(() => {
     const el = containerRef.current;
@@ -106,8 +107,6 @@ export function LayoutCanvas({
     [document, pixelViewport],
   );
 
-  // Mount the non-interactive renderer; remount only when the control
-  // structure changes, otherwise push geometry updates into the live renderer.
   const mountedStructureRef = useRef<string | null>(null);
   useEffect(() => {
     const key = structureSignature(document);
@@ -124,6 +123,7 @@ export function LayoutCanvas({
       mountedStructureRef.current = key;
     }
     rendererRef.current?.update(document, pixelViewport);
+    rendererRef.current?.setOrientation('landscape', pixelViewport);
   }, [document, pixelViewport]);
 
   useEffect(
@@ -138,31 +138,19 @@ export function LayoutCanvas({
     ? findControl(document, selectedControlId)?.control
     : null;
 
-  // Linked groups: face button + fillers sharing a binding, computed once per
-  // render instead of re-scanning per control in the hit layer.
-  const linkedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const section of document.sections) {
-      const byBinding = new Map<string, string[]>();
-      for (const control of section.controls) {
-        if (control.binding && FACE_BINDINGS.has(control.binding)) {
-          const list = byBinding.get(control.binding) ?? [];
-          list.push(control.id);
-          byBinding.set(control.binding, list);
-        }
-      }
-      for (const group of byBinding.values()) {
-        if (group.length > 1) for (const id of group) ids.add(id);
-      }
-    }
-    return ids;
-  }, [document]);
+  const selectedPeerIds = useMemo(() => {
+    if (!selectedControlId) return new Set<string>();
+    const found = findControl(document, selectedControlId);
+    if (!found || found.control.type === 'hitfill') return new Set<string>();
+    const hitfills = getHitfillsOf(document, selectedControlId);
+    return new Set<string>(hitfills);
+  }, [document, selectedControlId]);
 
   const locked = selectedControl
     ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
     : true;
-  const selectedLinked = selectedControl
-    ? linkedIds.has(selectedControl.id) && !detached.has(selectedControl.id)
+  const isParentWithHitfills = selectedControl
+    ? getHitfillsOf(document, selectedControl.id).length > 0
     : false;
 
   const { resolvedRect } = useMemo(() => {
@@ -193,11 +181,23 @@ export function LayoutCanvas({
     viewportHeight: viewport.height,
     scale,
     locked,
+    key: selectedControlId ?? undefined,
+    edges: {
+      left: '.editor-handle-tl, .editor-handle-bl',
+      right: '.editor-handle-tr, .editor-handle-br',
+      top: '.editor-handle-tl, .editor-handle-tr',
+      bottom: '.editor-handle-bl, .editor-handle-br',
+    },
     onDrag: (deltaX, deltaY) => {
       if (!selectedControlId) return;
       let next: LayoutDocument;
-      if (selectedLinked) {
-        next = moveLinkedGroup(document, selectedControlId, deltaX, deltaY);
+      if (isParentWithHitfills) {
+        next = moveParentWithHitfills(
+          document,
+          selectedControlId,
+          deltaX,
+          deltaY,
+        );
       } else {
         const found = findControl(document, selectedControlId);
         if (!found) return;
@@ -256,23 +256,25 @@ export function LayoutCanvas({
         </div>
       </div>
 
-      <div className="mb-2 flex items-center gap-4">
-        <ViewportSlider
-          label="W"
-          value={viewport.width}
-          min={VIEWPORT_MIN_W}
-          max={VIEWPORT_MAX_W}
-          onChange={(width) => setViewport((v) => ({ ...v, width }))}
-        />
-        <ViewportSlider
-          label="H"
-          value={viewport.height}
-          min={VIEWPORT_MIN_H}
-          max={VIEWPORT_MAX_H}
-          onChange={(height) => setViewport((v) => ({ ...v, height }))}
-        />
-        <span className="font-mono text-[10px] text-white/40">
-          {viewport.width}×{viewport.height}
+      <div className="mt-2 flex items-center justify-between gap-6 pt-1">
+        <div className="flex flex-1 items-center gap-6">
+          <ViewportSlider
+            label="W"
+            value={viewport.width}
+            min={VIEWPORT_MIN_W}
+            max={VIEWPORT_MAX_W}
+            onChange={(width) => setViewport((v) => ({ ...v, width }))}
+          />
+          <ViewportSlider
+            label="H"
+            value={viewport.height}
+            min={VIEWPORT_MIN_H}
+            max={VIEWPORT_MAX_H}
+            onChange={(height) => setViewport((v) => ({ ...v, height }))}
+          />
+        </div>
+        <span className="shrink-0 font-mono text-sm font-medium tracking-wide text-white/80">
+          {Math.round(viewport.width)} × {Math.round(viewport.height)}
         </span>
       </div>
 
@@ -289,14 +291,28 @@ export function LayoutCanvas({
         <div
           className="editor-scaled"
           style={{ width: pixelViewport.width, height: pixelViewport.height }}
+          onPointerDown={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('.editor-control-hit')) return;
+            if (target.closest('.editor-section-divider')) return;
+            if (target.closest('.editor-viewport-handle')) return;
+            if (target.closest('.editor-section-label')) return;
+            onSelectControl(null);
+            onSelectSection(null);
+          }}
         >
           <div ref={mountRef} className="editor-renderer-mount" />
 
           {/* Section boundaries + dividers */}
           {resolved?.sections.map((section, index) => {
             const rect = section.rect;
-            const isRightEdge = index === resolved.sections.length - 1;
             const side = index === 0 ? 'left' : index === 2 ? 'right' : null;
+            const dividerX =
+              side === 'left'
+                ? rect.left + rect.width
+                : side === 'right'
+                  ? rect.left
+                  : 0;
             return (
               <div key={section.section.id}>
                 {side && (
@@ -305,74 +321,52 @@ export function LayoutCanvas({
                     document={document}
                     viewport={viewport}
                     scale={scale}
-                    x={rect.left + rect.width}
+                    x={dividerX}
                     onDraftChange={onDraftChange}
                   />
                 )}
-                {!isRightEdge && (
-                  <button
-                    type="button"
-                    className="editor-section-label"
-                    style={{
-                      left: rect.left + 4,
-                      top: 4,
-                    }}
-                    onClick={() => onSelectSection(section.section.id)}
-                  >
-                    {section.section.id}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`editor-section-label editor-section-label--${section.section.id}`}
+                  style={{
+                    left: rect.left + 4,
+                    top: 4,
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectSection(section.section.id);
+                  }}
+                >
+                  {section.section.id}
+                </button>
               </div>
             );
           })}
 
-          {/* Control hit layers */}
+          {/* Control hit layers — auto-select on drag */}
           {resolved?.sections.flatMap((section) =>
             section.controls.map((rc) => {
               const rect = rc.visual;
               const isSelected = rc.control.id === selectedControlId;
-              const isLinked = linkedIds.has(rc.control.id);
+              const isParent =
+                getHitfillsOf(document, rc.control.id).length > 0;
+              const isPeer = selectedPeerIds.has(rc.control.id);
               return (
-                <button
-                  type="button"
+                <ControlHit
                   key={rc.control.id}
-                  className={cn(
-                    'editor-control-hit',
-                    rc.control.hitOnly && 'editor-hit-only',
-                    isSelected && 'editor-control-selected',
-                    isLinked && 'editor-control-linked',
-                  )}
-                  style={{
-                    left: rect.left,
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                  }}
-                  data-control-id={rc.control.id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectControl(rc.control.id);
-                    onSelectSection(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.stopPropagation();
-                      onSelectControl(rc.control.id);
-                      onSelectSection(null);
-                    }
-                  }}
-                >
-                  {isSelected && (
-                    <div ref={selectedRef} className="editor-interaction-layer">
-                      <ControlOverlay
-                        selected
-                        hitOnly={rc.control.hitOnly}
-                        linked={isLinked && !detached.has(rc.control.id)}
-                        onToggleLink={() => onToggleDetach(rc.control.id)}
-                      />
-                    </div>
-                  )}
-                </button>
+                  control={rc.control}
+                  rect={rect}
+                  isSelected={isSelected}
+                  isParent={isParent}
+                  isPeer={isPeer}
+                  viewportHeight={viewport.height}
+                  scale={scale}
+                  latestRef={latestRef}
+                  selectedRef={selectedRef}
+                  onSelectControl={onSelectControl}
+                  onSelectSection={onSelectSection}
+                  onDraftChange={onDraftChange}
+                />
               );
             }),
           )}
@@ -386,6 +380,150 @@ export function LayoutCanvas({
         </div>
       </div>
     </section>
+  );
+}
+
+function ControlHit({
+  control,
+  rect,
+  isSelected,
+  isParent,
+  isPeer,
+  viewportHeight,
+  scale,
+  latestRef,
+  selectedRef,
+  onSelectControl,
+  onSelectSection,
+  onDraftChange,
+}: {
+  control: LayoutDocument['sections'][number]['controls'][number];
+  rect: { left: number; top: number; width: number; height: number };
+  isSelected: boolean;
+  isParent: boolean;
+  isPeer: boolean;
+  viewportHeight: number;
+  scale: number;
+  latestRef: React.MutableRefObject<LayoutDocument>;
+  selectedRef: React.RefObject<HTMLDivElement | null>;
+  onSelectControl: (id: string | null) => void;
+  onSelectSection: (id: string | null) => void;
+  onDraftChange: (next: LayoutDocument, commit: boolean) => void;
+}) {
+  const hitRef = useRef<HTMLButtonElement>(null);
+  const scaleRef = useRef(scale);
+  const vhRef = useRef(viewportHeight);
+  const onSelectRef = useRef(onSelectControl);
+  const onDraftRef = useRef(onDraftChange);
+  const isSelectedRef = useRef(isSelected);
+  const isParentRef = useRef(isParent);
+  const onSelectSectionRef = useRef(onSelectSection);
+  const startWasSelectedRef = useRef(false);
+  const isHitfill = control.type === 'hitfill';
+
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
+    vhRef.current = viewportHeight;
+  }, [viewportHeight]);
+  useEffect(() => {
+    onSelectRef.current = onSelectControl;
+  }, [onSelectControl]);
+  useEffect(() => {
+    onDraftRef.current = onDraftChange;
+  }, [onDraftChange]);
+  useEffect(() => {
+    isSelectedRef.current = isSelected;
+  }, [isSelected]);
+  useEffect(() => {
+    isParentRef.current = isParent;
+  }, [isParent]);
+  useEffect(() => {
+    onSelectSectionRef.current = onSelectSection;
+  }, [onSelectSection]);
+
+  useEffect(() => {
+    const el = hitRef.current;
+    if (!el) return;
+    const instance = interact(el).draggable({
+      listeners: {
+        start() {
+          startWasSelectedRef.current = isSelectedRef.current;
+          if (!isSelectedRef.current) {
+            onSelectRef.current(control.id);
+            onSelectSectionRef.current(null);
+          }
+        },
+        move(event: { dx: number; dy: number }) {
+          if (startWasSelectedRef.current) return;
+          const vh = Math.max(1, vhRef.current);
+          const s = scaleRef.current || 1;
+          const deltaX = event.dx / s / vh;
+          const deltaY = event.dy / s / vh;
+          const latest = latestRef.current;
+          const isParentWithHitfills =
+            isParentRef.current && control.type !== 'hitfill';
+          let next: LayoutDocument;
+          if (isParentWithHitfills) {
+            next = moveParentWithHitfills(latest, control.id, deltaX, deltaY);
+          } else {
+            const found = findControl(latest, control.id);
+            if (!found) return;
+            next = updateControlGeometry(
+              latest,
+              control.id,
+              clampDrag(found.control.geometry, deltaX, deltaY, found.section),
+            );
+          }
+          latestRef.current = next;
+          onDraftRef.current(next, false);
+        },
+        end() {
+          if (startWasSelectedRef.current) return;
+          onDraftRef.current(latestRef.current, true);
+        },
+      },
+    });
+    return () => instance.unset();
+  }, [control.id]);
+
+  return (
+    <button
+      type="button"
+      ref={hitRef}
+      className={cn(
+        'editor-control-hit',
+        isHitfill && 'editor-hit-only',
+        isSelected && 'editor-control-selected',
+        isPeer && !isSelected && 'editor-control-peer',
+      )}
+      style={{
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      }}
+      data-control-id={control.id}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelectControl(control.id);
+        onSelectSection(null);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.stopPropagation();
+          onSelectControl(control.id);
+          onSelectSection(null);
+        }
+      }}
+    >
+      {isSelected && (
+        <div ref={selectedRef} className="editor-interaction-layer">
+          <ControlOverlay selected isHitfill={isHitfill} />
+        </div>
+      )}
+    </button>
   );
 }
 
@@ -403,17 +541,19 @@ function ViewportSlider({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-3 text-[10px] text-muted-foreground">{label}</span>
+    <div className="flex min-w-0 max-w-[220px] flex-1 items-center gap-2">
+      <span className="w-3 shrink-0 text-[10px] text-muted-foreground">
+        {label}
+      </span>
       <Slider
-        className="w-28"
-        value={value}
+        className="min-w-0 flex-1"
+        value={Math.round(value)}
         min={min}
         max={max}
         step={1}
         onValueChange={(v: number | readonly number[]) => {
           const next = Array.isArray(v) ? v[0] : v;
-          if (typeof next === 'number') onChange(next);
+          if (typeof next === 'number') onChange(Math.round(next));
         }}
       />
     </div>
@@ -437,6 +577,8 @@ function SectionDivider({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const startRef = useRef(0);
+  const accRef = useRef(0);
+  const startScaleRef = useRef(scale);
   const documentRef = useRef(document);
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
@@ -460,18 +602,25 @@ function SectionDivider({
     const instance = interact(el).draggable({
       lockAxis: 'x',
       startAxis: 'x',
+      cursorChecker: () => 'ew-resize',
       listeners: {
         start() {
           const section = documentRef.current.sections.find(
             (s) => s.id === side,
           );
           startRef.current = section?.relativeWidth ?? 0;
+          startScaleRef.current = scaleRef.current;
+          accRef.current = 0;
         },
         move(event: { dx: number }) {
+          accRef.current += event.dx;
           const vp = viewportRef.current;
+          const delta =
+            accRef.current / startScaleRef.current / Math.max(1, vp.height);
           const proposed =
-            startRef.current +
-            event.dx / scaleRef.current / Math.max(1, vp.height);
+            side === 'left'
+              ? startRef.current + delta
+              : startRef.current - delta;
           const clamped = clampSectionDivider(
             documentRef.current,
             side,
@@ -491,12 +640,19 @@ function SectionDivider({
   }, [side]);
 
   return (
-    <div
-      ref={ref}
-      className="editor-section-divider"
-      style={{ left: x }}
-      title={`Drag to resize ${side} section`}
-    />
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <div
+            ref={ref}
+            className="editor-section-divider"
+            style={{ left: x }}
+            aria-label={`Resize ${side} section`}
+          />
+        }
+      />
+      <TooltipContent side="top">Drag to resize {side} section</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -513,6 +669,8 @@ function ViewportEdgeHandles({
   const bottomRef = useRef<HTMLDivElement>(null);
   const cornerRef = useRef<HTMLDivElement>(null);
   const startRef = useRef({ width: 0, height: 0 });
+  const accRef = useRef({ x: 0, y: 0 });
+  const startScaleRef = useRef(scale);
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onViewportChangeRef = useRef(onViewportChange);
@@ -538,10 +696,13 @@ function ViewportEdgeHandles({
             width: viewportRef.current.width,
             height: viewportRef.current.height,
           };
+          startScaleRef.current = scaleRef.current;
+          accRef.current = { x: 0, y: 0 };
         },
         move(event: { dx: number }) {
+          accRef.current.x += event.dx;
           const width = clamp(
-            startRef.current.width + event.dx / scaleRef.current,
+            startRef.current.width + accRef.current.x / startScaleRef.current,
             VIEWPORT_MIN_W,
             VIEWPORT_MAX_W,
           );
@@ -567,10 +728,13 @@ function ViewportEdgeHandles({
             width: viewportRef.current.width,
             height: viewportRef.current.height,
           };
+          startScaleRef.current = scaleRef.current;
+          accRef.current = { x: 0, y: 0 };
         },
         move(event: { dy: number }) {
+          accRef.current.y += event.dy;
           const height = clamp(
-            startRef.current.height + event.dy / scaleRef.current,
+            startRef.current.height + accRef.current.y / startScaleRef.current,
             VIEWPORT_MIN_H,
             VIEWPORT_MAX_H,
           );
@@ -594,15 +758,19 @@ function ViewportEdgeHandles({
             width: viewportRef.current.width,
             height: viewportRef.current.height,
           };
+          startScaleRef.current = scaleRef.current;
+          accRef.current = { x: 0, y: 0 };
         },
         move(event: { dx: number; dy: number }) {
+          accRef.current.x += event.dx;
+          accRef.current.y += event.dy;
           const width = clamp(
-            startRef.current.width + event.dx / scaleRef.current,
+            startRef.current.width + accRef.current.x / startScaleRef.current,
             VIEWPORT_MIN_W,
             VIEWPORT_MAX_W,
           );
           const height = clamp(
-            startRef.current.height + event.dy / scaleRef.current,
+            startRef.current.height + accRef.current.y / startScaleRef.current,
             VIEWPORT_MIN_H,
             VIEWPORT_MAX_H,
           );
@@ -642,8 +810,7 @@ function structureSignature(document: LayoutDocument): string {
       controls: section.controls.map((control) => ({
         id: control.id,
         type: control.type,
-        visible: control.visible,
-        hitOnly: control.hitOnly,
+        parentId: control.parentId,
         shape: control.shape,
         asset: control.asset,
         binding: control.binding,

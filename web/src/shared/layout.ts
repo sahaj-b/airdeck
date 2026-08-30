@@ -64,6 +64,7 @@ const validateSchema: ValidateFunction = new Ajv2020({
 }).compile(schema);
 
 const safeAsset = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/;
+const parentIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export const DEFAULT_LAYOUT: LayoutDocument = defaultLayout as LayoutDocument;
 
@@ -103,6 +104,28 @@ export function validateLayout(value: unknown): value is LayoutDocument {
     for (const control of section.controls) {
       if (!add(control.id) || !validControl(control, section, assetIds))
         return false;
+    }
+  }
+  // hitfill parent relation second pass
+  const controlById = new Map<string, Control>();
+  const sectionByControlId = new Map<string, string>();
+  for (const section of document.sections) {
+    for (const control of section.controls) {
+      controlById.set(control.id, control);
+      sectionByControlId.set(control.id, section.id);
+    }
+  }
+  for (const section of document.sections) {
+    for (const control of section.controls) {
+      if (control.type === 'hitfill') {
+        if (!control.parentId) return false;
+        if (control.parentId === control.id) return false;
+        const parent = controlById.get(control.parentId);
+        if (!parent) return false;
+        if (parent.type === 'hitfill') return false;
+        if (sectionByControlId.get(control.parentId) !== section.id)
+          return false;
+      }
     }
   }
   return true;
@@ -183,6 +206,58 @@ export function getValidationErrors(value: unknown): ValidationError[] {
         });
     }
   }
+  // second pass for hitfill parent relation
+  if (document.sections) {
+    const controlById = new Map<string, Control>();
+    const sectionByControlId = new Map<string, string>();
+    for (const section of document.sections) {
+      for (const control of section.controls ?? []) {
+        controlById.set(control.id, control);
+        sectionByControlId.set(control.id, section.id);
+      }
+    }
+    for (const section of document.sections) {
+      for (const control of section.controls ?? []) {
+        if (control.type === 'hitfill') {
+          const parentId = control.parentId;
+          if (!parentId) {
+            errors.push({
+              path: `/sections/${section.id}/controls/${control.id}/parentId`,
+              message: 'hitfill requires parentId',
+            });
+            continue;
+          }
+          if (parentId === control.id) {
+            errors.push({
+              path: `/sections/${section.id}/controls/${control.id}/parentId`,
+              message: 'parentId must not be self',
+            });
+            continue;
+          }
+          const parent = controlById.get(parentId);
+          if (!parent) {
+            errors.push({
+              path: `/sections/${section.id}/controls/${control.id}/parentId`,
+              message: `parentId ${parentId} does not exist`,
+            });
+            continue;
+          }
+          if (parent.type === 'hitfill') {
+            errors.push({
+              path: `/sections/${section.id}/controls/${control.id}/parentId`,
+              message: 'parentId must not reference another hitfill',
+            });
+          }
+          if (sectionByControlId.get(parentId) !== section.id) {
+            errors.push({
+              path: `/sections/${section.id}/controls/${control.id}/parentId`,
+              message: 'parentId must be in same section',
+            });
+          }
+        }
+      }
+    }
+  }
   return errors;
 }
 
@@ -201,11 +276,59 @@ export function getControlErrors(
       path: 'geometry',
       message: 'geometry extends outside section bounds or has invalid size',
     });
-  if (control.shape && control.shape !== 'round' && control.shape !== 'rect')
-    errors.push({
-      path: 'shape',
-      message: `unsupported shape ${control.shape}`,
-    });
+  const isHitfill = control.type === 'hitfill';
+  if (isHitfill) {
+    if (!control.parentId) {
+      errors.push({ path: 'parentId', message: 'hitfill requires parentId' });
+    } else if (!parentIdPattern.test(control.parentId)) {
+      errors.push({
+        path: 'parentId',
+        message: `invalid parentId ${control.parentId}`,
+      });
+    }
+    if (control.shape && control.shape !== 'rect') {
+      errors.push({
+        path: 'shape',
+        message: `hitfill shape must be rect, got ${control.shape}`,
+      });
+    }
+    if (control.binding) {
+      errors.push({
+        path: 'binding',
+        message: 'hitfill must not have a binding',
+      });
+    }
+    if (control.bindings) {
+      errors.push({
+        path: 'bindings',
+        message: 'hitfill must not have bindings',
+      });
+    }
+    if (control.asset) {
+      errors.push({ path: 'asset', message: 'hitfill must not have an asset' });
+    }
+    if (
+      control.type !== 'hitfill' &&
+      (control as unknown as Record<string, unknown>).parentId
+    ) {
+      errors.push({
+        path: 'parentId',
+        message: 'only hitfill may have parentId',
+      });
+    }
+  } else {
+    if (control.parentId) {
+      errors.push({
+        path: 'parentId',
+        message: 'only hitfill controls may have parentId',
+      });
+    }
+    if (control.shape && control.shape !== 'round' && control.shape !== 'rect')
+      errors.push({
+        path: 'shape',
+        message: `unsupported shape ${control.shape}`,
+      });
+  }
   if (control.type === 'image' && !control.asset)
     errors.push({ path: 'asset', message: 'image control requires an asset' });
   if (control.type === 'label' && control.binding)
@@ -213,11 +336,25 @@ export function getControlErrors(
       path: 'binding',
       message: 'label controls cannot bind input',
     });
-  if (control.binding && !knownCommand(control.binding))
+  if (control.binding && !knownCommand(control.binding as string))
     errors.push({
       path: 'binding',
       message: `unknown command ${control.binding}`,
     });
+  if (
+    control.type !== 'hitfill' &&
+    control.type !== 'button' &&
+    control.type !== 'dpad' &&
+    control.type !== 'joystick' &&
+    control.type !== 'trigger' &&
+    control.type !== 'label' &&
+    control.type !== 'image'
+  ) {
+    errors.push({
+      path: 'type',
+      message: `unsupported control type ${control.type}`,
+    });
+  }
   if (control.type === 'dpad') {
     if (
       control.bindings?.up !== 'dpadUp' ||

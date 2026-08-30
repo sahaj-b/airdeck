@@ -10,11 +10,11 @@ import { validateLayout } from '../shared/layout';
 import {
   clampDrag,
   cloneDocument,
-  FACE_BINDINGS,
   findControl,
+  getHitfillsOf,
   isDefaultLocked,
   LayoutHistory,
-  moveLinkedGroup,
+  moveParentWithHitfills,
   resizeControl,
   updateControlGeometry,
 } from '../shared/layout-editor';
@@ -60,7 +60,6 @@ function PhoneEditorIsland({
   const [nameError, setNameError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [locks, setLocks] = useState<Record<string, boolean>>({});
-  const [detached, setDetached] = useState<Set<string>>(new Set());
   const [showOnboarding, setShowOnboarding] = useState(() => {
     try {
       return !localStorage.getItem(ONBOARDING_KEY);
@@ -217,31 +216,16 @@ function PhoneEditorIsland({
     ? findControl(draft, selectedId)?.control
     : null;
 
-  const linkedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const section of draft.sections) {
-      const byBinding = new Map<string, string[]>();
-      for (const control of section.controls) {
-        if (
-          control.binding &&
-          FACE_BINDINGS.has(control.binding as unknown as string)
-        ) {
-          const list = byBinding.get(control.binding) ?? [];
-          list.push(control.id);
-          byBinding.set(control.binding, list);
-        }
-      }
-      for (const group of byBinding.values()) {
-        if (group.length > 1) for (const id of group) ids.add(id);
-      }
-    }
-    return ids;
-  }, [draft]);
+  const selectedPeerIds = useMemo(() => {
+    if (!selectedId) return new Set<string>();
+    const found = findControl(draft, selectedId);
+    if (!found || found.control.type === 'hitfill') return new Set<string>();
+    return new Set<string>(getHitfillsOf(draft, selectedId));
+  }, [draft, selectedId]);
 
-  const isLinked =
-    selectedControl &&
-    linkedIds.has(selectedControl.id) &&
-    !detached.has(selectedControl.id);
+  const isParentWithHitfills = selectedControl
+    ? getHitfillsOf(draft, selectedControl.id).length > 0
+    : false;
 
   const locked = selectedControl
     ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
@@ -261,8 +245,13 @@ function PhoneEditorIsland({
     (deltaX: number, deltaY: number) => {
       if (!selectedId) return;
       let next: LayoutDocument;
-      if (isLinked) {
-        next = moveLinkedGroup(draftRef.current, selectedId, deltaX, deltaY);
+      if (isParentWithHitfills) {
+        next = moveParentWithHitfills(
+          draftRef.current,
+          selectedId,
+          deltaX,
+          deltaY,
+        );
       } else {
         const found = findControl(draftRef.current, selectedId);
         if (!found) return;
@@ -275,7 +264,7 @@ function PhoneEditorIsland({
       draftRef.current = next;
       setDraft(next);
     },
-    [selectedId, isLinked],
+    [selectedId, isParentWithHitfills],
   );
 
   const handleResize = useCallback(
@@ -304,7 +293,14 @@ function PhoneEditorIsland({
     viewportHeight: viewport.height,
     scale: 1,
     getScale: () => zoomRef.current.zoom,
+    key: selectedId ?? undefined,
     locked,
+    edges: {
+      left: '.phone-editor-handle.tl, .phone-editor-handle.bl',
+      right: '.phone-editor-handle.tr, .phone-editor-handle.br',
+      top: '.phone-editor-handle.tl, .phone-editor-handle.tr',
+      bottom: '.phone-editor-handle.bl, .phone-editor-handle.br',
+    },
     onDrag: handleDrag,
     onResize: handleResize,
     onDragEnd: commit,
@@ -385,7 +381,7 @@ function PhoneEditorIsland({
     setShowOnboarding(false);
   };
 
-  const hitOnlySelected = selectedControl?.hitOnly ?? false;
+  const isSelectedHitfill = selectedControl?.type === 'hitfill';
 
   return (
     <div
@@ -488,7 +484,8 @@ function PhoneEditorIsland({
         {resolved.sections.flatMap((section) =>
           section.controls.map((rc) => {
             const isSelected = rc.control.id === selectedId;
-            const isHitOnly = rc.control.hitOnly;
+            const isHitfill = rc.control.type === 'hitfill';
+            const isPeer = selectedPeerIds.has(rc.control.id);
             return (
               <button
                 type="button"
@@ -496,7 +493,8 @@ function PhoneEditorIsland({
                 className={
                   'phone-editor-hit' +
                   (isSelected ? ' selected' : '') +
-                  (isHitOnly ? ' hit-only' : '')
+                  (isHitfill ? ' hit-only' : '') +
+                  (isPeer && !isSelected ? ' peer' : '')
                 }
                 style={{
                   left: rc.visual.left,
@@ -540,24 +538,9 @@ function PhoneEditorIsland({
                       >
                         {locked ? '🔒' : '🔓'}
                       </button>
-                      <span>⛓️ {isLinked ? 'Linked' : 'Detached'}</span>
-                      <button
-                        type="button"
-                        className="phone-editor-link-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetached((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(rc.control.id))
-                              next.delete(rc.control.id);
-                            else next.add(rc.control.id);
-                            return next;
-                          });
-                        }}
-                      >
-                        {isLinked ? 'Detach' : 'Link'}
-                      </button>
-                      {hitOnlySelected && <span title="hitOnly">◈</span>}
+                      {isSelectedHitfill && (
+                        <span title="hitfill">◈ hitfill</span>
+                      )}
                     </div>
                   </div>
                 )}

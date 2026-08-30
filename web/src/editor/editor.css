@@ -1,40 +1,162 @@
 .editor-shell {
   display: grid;
-  grid-template-columns: 260px 1fr 320px;
+  grid-template-columns: 260px minmax(0, 1fr) 280px;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 16px;
+  gap: 0;
   min-height: 100dvh;
-  padding: 16px;
+  min-width: 0;
 }
 
 .editor-shell > header {
   grid-column: 1 / -1;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
 }
 
-.editor-panel {
+.editor-shell--left-collapsed {
+  grid-template-columns: 36px minmax(0, 1fr) 280px;
+}
+
+.editor-shell--right-collapsed {
+  grid-template-columns: 260px minmax(0, 1fr) 36px;
+}
+
+.editor-shell--left-collapsed.editor-shell--right-collapsed {
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+}
+
+.editor-panel,
+.editor-inspector {
+  border: none;
+  border-radius: 0;
+  padding: 8px;
+  background: transparent;
+}
+
+.editor-side {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 0.08);
+  height: 100%;
+  background: transparent;
+}
+
+.editor-side--left {
+  border-right: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.editor-side--right {
+  border-left: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.editor-side .editor-panel,
+.editor-side .editor-inspector {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.editor-side--collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0;
+  background: rgb(255 255 255 / 0.02);
+  min-height: 320px;
+}
+
+.editor-side--left.editor-side--collapsed {
+  border-right: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.editor-side--right.editor-side--collapsed {
+  border-left: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.editor-collapse-btn {
+  position: absolute;
+  top: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.7);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.editor-collapse-btn:hover {
+  background: rgb(255 255 255 / 0.14);
+  color: white;
+}
+
+.editor-side--left .editor-collapse-btn {
+  right: 8px;
+  left: auto;
+}
+
+.editor-side--right .editor-collapse-btn {
+  left: 8px;
+  right: auto;
+}
+
+.editor-side--left .editor-panel,
+.editor-side--right .editor-inspector {
+  padding-top: 8px;
+}
+
+.editor-collapse-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  background: transparent;
+  border: none;
+  color: rgb(255 255 255 / 0.5);
+  cursor: pointer;
   border-radius: 12px;
-  padding: 12px;
+}
+
+.editor-collapse-strip:hover {
+  background: rgb(255 255 255 / 0.06);
+  color: white;
 }
 
 .editor-canvas-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
 }
 
 .editor-canvas {
   position: relative;
   flex: 1;
   min-height: 320px;
+  min-width: 0;
   overflow: auto;
-  background:
-    radial-gradient(circle at 30% 30%, rgb(124 134 255 / 0.06), transparent 50%),
-    #0a0a0f;
+  background: #0a0a0f;
   border: 1px solid rgb(255 255 255 / 0.08);
   border-radius: 12px;
   padding: 24px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .editor-scaled {
@@ -45,6 +167,9 @@
   border-radius: 8px;
   background: #0d0d13;
   box-shadow: 0 8px 40px rgb(0 0 0 / 0.5);
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .editor-renderer-mount {
@@ -71,14 +196,51 @@
   background: rgb(124 134 255 / 0.04);
 }
 
+.editor-sidebar-peer {
+  border-radius: 6px;
+}
+
+.editor-control-hit:active {
+  cursor: grabbing;
+}
+
 .editor-control-selected {
   z-index: 3;
 }
 
 .editor-control-hit.editor-hit-only {
-  border: 1px dashed rgb(255 255 255 / 0.35);
-  background: rgb(255 255 255 / 0.06);
-  opacity: 0.35;
+  border: 1px dashed rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.09);
+  opacity: 0.65;
+}
+
+.editor-control-hit.editor-hit-only:hover {
+  border-color: rgb(255 255 255 / 0.7);
+  background: rgb(255 255 255 / 0.14);
+  opacity: 0.9;
+}
+
+.editor-control-hit.editor-control-peer {
+  border: 2px dashed rgb(250 204 21 / 0.95);
+  background: rgb(250 204 21 / 0.12);
+  border-radius: 6px;
+  opacity: 1;
+}
+
+.editor-control-hit.editor-control-peer:hover {
+  border-color: rgb(250 204 21);
+  background: rgb(250 204 21 / 0.18);
+}
+
+.editor-control-hit.editor-control-peer.editor-hit-only {
+  border: 2px dashed rgb(250 204 21 / 0.9);
+  background: rgb(250 204 21 / 0.14);
+  opacity: 1;
+}
+
+.editor-control-hit.editor-control-peer.editor-hit-only:hover {
+  border-color: rgb(250 204 21);
+  background: rgb(250 204 21 / 0.2);
 }
 
 .editor-interaction-layer {
@@ -176,10 +338,13 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 10px;
-  cursor: col-resize;
+  width: 14px;
+  cursor: ew-resize;
   z-index: 4;
-  margin-left: -5px;
+  margin-left: -7px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .editor-section-divider::after {
@@ -218,6 +383,8 @@
   z-index: 5;
   background: transparent;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .editor-handle-right {
@@ -248,7 +415,10 @@
 }
 
 @media (max-width: 1024px) {
-  .editor-shell {
+  .editor-shell,
+  .editor-shell--left-collapsed,
+  .editor-shell--right-collapsed,
+  .editor-shell--left-collapsed.editor-shell--right-collapsed {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
@@ -257,7 +427,43 @@
     grid-column: 1;
   }
 
-  .editor-panel {
+  .editor-side .editor-panel,
+  .editor-side .editor-inspector {
     max-height: none;
   }
+
+  .editor-side--collapsed {
+    min-height: 36px;
+    height: 36px;
+  }
+
+  .editor-collapse-strip {
+    min-height: 36px;
+    height: 36px;
+  }
+
+  .editor-canvas {
+    min-height: 280px;
+    padding: 12px;
+  }
 }
+
+@media (max-width: 1280px) and (min-width: 1025px) {
+  .editor-shell:not(.editor-shell--right-collapsed):not(
+    .editor-shell--left-collapsed
+  ) {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+  }
+}
+
+/* Header compact: hide button text at narrow widths, keep icons (trigger early to never wrap) */
+@media (max-width: 1200px) {
+  .editor-header .header-btn-text {
+    display: none;
+  }
+  .editor-header .header-btn-compact {
+    padding-inline: 8px;
+  }
+}
+
+/* Control row: link + actions share absolute container at far right, no overlap */

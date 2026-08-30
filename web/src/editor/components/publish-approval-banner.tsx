@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { AdminStore } from '../../dashboard/admin-store';
+import { type AdminStore, useAdminSnapshot } from '../../dashboard/admin-store';
 
 export interface PublishApprovalBannerProps {
   store: AdminStore;
 }
 
 export function PublishApprovalBanner({ store }: PublishApprovalBannerProps) {
-  const snapshot = store.getSnapshot();
+  const snapshot = useAdminSnapshot(store);
   const pendings = snapshot.pendingPublishes;
   const [busy, setBusy] = useState<string | null>(null);
 

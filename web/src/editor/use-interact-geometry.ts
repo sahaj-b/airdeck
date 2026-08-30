@@ -12,6 +12,13 @@ export interface InteractGeometryOptions {
   onDragEnd: () => void;
   onResizeEnd: () => void;
   locked: boolean;
+  key?: string;
+  edges?: {
+    left?: boolean | string;
+    right?: boolean | string;
+    top?: boolean | string;
+    bottom?: boolean | string;
+  };
 }
 
 export function useInteractGeometry(options: InteractGeometryOptions): void {
@@ -21,6 +28,9 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
   const onResizeEndRef = useRef(options.onResizeEnd);
   const getScaleRef = useRef(options.getScale);
   const lockedRef = useRef(options.locked);
+  const viewportHeightRef = useRef(options.viewportHeight);
+  const scaleRef = useRef(options.scale);
+  const edgesRef = useRef(options.edges);
   useEffect(() => {
     onDragRef.current = options.onDrag;
   }, [options.onDrag]);
@@ -39,6 +49,15 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
   useEffect(() => {
     lockedRef.current = options.locked;
   }, [options.locked]);
+  useEffect(() => {
+    viewportHeightRef.current = options.viewportHeight;
+  }, [options.viewportHeight]);
+  useEffect(() => {
+    scaleRef.current = options.scale;
+  }, [options.scale]);
+  useEffect(() => {
+    edgesRef.current = options.edges;
+  }, [options.edges]);
 
   useEffect(() => {
     const element = options.targetRef.current;
@@ -51,9 +70,10 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
         move(event: { dx: number; dy: number }) {
           const scale = getScaleRef.current
             ? getScaleRef.current()
-            : options.scale || 1;
-          const deltaX = event.dx / scale / Math.max(1, options.viewportHeight);
-          const deltaY = event.dy / scale / Math.max(1, options.viewportHeight);
+            : scaleRef.current || 1;
+          const vh = Math.max(1, viewportHeightRef.current);
+          const deltaX = event.dx / scale / vh;
+          const deltaY = event.dy / scale / vh;
           onDragRef.current(deltaX, deltaY);
         },
         end() {
@@ -62,17 +82,12 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
       },
     });
 
-    const isPhoneEditor = element.classList.contains(
-      'phone-editor-overlay-handles',
-    );
-    const edges = isPhoneEditor
-      ? {
-          left: '.phone-editor-handle.tl, .phone-editor-handle.bl',
-          right: '.phone-editor-handle.tr, .phone-editor-handle.br',
-          top: '.phone-editor-handle.tl, .phone-editor-handle.tr',
-          bottom: '.phone-editor-handle.bl, .phone-editor-handle.br',
-        }
-      : { left: true, right: true, bottom: true, top: true };
+    const edges = edgesRef.current ?? {
+      left: true,
+      right: true,
+      top: true,
+      bottom: true,
+    };
 
     instance.resizable({
       edges,
@@ -80,14 +95,11 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
         move(event: { deltaRect: { width: number; height: number } }) {
           const scale = getScaleRef.current
             ? getScaleRef.current()
-            : options.scale || 1;
+            : scaleRef.current || 1;
+          const vh = Math.max(1, viewportHeightRef.current);
           const locked = lockedRef.current;
-          const deltaWidth =
-            event.deltaRect.width / scale / Math.max(1, options.viewportHeight);
-          const deltaHeight =
-            event.deltaRect.height /
-            scale /
-            Math.max(1, options.viewportHeight);
+          const deltaWidth = event.deltaRect.width / scale / vh;
+          const deltaHeight = event.deltaRect.height / scale / vh;
           onResizeRef.current(deltaWidth, deltaHeight, locked);
         },
         end() {
@@ -104,5 +116,6 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
     options.targetRef,
     options.viewportHeight,
     options.scale,
+    options.key,
   ]);
 }

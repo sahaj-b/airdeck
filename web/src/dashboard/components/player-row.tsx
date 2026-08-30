@@ -65,9 +65,9 @@ export const PlayerRow = memo(function PlayerRow({
         <div
           className="grid size-11 shrink-0 place-items-center rounded-xl border text-sm font-bold tracking-tight tabular-nums sm:size-[44px]"
           style={{
-            backgroundColor: `${accent}18`,
+            backgroundColor: `color-mix(in oklch, ${accent} 10%, transparent)`,
             color: accent,
-            borderColor: `${accent}30`,
+            borderColor: `color-mix(in oklch, ${accent} 22%, transparent)`,
           }}
           role="img"
           aria-label={`Slot ${player.slot + 1}`}
@@ -269,7 +269,7 @@ function formatAge(value: string, now: number): string {
 }
 
 function formatRTT(nanos: number): string {
-  if (!Number.isFinite(nanos) || nanos <= 0) return '—';
+  if (!Number.isFinite(nanos) || nanos <= 0) return '-';
   const ms = Math.round(nanos / 1_000_000);
   return `${String(ms)}ms`;
 }
