@@ -66,7 +66,9 @@ export function LayoutCanvas({
   const rendererRef = useRef<RenderedLayout | null>(null);
   const selectedRef = useRef<HTMLDivElement>(null);
   const latestRef = useRef<LayoutDocument>(document);
-  latestRef.current = document;
+  useEffect(() => {
+    latestRef.current = document;
+  }, [document]);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   const [viewport, setViewport] = useState({ width: 390, height: 844 });
 
@@ -439,10 +441,18 @@ function SectionDivider({
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onDraftChangeRef = useRef(onDraftChange);
-  documentRef.current = document;
-  viewportRef.current = viewport;
-  scaleRef.current = scale;
-  onDraftChangeRef.current = onDraftChange;
+  useEffect(() => {
+    documentRef.current = document;
+  }, [document]);
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange;
+  }, [onDraftChange]);
 
   useEffect(() => {
     const el = ref.current;
@@ -506,9 +516,15 @@ function ViewportEdgeHandles({
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onViewportChangeRef = useRef(onViewportChange);
-  viewportRef.current = viewport;
-  scaleRef.current = scale;
-  onViewportChangeRef.current = onViewportChange;
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
+    onViewportChangeRef.current = onViewportChange;
+  }, [onViewportChange]);
 
   useEffect(() => {
     const el = rightRef.current;

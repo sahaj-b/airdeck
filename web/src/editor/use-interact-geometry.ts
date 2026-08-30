@@ -21,12 +21,24 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
   const onResizeEndRef = useRef(options.onResizeEnd);
   const getScaleRef = useRef(options.getScale);
   const lockedRef = useRef(options.locked);
-  onDragRef.current = options.onDrag;
-  onResizeRef.current = options.onResize;
-  onDragEndRef.current = options.onDragEnd;
-  onResizeEndRef.current = options.onResizeEnd;
-  getScaleRef.current = options.getScale;
-  lockedRef.current = options.locked;
+  useEffect(() => {
+    onDragRef.current = options.onDrag;
+  }, [options.onDrag]);
+  useEffect(() => {
+    onResizeRef.current = options.onResize;
+  }, [options.onResize]);
+  useEffect(() => {
+    onDragEndRef.current = options.onDragEnd;
+  }, [options.onDragEnd]);
+  useEffect(() => {
+    onResizeEndRef.current = options.onResizeEnd;
+  }, [options.onResizeEnd]);
+  useEffect(() => {
+    getScaleRef.current = options.getScale;
+  }, [options.getScale]);
+  useEffect(() => {
+    lockedRef.current = options.locked;
+  }, [options.locked]);
 
   useEffect(() => {
     const element = options.targetRef.current;
@@ -87,5 +99,10 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
     return () => {
       instance.unset();
     };
-  }, [options.enabled, options.targetRef, options.viewportHeight]);
+  }, [
+    options.enabled,
+    options.targetRef,
+    options.viewportHeight,
+    options.scale,
+  ]);
 }

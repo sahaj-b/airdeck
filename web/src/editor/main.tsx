@@ -308,7 +308,9 @@ function EditorApp() {
     [draft, selectedControlId],
   );
   const deleteControlRef = useRef(handleDeleteControl);
-  deleteControlRef.current = handleDeleteControl;
+  useEffect(() => {
+    deleteControlRef.current = handleDeleteControl;
+  }, [handleDeleteControl]);
 
   const handleMoveControl = useCallback(
     (controlId: string, direction: 'up' | 'down') => {
