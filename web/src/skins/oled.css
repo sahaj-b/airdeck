@@ -3,12 +3,12 @@
    Optimized for OLED panels where black = pixel off. */
 
 html[data-skin="oled"] {
-  --accent: #4fc3f7;
+  --skin-accent: #4fc3f7;
   --void: #000000;
   --surface: #0a0a0a;
   --edge: #999999;
   --text: #e0e0e0;
-  --muted: #777777;
+  --skin-muted: #777777;
 }
 
 html[data-skin="oled"] body,
@@ -18,7 +18,6 @@ html[data-skin="oled"] .controller-shell {
 
 html[data-skin="oled"] .controller-frame {
   background: var(--void);
-  border: 1.5px solid var(--edge);
 }
 
 html[data-skin="oled"] .controller-name {
@@ -26,7 +25,7 @@ html[data-skin="oled"] .controller-name {
 }
 
 html[data-skin="oled"] .controller-slot {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .controller-control {
@@ -54,7 +53,7 @@ html[data-skin="oled"] [data-command="north"] {
 
 html[data-skin="oled"] .controller-control.is-pressed {
   background: var(--surface);
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
   color: var(--text);
 }
 
@@ -65,7 +64,7 @@ html[data-skin="oled"] .control-joystick {
 }
 
 html[data-skin="oled"] .control-joystick.is-active {
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .control-joystick::after {
@@ -79,8 +78,8 @@ html[data-skin="oled"] .control-joystick::after {
 }
 
 html[data-skin="oled"] .control-joystick.is-dragging::after {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--skin-accent);
+  border-color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .dpad-direction {
@@ -98,34 +97,34 @@ html[data-skin="oled"] .dpad-direction svg {
 
 html[data-skin="oled"] .controller-dpad[data-direction="up"] .dpad-up {
   background: transparent !important;
-  border: 1.5px solid var(--accent) !important;
+  border: 1.5px solid var(--skin-accent) !important;
   border-bottom: 0 !important;
   box-shadow: none !important;
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .controller-dpad[data-direction="down"] .dpad-down {
   background: transparent !important;
-  border: 1.5px solid var(--accent) !important;
+  border: 1.5px solid var(--skin-accent) !important;
   border-top: 0 !important;
   box-shadow: none !important;
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .controller-dpad[data-direction="left"] .dpad-left {
   background: transparent !important;
-  border: 1.5px solid var(--accent) !important;
+  border: 1.5px solid var(--skin-accent) !important;
   border-right: 0 !important;
   box-shadow: none !important;
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .controller-dpad[data-direction="right"] .dpad-right {
   background: transparent !important;
-  border: 1.5px solid var(--accent) !important;
+  border: 1.5px solid var(--skin-accent) !important;
   border-left: 0 !important;
   box-shadow: none !important;
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .controller-status {
@@ -141,7 +140,7 @@ html[data-skin="oled"] .icon-button {
 }
 
 html[data-skin="oled"] .icon-button:hover {
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
   color: var(--text);
 }
 
@@ -165,15 +164,22 @@ html[data-skin="oled"] .controller-layout-picker {
 }
 
 html[data-skin="oled"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="oled"] .settings-capabilities {
-  color: var(--muted);
+  color: var(--skin-muted);
 }
 
 html[data-skin="oled"] .orientation-message {
   border: 1.5px solid var(--edge);
   background: var(--void);
   color: var(--text);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="oled"] .controller-control.hit-only {
+  visibility: hidden;
 }

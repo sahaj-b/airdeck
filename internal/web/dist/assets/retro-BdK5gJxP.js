@@ -3,9 +3,15 @@ var e=`/* Retro pixel — PICO-8-ish palette, Press Start 2P, hard offset shadow
    into the shadow (translate(4px,4px), shadow removed). */
 
 html[data-skin="retro"] {
-  --accent: #ffcd75;
+  --skin-accent: #ffcd75;
   --ink: #1a1c2c;
   --line: #0d0e17;
+}
+
+/* Keep the pixel font off the settings surface (it portals to <body> and
+   would make the sheet unreadable). Scope it to the controller shell so the
+   controls keep the retro identity but settings stay in the base font. */
+html[data-skin="retro"] .controller-shell {
   font-family: "Press Start 2P", ui-monospace, monospace;
 }
 
@@ -112,7 +118,7 @@ html[data-skin="retro"] .controller-dpad[data-direction="up"] .dpad-up,
 html[data-skin="retro"] .controller-dpad[data-direction="right"] .dpad-right,
 html[data-skin="retro"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="retro"] .controller-dpad[data-direction="left"] .dpad-left {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="retro"] .icon-button {
@@ -153,7 +159,7 @@ html[data-skin="retro"] .controller-layout-picker {
 }
 
 html[data-skin="retro"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="retro"] .settings-capabilities {
@@ -166,5 +172,12 @@ html[data-skin="retro"] .orientation-message {
   background: #2b2250;
   color: #f4f4f4;
   text-shadow: 2px 2px 0 var(--line);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="retro"] .controller-control.hit-only {
+  visibility: hidden;
 }
 `;export{e as default};

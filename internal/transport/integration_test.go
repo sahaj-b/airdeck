@@ -364,6 +364,25 @@ func TestMoveRebindsDeviceAndRoutesInputToDestination(t *testing.T) {
 	if !ok || player.Slot != target {
 		t.Fatalf("player after move = slot %d, ok=%v", player.Slot, ok)
 	}
+	// The moved client must learn its new slot without reconnecting.
+	_ = first.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for {
+		_, data, err := first.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var update protocol.SlotUpdate
+		if err := json.Unmarshal(data, &update); err != nil {
+			t.Fatal(err)
+		}
+		if update.Type != protocol.MessageSlotUpdate {
+			continue // heartbeat pings can interleave
+		}
+		if update.Slot != target || update.Accent != player.Accent {
+			t.Fatalf("slot update = %+v, want slot %d accent %q", update, target, player.Accent)
+		}
+		break
+	}
 	if err := first.WriteMessage(websocket.BinaryMessage, (protocol.Frame{Seq: 1, Buttons: protocol.BitSouth}).Encode()); err != nil {
 		t.Fatal(err)
 	}

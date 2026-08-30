@@ -3,7 +3,7 @@
    values flipped and brightened for dark. */
 
 html[data-skin="minimal"] {
-  --accent: #ff922b;
+  --skin-accent: #ff922b;
   --ink: #e9e4d6;
   --bg: #14130e;
 }
@@ -15,7 +15,6 @@ html[data-skin="minimal"] .controller-shell {
 
 html[data-skin="minimal"] .controller-frame {
   background: var(--bg);
-  border: 1px solid #26241c;
 }
 
 html[data-skin="minimal"] .controller-name {
@@ -33,14 +32,14 @@ html[data-skin="minimal"] .controller-control {
 }
 
 html[data-skin="minimal"] .controller-control.is-pressed {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--ink);
+  border-color: var(--ink);
   color: var(--bg);
 }
 
 html[data-skin="minimal"] .control-trigger.is-pressed {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--ink);
+  border-color: var(--ink);
   color: var(--bg);
 }
 
@@ -53,19 +52,23 @@ html[data-skin="minimal"] .control-joystick {
 }
 
 html[data-skin="minimal"] .control-joystick.is-active {
-  border-color: var(--accent);
-  background: #2e2e2e;
+  border-color: var(--ink);
+  background: transparent;
 }
 
 html[data-skin="minimal"] .control-joystick::after {
   width: 34%;
   height: 34%;
-  background: var(--accent);
-  transition: background-color 90ms ease;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  transition:
+    background-color 90ms ease,
+    border-color 90ms ease;
 }
 
 html[data-skin="minimal"] .control-joystick.is-dragging::after {
-  background: var(--accent);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 html[data-skin="minimal"] .dpad-direction {
@@ -130,7 +133,7 @@ html[data-skin="minimal"] .controller-layout-picker {
 }
 
 html[data-skin="minimal"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="minimal"] .settings-capabilities {
@@ -141,4 +144,11 @@ html[data-skin="minimal"] .orientation-message {
   border: 1px solid #26241c;
   background: var(--bg);
   color: var(--ink);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="minimal"] .controller-control.hit-only {
+  visibility: hidden;
 }

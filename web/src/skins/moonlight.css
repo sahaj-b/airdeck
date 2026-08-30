@@ -3,14 +3,14 @@
    Subtle gradients, silver-blue accent, no harsh glow. */
 
 html[data-skin="moonlight"] {
-  --accent: #7ba4d6;
+  --skin-accent: #7ba4d6;
   --accent-bright: #a8c8f0;
   --bg: #0c1220;
   --surface: #141d2e;
   --panel: #1a2640;
   --edge: #243352;
   --text: #c8d6e8;
-  --muted: #5c7090;
+  --skin-muted: #5c7090;
 }
 
 html[data-skin="moonlight"] body,
@@ -34,7 +34,7 @@ html[data-skin="moonlight"] .controller-name {
 }
 
 html[data-skin="moonlight"] .controller-slot {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="moonlight"] .controller-control {
@@ -71,7 +71,7 @@ html[data-skin="moonlight"] [data-command="north"] {
 
 html[data-skin="moonlight"]
   .controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
   box-shadow:
     0 0 20px rgba(123, 164, 214, 0.12),
     inset 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -116,14 +116,14 @@ html[data-skin="moonlight"] .control-joystick::after {
 
 html[data-skin="moonlight"] .control-joystick.is-dragging::after {
   background: linear-gradient(160deg, #4a6890 0%, #2a4060 60%, #1a2e48 100%);
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
 }
 
 html[data-skin="moonlight"] .dpad-direction {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--skin-muted);
   transition: color 100ms ease;
 }
 
@@ -156,7 +156,7 @@ html[data-skin="moonlight"] .icon-button {
 }
 
 html[data-skin="moonlight"] .icon-button:hover {
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
   color: #e0ecf8;
 }
 
@@ -180,15 +180,22 @@ html[data-skin="moonlight"] .controller-layout-picker {
 }
 
 html[data-skin="moonlight"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="moonlight"] .settings-capabilities {
-  color: var(--muted);
+  color: var(--skin-muted);
 }
 
 html[data-skin="moonlight"] .orientation-message {
   border: 1px solid #1e2d44;
   background: #10192a;
   color: var(--text);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="moonlight"] .controller-control.hit-only {
+  visibility: hidden;
 }

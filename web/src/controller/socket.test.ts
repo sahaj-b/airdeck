@@ -115,6 +115,37 @@ describe('ControllerSocket', () => {
     );
   });
 
+  it('applies host slot updates and reports malformed ones without closing', () => {
+    const fake = new FakeSocket();
+    const updates: Array<{ slot: number; accent: string }> = [];
+    const errors: string[] = [];
+    const socket = new ControllerSocket({
+      sessionCode: '4821',
+      capabilities: {
+        sound: false,
+        wakeLock: false,
+        fullscreen: false,
+        orientation: false,
+      },
+      socketFactory: () => fake,
+      onSlotUpdate: (update) =>
+        updates.push({ slot: update.slot, accent: update.accent }),
+      onError: (error) => errors.push(error.code),
+    });
+    socket.connect();
+    fake.open();
+    fake.message(
+      JSON.stringify({ type: 'slot.update', slot: 3, accent: '#fbbf24' }),
+    );
+    expect(updates).toEqual([{ slot: 3, accent: '#fbbf24' }]);
+    fake.message(
+      JSON.stringify({ type: 'slot.update', slot: 99, accent: '#fbbf24' }),
+    );
+    expect(updates).toEqual([{ slot: 3, accent: '#fbbf24' }]);
+    expect(errors).toEqual(['invalid_message']);
+    expect(socket.state).toBe('hello-sent');
+  });
+
   it('rejects the connection after a pre-welcome admission error', () => {
     const fake = new FakeSocket();
     const states: string[] = [];

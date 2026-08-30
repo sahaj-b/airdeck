@@ -878,6 +878,10 @@ function showController(options: {
         island.update({ selectedLayout: currentLayoutId });
       updateStatus(diagnostic ?? 'Controller ready.');
     },
+    onSlotUpdate: (update) => {
+      slot.textContent = `Player ${update.slot + 1}`;
+      shell.style.setProperty('--slot-accent', update.accent);
+    },
     onPublishResult: (result) => {
       clearPublishTimer();
       // only handle pending id match

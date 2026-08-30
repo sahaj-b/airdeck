@@ -5,6 +5,7 @@ import type {
   PublishResult,
   Rumble,
   ServerMessage,
+  SlotUpdate,
   Welcome,
 } from '../shared/contracts';
 import { type LayoutDocument, parseLayoutDocument } from '../shared/layout';
@@ -46,6 +47,7 @@ export interface ControllerSocketOptions {
   onStateChange?: (state: ConnectionState) => void;
   onWelcome?: (welcome: Welcome) => void;
   onLayout?: (layout: LayoutDocument, diagnostic?: string) => void;
+  onSlotUpdate?: (update: SlotUpdate) => void;
   onError?: (error: ErrorMessage) => void;
   onRumble?: (rumble: Rumble) => void;
   onPing?: (rttMs: number) => void;
@@ -217,6 +219,21 @@ export class ControllerSocket {
         return;
       case 'layout':
         this.handleLayout(message);
+        return;
+      case 'slot.update':
+        if (
+          Number.isInteger(message.slot) &&
+          message.slot >= 0 &&
+          message.slot <= 15 &&
+          typeof message.accent === 'string'
+        ) {
+          this.options.onSlotUpdate?.(message);
+        } else {
+          this.reportError(
+            'invalid_message',
+            'The host sent an invalid slot update.',
+          );
+        }
         return;
       case 'ping':
         if (typeof message.id === 'string') {

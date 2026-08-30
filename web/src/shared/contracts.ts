@@ -62,6 +62,7 @@ export type {
   PublishResult,
   ResetMessage,
   Rumble,
+  SlotUpdate,
   Welcome,
 } from './generated/protocol';
 export type { LayoutDocument };
@@ -83,6 +84,7 @@ export interface AdminLayoutSummary {
 export type ServerMessage =
   | import('./generated/protocol').Welcome
   | import('./generated/protocol').LayoutMessage
+  | import('./generated/protocol').SlotUpdate
   | import('./generated/protocol').Ping
   | import('./generated/protocol').ErrorMessage
   | import('./generated/protocol').Rumble

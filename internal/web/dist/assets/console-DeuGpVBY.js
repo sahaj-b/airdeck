@@ -3,7 +3,7 @@ var e=`/* Console 3D — skeuomorphic Xbox-style plastic. Techniques: radial-gra
    eats the drop shadow, recessed wells for stick pockets. */
 
 html[data-skin="console"] {
-  --accent: #9ade3b;
+  --skin-accent: #9ade3b;
   --plastic-hi: #4a4f58;
   --plastic: #34383f;
   --plastic-lo: #212429;
@@ -32,7 +32,7 @@ html[data-skin="console"] .controller-name {
 }
 
 html[data-skin="console"] .controller-slot {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="console"] .controller-control {
@@ -202,7 +202,7 @@ html[data-skin="console"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="console"] .controller-dpad[data-direction="left"] .dpad-left {
   transform: scale(0.94);
   filter: brightness(0.88);
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="console"] .controller-status {
@@ -218,7 +218,7 @@ html[data-skin="console"] .icon-button {
 }
 
 html[data-skin="console"] .icon-button:hover {
-  border-color: var(--accent);
+  border-color: var(--skin-accent);
   color: #e8ebf0;
 }
 
@@ -242,7 +242,7 @@ html[data-skin="console"] .controller-layout-picker {
 }
 
 html[data-skin="console"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="console"] .settings-capabilities {
@@ -253,5 +253,12 @@ html[data-skin="console"] .orientation-message {
   border: 1px solid #3a3f47;
   background: #1b1e23;
   color: #cfd5dd;
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="console"] .controller-control.hit-only {
+  visibility: hidden;
 }
 `;export{e as default};

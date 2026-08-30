@@ -81,6 +81,14 @@ type ResetMessage struct {
 	Type string `json:"type" tstype:"'session.reset'"`
 }
 
+// SlotUpdate tells a connected client its player slot changed after a
+// host-side move, so the phone can re-label itself without reconnecting.
+type SlotUpdate struct {
+	Type   string `json:"type" tstype:"'slot.update'"`
+	Slot   int    `json:"slot"`
+	Accent string `json:"accent"`
+}
+
 type DebugInputTrace struct {
 	Type       string `json:"type" tstype:"'debug.inputTrace'"`
 	Sequence   uint32 `json:"sequence"`

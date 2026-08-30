@@ -54,6 +54,7 @@ export const MessageRumble = "rumble";
 export const MessageError = "error";
 export const MessageClose = "close";
 export const MessageReset = "session.reset";
+export const MessageSlotUpdate = "slot.update";
 export const MessageDebugTrace = "debug.inputTrace";
 export const MessagePublishPending = "layout.publish.pending";
 export const MessagePublishResult = "publish.result";
@@ -132,6 +133,15 @@ export interface CloseMessage {
 }
 export interface ResetMessage {
   type: 'session.reset';
+}
+/**
+ * SlotUpdate tells a connected client its player slot changed after a
+ * host-side move, so the phone can re-label itself without reconnecting.
+ */
+export interface SlotUpdate {
+  type: 'slot.update';
+  slot: number /* int */;
+  accent: string;
 }
 export interface DebugInputTrace {
   type: 'debug.inputTrace';

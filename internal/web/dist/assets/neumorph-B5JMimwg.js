@@ -2,7 +2,7 @@ var e=`/* Neumorphic dark — same dual-shadow soft UI, dark surface.
    Shadows flip roles: dark shadow #1c2026, light edge #3a414c. */
 
 html[data-skin="neumorph"] {
-  --accent: #7aa2f7;
+  --skin-accent: #7aa2f7;
   --surface: #2b3038;
   --shade: #1b1f25;
   --light: #3b424d;
@@ -49,7 +49,7 @@ html[data-skin="neumorph"] .controller-control.is-pressed {
 }
 
 html[data-skin="neumorph"] .control-trigger.is-pressed {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="neumorph"] .control-joystick {
@@ -63,7 +63,7 @@ html[data-skin="neumorph"] .control-joystick.is-active {
   box-shadow:
     inset 5px 5px 10px var(--shade),
     inset -5px -5px 10px var(--light),
-    0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+    0 0 0 2px color-mix(in srgb, var(--skin-accent) 45%, transparent);
 }
 
 html[data-skin="neumorph"] .control-joystick::after {
@@ -71,7 +71,7 @@ html[data-skin="neumorph"] .control-joystick::after {
   box-shadow:
     4px 4px 8px var(--shade),
     -4px -4px 8px var(--light),
-    inset 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+    inset 0 0 0 2px color-mix(in srgb, var(--skin-accent) 30%, transparent);
 }
 
 html[data-skin="neumorph"] .dpad-direction {
@@ -136,8 +136,8 @@ html[data-skin="neumorph"] .icon-button {
 }
 
 html[data-skin="neumorph"] .icon-button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--skin-accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="neumorph"] .settings-backdrop {
@@ -160,7 +160,7 @@ html[data-skin="neumorph"] .controller-layout-picker {
 }
 
 html[data-skin="neumorph"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="neumorph"] .settings-capabilities {
@@ -171,5 +171,12 @@ html[data-skin="neumorph"] .orientation-message {
   border: 1px solid var(--shade);
   background: var(--surface);
   color: var(--text);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="neumorph"] .controller-control.hit-only {
+  visibility: hidden;
 }
 `;export{e as default};

@@ -3,7 +3,7 @@
    outer glow, faint white top light, strong inner bottom shade. */
 
 html[data-skin="clay"] {
-  --accent: #9d7bff;
+  --skin-accent: #9d7bff;
   --clay: #3a355a;
   --clay-hi: #463f6b;
   --bg: #1a1830;
@@ -36,7 +36,7 @@ html[data-skin="clay"] .controller-name {
 }
 
 html[data-skin="clay"] .controller-slot {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="clay"] .controller-control {
@@ -146,7 +146,7 @@ html[data-skin="clay"] .controller-dpad[data-direction="down"] .dpad-down,
 html[data-skin="clay"] .controller-dpad[data-direction="left"] .dpad-left {
   transform: scale(0.9);
   filter: brightness(1.15) saturate(1.2);
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="clay"] .controller-status {
@@ -185,7 +185,7 @@ html[data-skin="clay"] .controller-layout-picker {
 }
 
 html[data-skin="clay"] .settings-value {
-  color: var(--accent);
+  color: var(--skin-accent);
 }
 
 html[data-skin="clay"] .settings-capabilities {
@@ -196,4 +196,11 @@ html[data-skin="clay"] .orientation-message {
   border: 1px solid rgb(255 255 255 / 0.05);
   background: #221f3b;
   color: var(--text);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="clay"] .controller-control.hit-only {
+  visibility: hidden;
 }

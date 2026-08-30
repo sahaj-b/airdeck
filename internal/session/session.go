@@ -494,12 +494,19 @@ func (s *Session) Move(id string, target int) error {
 	}
 	s.slots[old] = nil
 	s.slots[target] = current
+	accent := slotAccents[target]
 	current.Slot = target
-	current.Accent = slotAccents[target]
+	current.Accent = accent
 	current.DeviceStatus = "ready"
 	current.State = StateActive
+	send := current.Send
 	s.mu.Unlock()
 	log.Printf("player %s moved %d -> %d", id, old, target)
+	// Tell the phone its slot changed; its socket stays connected and input
+	// keeps routing by player ID, so only the chrome label needs this push.
+	if send != nil {
+		_ = send(protocol.SlotUpdate{Type: protocol.MessageSlotUpdate, Slot: target, Accent: accent})
+	}
 	s.emit(Event{Type: "player.moved", Player: s.snapshotByID(id)})
 	return nil
 }

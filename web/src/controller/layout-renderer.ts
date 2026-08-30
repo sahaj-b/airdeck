@@ -330,7 +330,6 @@ function renderControl(
     const target = document.createElement('div');
     target.className = 'controller-hit-target';
     target.dataset.controlId = control.id;
-    if (binding) target.dataset.command = binding;
     target.append(filler);
     const effectiveControl = {
       ...control,

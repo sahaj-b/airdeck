@@ -19,6 +19,7 @@ const (
 	MessageError          = "error"
 	MessageClose          = "close"
 	MessageReset          = "session.reset"
+	MessageSlotUpdate     = "slot.update"
 	MessageDebugTrace     = "debug.inputTrace"
 	MessagePublishPending = "layout.publish.pending"
 	MessagePublishResult  = "publish.result"

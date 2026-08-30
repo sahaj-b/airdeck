@@ -20,7 +20,6 @@ html[data-skin="airdeck"] .controller-shell {
 }
 
 html[data-skin="airdeck"] .controller-frame {
-  border: 1px solid var(--border);
   border-radius: clamp(0.8rem, 3vw, 1.8rem);
   background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
   box-shadow:
@@ -166,4 +165,11 @@ html[data-skin="airdeck"] .orientation-message {
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--card-foreground);
+}
+
+/* Hitfill extends its parent touch area — it must never paint. The skin’s
+   .controller-control rules (background/border/shadow) must not apply to it,
+   so hide it outright. Pointer hits stay on the parent hit target. */
+html[data-skin="airdeck"] .controller-control.hit-only {
+  visibility: hidden;
 }
