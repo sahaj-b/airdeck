@@ -122,7 +122,8 @@ const BINDING_LABELS: Record<string, BindingLabel> = {
 };
 
 export function getBindingLabel(command: Command): string {
-  return BINDING_LABELS[command]?.dual ?? command;
+  const label = BINDING_LABELS[command]?.dual ?? command;
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 export function getAllowedBindings(type: Control['type']): Command[] {
@@ -181,15 +182,15 @@ export function clampGeometry(geometry: Geometry, section: Section): Geometry {
   let { x, y } = geometry.position;
   let { width, height } = geometry.size;
 
-  width = Math.min(Math.max(width, 0.01), Math.min(2, contentWidth));
-  height = Math.min(Math.max(height, 0.01), Math.min(2, contentHeight));
+  // Midpoint clamping: center must stay inside section, edges may overflow.
+  // This lets controls kiss the divider without being blocked by their own size.
+  width = Math.min(Math.max(width, 0.01), 2);
+  height = Math.min(Math.max(height, 0.01), 2);
 
-  const halfW = width / 2;
-  const halfH = height / 2;
-  const minX = halfW - centerX;
-  const maxX = contentWidth - halfW - centerX;
-  const minY = halfH - centerY;
-  const maxY = 1 - halfH - centerY;
+  const minX = -centerX;
+  const maxX = contentWidth - centerX;
+  const minY = -centerY;
+  const maxY = contentHeight - centerY;
   x = Math.min(Math.max(x, minX), maxX);
   y = Math.min(Math.max(y, minY), maxY);
 
@@ -461,6 +462,27 @@ export function nextControlId(document: LayoutDocument): string {
     }
   }
   return `control-${max + 1}`;
+}
+
+export function moveControl(
+  document: LayoutDocument,
+  sectionId: string,
+  fromIndex: number,
+  toIndex: number,
+): LayoutDocument {
+  const next = cloneDocument(document);
+  const section = next.sections.find((s) => s.id === sectionId);
+  if (!section) return document;
+  const clampedFrom = Math.max(
+    0,
+    Math.min(fromIndex, section.controls.length - 1),
+  );
+  const clampedTo = Math.max(0, Math.min(toIndex, section.controls.length - 1));
+  if (clampedFrom === clampedTo) return document;
+  const [moved] = section.controls.splice(clampedFrom, 1);
+  if (!moved) return document;
+  section.controls.splice(clampedTo, 0, moved);
+  return next;
 }
 
 export function isDirty(

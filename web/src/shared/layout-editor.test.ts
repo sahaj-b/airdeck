@@ -152,7 +152,9 @@ describe('layout-editor helpers', () => {
       section,
     );
     expect(huge.position.x).toBeLessThan(2);
-    expect(huge.size.width).toBeLessThanOrEqual(section.relativeWidth);
+    // midpoint clamping allows width up to 2, edges may overflow section
+    expect(huge.size.width).toBeLessThanOrEqual(2);
+    expect(huge.size.width).toBeGreaterThan(section.relativeWidth * 0.5);
   });
 
   it('clamps section dividers to keep center minimum and viewport bounds', () => {
@@ -169,12 +171,12 @@ describe('layout-editor helpers', () => {
   });
 
   it('exposes dual Xbox/PlayStation binding labels and pixel conversion', () => {
-    expect(getBindingLabel('south' as never)).toBe('south (A | Cross)');
+    expect(getBindingLabel('south' as never)).toBe('South (A | Cross)');
     expect(getBindingLabel('leftShoulder' as never)).toBe(
-      'leftShoulder (LB | L1)',
+      'LeftShoulder (LB | L1)',
     );
     expect(getBindingLabel('leftTrigger' as never)).toBe(
-      'leftTrigger (LT | L2)',
+      'LeftTrigger (LT | L2)',
     );
     expect(pixelsToHeightUnits(100, 500)).toBe(0.2);
     expect(pixelsToHeightUnits(10, 0)).toBe(0);

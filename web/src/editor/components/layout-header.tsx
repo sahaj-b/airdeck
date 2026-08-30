@@ -100,32 +100,34 @@ export function LayoutHeader(props: LayoutHeaderProps) {
   };
 
   return (
-    <header className="editor-header flex flex-wrap items-center gap-3 border-b border-white/10 pb-3">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-              onClick={props.onBack}
-              aria-label="Back to dashboard"
-            >
-              <ArrowLeft className="size-4" />
-            </button>
-          }
-        />
-        <TooltipContent side="bottom">Back to dashboard</TooltipContent>
-      </Tooltip>
+    <header className="editor-header flex flex-wrap items-center gap-2 border-b border-border pb-3">
+      {/* Group 1: Back | Layout Select */}
+      <div className="editor-header__group">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                onClick={props.onBack}
+                aria-label="Back to dashboard"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+            }
+          />
+          <TooltipContent side="bottom">Back to dashboard</TooltipContent>
+        </Tooltip>
 
-      <div className="ml-2 flex min-w-0 items-center gap-2">
+        <div className="editor-header__divider" />
+
         <Select
           value={props.currentId}
           onValueChange={(value) => {
             if (value) props.onSelectLayout(value);
           }}
         >
-          {' '}
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-[200px] bg-card">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -137,23 +139,15 @@ export function LayoutHeader(props: LayoutHeaderProps) {
           </SelectContent>
         </Select>
         {props.isBuiltin && (
-          <span className="rounded bg-white/10 px-2 py-1 text-[10px] tracking-wide text-white/50 uppercase">
+          <span className="rounded-md border border-border bg-muted px-2 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             Built-in
           </span>
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
-        {props.dirty && (
-          <Tooltip>
-            <TooltipTrigger>
-              <span className="mr-2 cursor-default text-sm font-medium tracking-wide text-amber-400">
-                Unsaved
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Unsaved changes</TooltipContent>
-          </Tooltip>
-        )}
+      {/* Group 2: New Rename Delete */}
+      <div className="editor-header__group">
+        <div className="editor-header__divider hidden sm:block" />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -161,7 +155,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="header-btn-compact gap-1.5"
+                className="header-btn-compact gap-1.5 bg-card"
                 onClick={props.onNewLayout}
               >
                 <Plus className="size-3.5" />
@@ -178,7 +172,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="header-btn-compact gap-1.5"
+                className="header-btn-compact gap-1.5 bg-card"
                 disabled={persistenceDisabled}
                 onClick={() => {
                   setRenameValue(props.currentName);
@@ -203,7 +197,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="header-btn-compact gap-1.5"
+                className="header-btn-compact gap-1.5 bg-card border-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"
                 disabled={persistenceDisabled || props.isDefault}
                 onClick={() => setDeleteOpen(true)}
               >
@@ -216,15 +210,17 @@ export function LayoutHeader(props: LayoutHeaderProps) {
             {persistenceNote ?? 'Delete this layout'}
           </TooltipContent>
         </Tooltip>
+      </div>
 
-        <div className="mx-1 h-5 w-px bg-white/10" />
-
+      {/* Group 3: Undo Redo */}
+      <div className="editor-header__group">
+        <div className="editor-header__divider hidden sm:block" />
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 className="header-btn-compact gap-1.5"
                 disabled={!props.canUndo}
@@ -242,7 +238,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
             render={
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 className="header-btn-compact gap-1.5"
                 disabled={!props.canRedo}
@@ -255,15 +251,27 @@ export function LayoutHeader(props: LayoutHeaderProps) {
           />
           <TooltipContent side="bottom">Redo (Ctrl+Shift+Z)</TooltipContent>
         </Tooltip>
+      </div>
 
-        <div className="mx-1 h-5 w-px bg-white/10" />
-
+      {/* Group 4: Discard Save — primary hierarchy */}
+      <div className="ml-auto flex items-center gap-2">
+        {props.dirty && (
+          <Tooltip>
+            <TooltipTrigger>
+              <span className="editor-header__unsaved">
+                <span className="editor-header__unsaved-dot" aria-hidden />
+                <span>Unsaved</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Unsaved changes</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 className="header-btn-compact gap-1.5"
                 disabled={!props.dirty}
@@ -281,8 +289,9 @@ export function LayoutHeader(props: LayoutHeaderProps) {
             <span className="inline-flex">
               <Button
                 type="button"
+                variant="default"
                 size="sm"
-                className="header-btn-compact gap-1.5"
+                className="header-btn-compact gap-1.5 shadow-sm"
                 disabled={
                   !props.dirty || props.hasErrors || persistenceDisabled
                 }

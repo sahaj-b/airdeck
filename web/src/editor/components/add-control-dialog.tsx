@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,11 +21,7 @@ import type {
   Control,
   Document as LayoutDocument,
 } from '@/shared/generated/layout';
-import {
-  getAllowedBindings,
-  getBindingLabel,
-  nextControlId,
-} from '@/shared/layout-editor';
+import { getAllowedBindings, nextControlId } from '@/shared/layout-editor';
 
 export type ControlType = Control['type'];
 
@@ -140,7 +137,7 @@ export function AddControlDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[420px]">
         <DialogTitle>Add control</DialogTitle>
         <DialogDescription>
           New controls land at the center of the {section?.id ?? ''} section.
@@ -165,7 +162,7 @@ export function AddControlDialog({
                 }
               }}
             >
-              <SelectTrigger id="add-type">
+              <SelectTrigger id="add-type" className="capitalize">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -181,7 +178,7 @@ export function AddControlDialog({
                   ] as const
                 ).map((option) => (
                   <SelectItem key={option} value={option}>
-                    {option}
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -225,7 +222,7 @@ export function AddControlDialog({
                   its parent. Binding is derived automatically.
                 </p>
               </div>
-              {error && <p className="text-xs text-red-400">{error}</p>}
+              {error && <p className="text-xs text-destructive">{error}</p>}
             </>
           ) : (
             <>
@@ -249,13 +246,13 @@ export function AddControlDialog({
                       if (value) setBinding(value);
                     }}
                   >
-                    <SelectTrigger id="add-binding">
+                    <SelectTrigger id="add-binding" className="capitalize">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="min-w-[240px]">
                       {allowed.map((command) => (
                         <SelectItem key={command} value={command}>
-                          {getBindingLabel(command)}
+                          <BindingLabel command={command} />
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -275,7 +272,7 @@ export function AddControlDialog({
                     if (value) setShape(value as 'round' | 'rect');
                   }}
                 >
-                  <SelectTrigger id="add-shape">
+                  <SelectTrigger id="add-shape" className="capitalize">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

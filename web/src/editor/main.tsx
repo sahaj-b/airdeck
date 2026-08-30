@@ -51,6 +51,7 @@ import {
   isDefaultLocked,
   isDirty,
   LayoutHistory,
+  moveControl,
   nextControlId,
   type SectionId,
 } from '@/shared/layout-editor';
@@ -81,6 +82,10 @@ function EditorApp() {
     null,
   );
   const [selectedSectionId, setSelectedSectionId] = useState<SectionId | null>(
+    null,
+  );
+  const [hoveredControlId, setHoveredControlId] = useState<string | null>(null);
+  const [hoveredSectionId, setHoveredSectionId] = useState<SectionId | null>(
     null,
   );
   const [locks, setLocks] = useState<Record<string, boolean>>({});
@@ -381,10 +386,20 @@ function EditorApp() {
   const handleDuplicateControl = useCallback(
     (controlId: string) => {
       if (!draft) return;
+      const before = findControl(draft, controlId);
+      if (!before) return;
       const next = duplicateControl(draft, controlId);
+      // find new id: the control inserted after source
+      const section = next.sections.find((s) => s.id === before.section.id);
+      const idx = section?.controls.findIndex((c) => c.id === controlId) ?? -1;
+      const newControl = section?.controls[idx + 1];
       setDraft(next);
       historyRef.current.push(next);
       markDirty(next);
+      if (newControl) {
+        setSelectedControlId(newControl.id);
+        setSelectedSectionId(null);
+      }
     },
     [draft, markDirty],
   );
@@ -486,20 +501,26 @@ function EditorApp() {
   const handleMoveControl = useCallback(
     (controlId: string, direction: 'up' | 'down') => {
       if (!draft) return;
-      const next = cloneDocument(draft);
-      for (const section of next.sections) {
-        const index = section.controls.findIndex(
-          (candidate) => candidate.id === controlId,
-        );
-        if (index >= 0) {
-          const target = direction === 'up' ? index - 1 : index + 1;
-          if (target >= 0 && target < section.controls.length) {
-            const [moved] = section.controls.splice(index, 1);
-            section.controls.splice(target, 0, moved);
-          }
-          break;
-        }
-      }
+      const found = findControl(draft, controlId);
+      if (!found) return;
+      const fromIndex = found.section.controls.findIndex(
+        (c) => c.id === controlId,
+      );
+      const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+      if (toIndex < 0 || toIndex >= found.section.controls.length) return;
+      const next = moveControl(draft, found.section.id, fromIndex, toIndex);
+      setDraft(next);
+      historyRef.current.push(next);
+      markDirty(next);
+    },
+    [draft, markDirty],
+  );
+
+  const handleReorderControl = useCallback(
+    (sectionId: string, fromIndex: number, toIndex: number) => {
+      if (!draft) return;
+      const next = moveControl(draft, sectionId, fromIndex, toIndex);
+      if (next === draft) return;
       setDraft(next);
       historyRef.current.push(next);
       markDirty(next);
@@ -594,7 +615,7 @@ function EditorApp() {
   if (!draft) {
     return (
       <div className="editor-shell">
-        <div className="col-span-3 p-6 text-sm text-white/60">
+        <div className="col-span-3 p-6 text-sm text-muted-foreground">
           Loading layout…
         </div>
       </div>
@@ -680,11 +701,27 @@ function EditorApp() {
             <SectionsPanel
               document={draft}
               selectedControlId={selectedControlId}
-              onSelectControl={setSelectedControlId}
+              selectedSectionId={selectedSectionId}
+              hoveredControlId={hoveredControlId}
+              onSelectControl={(id) => {
+                setSelectedControlId(id);
+                setSelectedSectionId(null);
+              }}
+              onSelectSection={(id) => {
+                setSelectedSectionId(id as SectionId);
+                setSelectedControlId(null);
+              }}
+              onHoverSection={(id) =>
+                setHoveredSectionId(id as SectionId | null)
+              }
               onAddControl={(sectionId) =>
                 setAddDialogSection(sectionId as SectionId | null)
               }
               onMoveControl={handleMoveControl}
+              onDuplicateControl={handleDuplicateControl}
+              onDeleteControl={handleDeleteControl}
+              onReorderControl={handleReorderControl}
+              onHoverControl={setHoveredControlId}
               onCollapse={() => setLeftCollapsed(true)}
             />
           )}
@@ -693,8 +730,12 @@ function EditorApp() {
         <LayoutCanvas
           document={draft}
           selectedControlId={selectedControlId}
+          selectedSectionId={selectedSectionId}
+          hoveredControlId={hoveredControlId}
+          hoveredSectionId={hoveredSectionId}
           onSelectControl={setSelectedControlId}
           onSelectSection={(id) => setSelectedSectionId(id as SectionId | null)}
+          onHoverSection={(id) => setHoveredSectionId(id as SectionId | null)}
           onDraftChange={handleDraftChange}
           locks={locks}
         />
@@ -764,7 +805,7 @@ function EditorApp() {
               Create a blank layout or clone an existing one.
             </DialogDescription>
             {newLayoutError && (
-              <p className="rounded bg-red-900/20 px-2 py-1.5 text-xs text-red-400">
+              <p className="rounded border border-destructive/20 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
                 {newLayoutError}
               </p>
             )}

@@ -263,12 +263,11 @@ func validateGeometry(geometry Geometry, section Section, name string) error {
 	contentHeight := 1.0
 	centerX := contentWidth / 2
 	centerY := contentHeight / 2
-	left := centerX + geometry.Position.X - geometry.Size.Width/2
-	right := left + geometry.Size.Width
-	top := centerY + geometry.Position.Y - geometry.Size.Height/2
-	bottom := top + geometry.Size.Height
+	// Midpoint check: center must be inside section, edges may overflow.
+	centerPosX := centerX + geometry.Position.X
+	centerPosY := centerY + geometry.Position.Y
 	const epsilon = 1e-9
-	if left < -epsilon || right > contentWidth+epsilon || top < -epsilon || bottom > 1+epsilon {
+	if centerPosX < -epsilon || centerPosX > contentWidth+epsilon || centerPosY < -epsilon || centerPosY > contentHeight+epsilon {
 		return fmt.Errorf("%s extends outside the authored section bounds", name)
 	}
 	return nil

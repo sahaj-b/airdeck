@@ -274,7 +274,7 @@ export function getControlErrors(
   if (!validGeometry(control.geometry, section))
     errors.push({
       path: 'geometry',
-      message: 'geometry extends outside section bounds or has invalid size',
+      message: 'geometry center is outside section bounds or has invalid size',
     });
   const isHitfill = control.type === 'hitfill';
   if (isHitfill) {
@@ -439,16 +439,15 @@ function validGeometry(geometry: Geometry, section: Section): boolean {
   const contentHeight = 1;
   const centerX = contentWidth / 2;
   const centerY = contentHeight / 2;
-  const left = centerX + geometry.position.x - geometry.size.width / 2;
-  const right = left + geometry.size.width;
-  const top = centerY + geometry.position.y - geometry.size.height / 2;
-  const bottom = top + geometry.size.height;
+  // Midpoint check: center must be inside section, edges may overflow.
+  const centerPosX = centerX + geometry.position.x;
+  const centerPosY = centerY + geometry.position.y;
   const epsilon = 1e-9;
   return (
-    left >= -epsilon &&
-    right <= contentWidth + epsilon &&
-    top >= -epsilon &&
-    bottom <= 1 + epsilon
+    centerPosX >= -epsilon &&
+    centerPosX <= contentWidth + epsilon &&
+    centerPosY >= -epsilon &&
+    centerPosY <= contentHeight + epsilon
   );
 }
 

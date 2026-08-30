@@ -7,6 +7,7 @@ import {
   Unlock,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,7 +32,6 @@ import type { ValidationError } from '@/shared/layout';
 import {
   findControl,
   getAllowedBindings,
-  getBindingLabel,
   isDefaultLocked,
 } from '@/shared/layout-editor';
 
@@ -88,6 +88,12 @@ export function Inspector({
     return map;
   }, [errors, selectedControl, selectedSectionId]);
 
+  // Top-level summary without raw path dump
+  const relevantErrors = useMemo(() => {
+    if (selectedControl || selectedSectionId) return [];
+    return errors.slice(0, 3);
+  }, [errors, selectedControl, selectedSectionId]);
+
   return (
     <section className="editor-panel editor-inspector">
       <div className="mb-3 flex items-center gap-2">
@@ -99,7 +105,7 @@ export function Inspector({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-8 shrink-0 text-white/60 hover:text-white"
+                  className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={onCollapse}
                   aria-label="Collapse inspector"
                 >
@@ -110,13 +116,25 @@ export function Inspector({
             <TooltipContent side="left">Collapse inspector</TooltipContent>
           </Tooltip>
         )}
-        <h2 className="flex-1 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          {selectedControlId
-            ? `Control: ${control?.label ?? control?.id ?? ''}`
-            : selectedSectionId
-              ? `Section: ${selectedSectionId}`
-              : 'Document'}
-        </h2>
+        {selectedControlId ? (
+          <h2 className="flex-1 flex min-w-0 items-baseline gap-1.5 text-left text-xs font-semibold tracking-wide text-muted-foreground">
+            <span className="shrink-0 uppercase">CONTROL:</span>
+            <span className="min-w-0 flex-1 truncate font-medium normal-case tracking-normal text-foreground">
+              {control?.label || control?.id || ''}
+            </span>
+          </h2>
+        ) : selectedSectionId ? (
+          <h2 className="flex-1 flex min-w-0 items-baseline gap-1.5 text-left text-xs font-semibold tracking-wide text-muted-foreground">
+            <span className="shrink-0 uppercase">SECTION:</span>
+            <span className="min-w-0 flex-1 truncate font-medium normal-case tracking-normal text-foreground">
+              {selectedSectionId}
+            </span>
+          </h2>
+        ) : (
+          <h2 className="flex-1 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Document
+          </h2>
+        )}
         {control && onDuplicateControl && onDeleteControl && (
           <div className="flex items-center gap-1">
             <Tooltip>
@@ -126,7 +144,7 @@ export function Inspector({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    className="size-7 text-white/60 hover:text-white"
+                    className="size-7 text-muted-foreground hover:text-foreground"
                     onClick={() => onDuplicateControl(control.id)}
                     aria-label="Duplicate control"
                   >
@@ -143,7 +161,7 @@ export function Inspector({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    className="size-7 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                    className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => onDeleteControl(control.id)}
                     aria-label="Delete control"
                   >
@@ -157,25 +175,25 @@ export function Inspector({
         )}
       </div>
 
-      {errors.length > 0 && (
-        <div className="mb-3 space-y-1 rounded bg-red-900/20 px-2 py-1.5">
-          {errors.slice(0, 3).map((error) => (
+      {relevantErrors.length > 0 && (
+        <div className="mb-3 space-y-1 rounded-md border border-destructive/20 bg-destructive/10 px-2.5 py-2">
+          {relevantErrors.map((error) => (
             <p
               key={error.path + error.message}
-              className="text-[11px] leading-tight text-red-400"
+              className="text-[11px] leading-tight text-destructive"
             >
-              {error.path}: {error.message}
+              {error.message}
             </p>
           ))}
           {errors.length > 3 && (
-            <p className="text-[11px] text-red-400/60">
-              +{errors.length - 3} more errors
+            <p className="text-[11px] text-destructive/60">
+              +{errors.length - 3} more
             </p>
           )}
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         <DocumentMeta document={document} onDraftChange={onDraftChange} />
 
         {section && !control && (
@@ -211,13 +229,17 @@ function DocumentMeta({
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="space-y-1.5">
-        <Label htmlFor="doc-name" className="text-xs">
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <Label
+          htmlFor="doc-name"
+          className="w-12 shrink-0 text-xs font-medium text-muted-foreground"
+        >
           Name
         </Label>
         <Input
           id="doc-name"
+          className="flex-1 h-8"
           value={document.name}
           onChange={(event) => {
             const next = structuredClone(document);
@@ -231,14 +253,14 @@ function DocumentMeta({
           }}
         />
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5 rounded-lg border border-border bg-card px-3 py-2">
         <InfoRow label="ID" value={document.id} />
         <InfoRow label="Schema" value={`v${document.schemaVersion}`} />
         <InfoRow label="Orientation" value={document.defaultOrientation} />
         <InfoRow label="Assets" value={`${document.assets.length}`} />
       </div>
       {document.assets.length === 0 && (
-        <p className="text-[10px] text-muted-foreground/60">
+        <p className="text-[11px] leading-tight text-muted-foreground">
           No assets. Add files to layouts folder manually.
         </p>
       )}
@@ -248,9 +270,11 @@ function DocumentMeta({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-[10px] text-muted-foreground">{label}</span>
-      <span className="font-mono text-[10px] text-white/60">{value}</span>
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="truncate font-mono text-[11px] text-muted-foreground">
+        {value}
+      </span>
     </div>
   );
 }
@@ -283,27 +307,34 @@ function SectionFields({
   };
 
   return (
-    <div className="space-y-2 border-t border-white/10 pt-4">
-      <h3 className="text-xs font-medium text-white/80">Section</h3>
-      <NumberField
-        label="Width (relativeWidth)"
-        value={section.relativeWidth}
-        min={0.1}
-        max={4}
-        step={0.01}
-        error={fieldErrors.get('relativeWidth')}
-        onChange={updateWidth}
-      />
-      <NumberField
-        label="Min width (optional)"
-        value={section.relativeMinWidth ?? 0}
-        min={0}
-        max={4}
-        step={0.01}
-        note="0 = no minimum"
-        error={fieldErrors.get('relativeMinWidth')}
-        onChange={updateMinWidth}
-      />
+    <div className="space-y-3 border-t border-border pt-4">
+      <h3 className="text-xs font-semibold text-foreground">Section</h3>
+      <div className="editor-geometry-card space-y-3">
+        <NumberField
+          label="Width"
+          labelWidth="w-20"
+          value={section.relativeWidth}
+          min={0.1}
+          max={4}
+          step={0.01}
+          error={fieldErrors.get('relativeWidth')}
+          onChange={updateWidth}
+        />
+        <NumberField
+          label="Min width"
+          labelWidth="w-20"
+          value={section.relativeMinWidth ?? 0}
+          min={0}
+          max={4}
+          step={0.01}
+          note="0 = no minimum"
+          error={fieldErrors.get('relativeMinWidth')}
+          onChange={updateMinWidth}
+        />
+      </div>
+      <p className="editor-geometry-help">
+        Width in viewport-height units. Center fills remaining width.
+      </p>
     </div>
   );
 }
@@ -343,211 +374,152 @@ function ControlFields({
       .flatMap((s) => s.controls)
       .find((c) => c.id === control.parentId);
     const binding = parent?.binding ?? '—';
+    const parentIdCap = control.parentId
+      ? control.parentId.charAt(0).toUpperCase() + control.parentId.slice(1)
+      : '—';
+    const bindingCap =
+      binding !== '—'
+        ? binding.charAt(0).toUpperCase() + binding.slice(1)
+        : '—';
+    const isSame =
+      binding !== '—' && parent?.id?.toLowerCase() === binding.toLowerCase();
     return (
-      <div className="space-y-3 border-t border-white/10 pt-4">
-        <h3 className="text-xs font-medium text-white/80">
-          hitfill → {control.parentId} {binding !== '—' ? `(${binding})` : ''}
-        </h3>
-        <InfoRow label="Type" value="hitfill" />
-        <div className="rounded bg-white/5 px-2 py-1.5">
-          <p className="text-[11px] text-white/70">
-            Parent: <span className="font-mono">{control.parentId ?? '—'}</span>{' '}
-            {binding !== '—' && (
-              <span className="text-white/50">({binding})</span>
-            )}
-          </p>
-          <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
-            Binding is derived from parent. Changing the parent’s binding
-            automatically updates this hitfill.
-          </p>
-        </div>
-        {fieldErrors.get('parentId') && (
-          <p className="text-[11px] text-red-400">
-            {fieldErrors.get('parentId')}
-          </p>
-        )}
-
-        <div className="space-y-2 border-t border-white/10 pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-white/80">Geometry</span>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant={locked ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 gap-1.5 px-2.5 text-xs font-medium"
-                    onClick={() => onToggleLock(control.id)}
-                  >
-                    {locked ? (
-                      <>
-                        <Lock className="size-3.5" />
-                        Locked
-                      </>
-                    ) : (
-                      <>
-                        <Unlock className="size-3.5" />
-                        Free
-                      </>
-                    )}
-                  </Button>
-                }
-              />
-              <TooltipContent side="top">
-                {locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-              </TooltipContent>
-            </Tooltip>
+      <div className="space-y-4 border-t border-border pt-4">
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-foreground">
+            Hitfill → {parentIdCap}
+            {binding !== '—' && !isSame ? ` (${bindingCap})` : ''}
+          </h3>
+          <InfoRow label="Type" value="Hitfill" />
+          <div className="rounded-lg border border-border bg-muted/50 px-3 py-2.5">
+            <p className="text-xs text-foreground">
+              Parent:{' '}
+              <span className="font-mono font-medium">{parentIdCap}</span>{' '}
+              {binding !== '—' && !isSame && (
+                <span className="text-muted-foreground">({bindingCap})</span>
+              )}
+            </p>
+            <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+              Binding is derived from parent. Changing the parent’s binding
+              automatically updates this hitfill.
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="X"
-              value={control.geometry.position.x}
-              step={0.01}
-              min={-2}
-              max={2}
-              error={fieldErrors.get('x')}
-              onChange={(v) => {
-                const next = structuredClone(document);
-                const found = findControl(next, control.id);
-                if (found) found.control.geometry.position.x = v;
-                onDraftChange(next, true);
-              }}
-            />
-            <NumberField
-              label="Y"
-              value={control.geometry.position.y}
-              step={0.01}
-              min={-2}
-              max={2}
-              error={fieldErrors.get('y')}
-              onChange={(v) => {
-                const next = structuredClone(document);
-                const found = findControl(next, control.id);
-                if (found) found.control.geometry.position.y = v;
-                onDraftChange(next, true);
-              }}
-            />
-            <NumberField
-              label="W"
-              value={control.geometry.size.width}
-              step={0.01}
-              min={0.01}
-              max={2}
-              error={fieldErrors.get('width')}
-              onChange={(v) => {
-                const next = structuredClone(document);
-                const found = findControl(next, control.id);
-                if (found) {
-                  if (locked) {
-                    const ratio =
-                      control.geometry.size.width /
-                      control.geometry.size.height;
-                    found.control.geometry.size.height = v / ratio;
-                  }
-                  found.control.geometry.size.width = v;
-                }
-                onDraftChange(next, true);
-              }}
-            />
-            <NumberField
-              label="H"
-              value={control.geometry.size.height}
-              step={0.01}
-              min={0.01}
-              max={2}
-              error={fieldErrors.get('height')}
-              onChange={(v) => {
-                const next = structuredClone(document);
-                const found = findControl(next, control.id);
-                if (found) {
-                  if (locked) {
-                    const ratio =
-                      control.geometry.size.width /
-                      control.geometry.size.height;
-                    found.control.geometry.size.width = v * ratio;
-                  }
-                  found.control.geometry.size.height = v;
-                }
-                onDraftChange(next, true);
-              }}
-            />
-          </div>
-          {fieldErrors.get('geometry') && (
-            <p className="text-[10px] leading-tight text-red-400">
-              {fieldErrors.get('geometry')}
+          {fieldErrors.get('parentId') && (
+            <p className="text-[11px] text-destructive">
+              {fieldErrors.get('parentId')}
             </p>
           )}
         </div>
+
+        <GeometrySection
+          control={control}
+          document={document}
+          fieldErrors={fieldErrors}
+          locked={locked}
+          onToggleLock={onToggleLock}
+          onDraftChange={onDraftChange}
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-3 border-t border-white/10 pt-4">
-      <h3 className="text-xs font-medium text-white/80">
-        {control.label || control.id}
-      </h3>
+    <div className="space-y-5 border-t border-border pt-4">
+      <div className="flex items-baseline gap-1 min-w-0">
+        <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground truncate">
+          {control.label || control.id}
+        </h3>
+        <span className="shrink-0 text-[10px] leading-none text-muted-foreground">
+          ·
+        </span>
+        <span className="shrink-0 truncate font-mono text-[11px] leading-none text-muted-foreground">
+          {control.type}
+        </span>
+        <span className="shrink-0 text-[10px] leading-none text-muted-foreground">
+          ·
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] leading-none text-muted-foreground">
+          {control.id}
+        </span>
+      </div>
 
-      <InfoRow label="Type" value={control.type} />
-
-      <div className="space-y-1.5">
-        <Label htmlFor={`label-${control.id}`} className="text-xs">
-          Label
-        </Label>
-        <Input
-          id={`label-${control.id}`}
-          value={control.label}
-          onChange={(event) => {
-            const next = structuredClone(document);
-            const found = findControl(next, control.id);
-            if (found) found.control.label = event.target.value;
-            onDraftChange(next, false);
-          }}
-          onBlur={(event) => {
-            const next = structuredClone(document);
-            const found = findControl(next, control.id);
-            if (found) {
-              found.control.label = (event.target as HTMLInputElement).value;
-              onDraftChange(next, true);
-            }
-          }}
-        />
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <Label
+            htmlFor={`label-${control.id}`}
+            className="w-14 shrink-0 text-xs font-medium text-muted-foreground"
+          >
+            Label
+          </Label>
+          <Input
+            id={`label-${control.id}`}
+            className="flex-1 h-8"
+            value={control.label}
+            onChange={(event) => {
+              const next = structuredClone(document);
+              const found = findControl(next, control.id);
+              if (found) found.control.label = event.target.value;
+              onDraftChange(next, false);
+            }}
+            onBlur={(event) => {
+              const next = structuredClone(document);
+              const found = findControl(next, control.id);
+              if (found) {
+                found.control.label = (event.target as HTMLInputElement).value;
+                onDraftChange(next, true);
+              }
+            }}
+          />
+        </div>
+        {fieldErrors.get('label') && (
+          <p className="ml-17 text-[11px] text-destructive">
+            {fieldErrors.get('label')}
+          </p>
+        )}
       </div>
 
       {allowed.length > 0 && !isDpad && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Binding</Label>
-          <Select
-            value={control.binding ?? ''}
-            onValueChange={(value) => {
-              if (value) update({ binding: value as Control['binding'] });
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select binding" />
-            </SelectTrigger>
-            <SelectContent>
-              {allowed.map((command) => (
-                <SelectItem key={command} value={command}>
-                  {getBindingLabel(command)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
+              Binding
+            </Label>
+            <Select
+              value={control.binding ?? ''}
+              onValueChange={(value) => {
+                if (value) update({ binding: value as Control['binding'] });
+              }}
+            >
+              <SelectTrigger className="flex-1 h-8 capitalize">
+                <SelectValue placeholder="Select binding" />
+              </SelectTrigger>
+              <SelectContent className="min-w-[240px]">
+                {allowed.map((command) => (
+                  <SelectItem key={command} value={command}>
+                    <BindingLabel command={command} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {fieldErrors.get('binding') && (
+            <p className="ml-17 text-[11px] text-destructive">
+              {fieldErrors.get('binding')}
+            </p>
+          )}
         </div>
       )}
 
       {isDpad && (
-        <div className="space-y-1">
-          <p className="text-[10px] text-muted-foreground">
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
             D-pad has four fixed directions.
           </p>
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-2 gap-1.5">
             {(['up', 'down', 'left', 'right'] as const).map((dir) => (
               <div
                 key={dir}
-                className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/60"
+                className="rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground"
               >
                 {dir}: {control.bindings?.[dir] ?? '-'}
               </div>
@@ -556,24 +528,28 @@ function ControlFields({
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <Label className="text-xs">Shape</Label>
-        <Select
-          value={control.shape ?? 'round'}
-          onValueChange={(value) => {
-            if (value) update({ shape: value as 'round' | 'rect' });
-          }}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="round">Round</SelectItem>
-            <SelectItem value="rect">Rect</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
+            Shape
+          </Label>
+          <Select
+            value={control.shape ?? 'round'}
+            onValueChange={(value) => {
+              if (value) update({ shape: value as 'round' | 'rect' });
+            }}
+          >
+            <SelectTrigger className="flex-1 h-8 capitalize">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="round">Round</SelectItem>
+              <SelectItem value="rect">Rect</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         {control.shape === 'round' && (
-          <p className="text-[10px] leading-tight text-muted-foreground">
+          <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
             Shape is visual only. Touch area is always the bounding rectangle.
           </p>
         )}
@@ -587,22 +563,24 @@ function ControlFields({
             type="button"
             variant="outline"
             size="sm"
-            className="w-full gap-1.5 border-white/10"
+            className="w-full gap-1.5"
             onClick={() => onAddHitfill(control.id)}
           >
             <Plus className="size-3.5" />
-            Add hitfill here
+            Add Hitfill
           </Button>
         )}
 
       {control.type === 'image' && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Asset</Label>
+        <div className="flex items-center gap-3">
+          <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
+            Asset
+          </Label>
           <Select
             value={control.asset ?? ''}
             onValueChange={(value) => update({ asset: value || undefined })}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="flex-1 h-8">
               <SelectValue
                 placeholder={
                   document.assets.length === 0
@@ -622,44 +600,71 @@ function ControlFields({
         </div>
       )}
 
-      <div className="space-y-2 border-t border-white/10 pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-white/80">Geometry</span>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant={locked ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-7 gap-1.5 px-2.5 text-xs font-medium"
-                  onClick={() => onToggleLock(control.id)}
-                >
-                  {locked ? (
-                    <>
-                      <Lock className="size-3.5" />
-                      Locked
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="size-3.5" />
-                      Free
-                    </>
-                  )}
-                </Button>
-              }
-            />
-            <TooltipContent side="top">
-              {locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <p className="text-[10px] leading-tight text-muted-foreground">
-          {locked
-            ? 'Aspect ratio locked. Resize keeps proportions.'
-            : 'Aspect ratio free. Stretch width and height independently.'}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
+      <GeometrySection
+        control={control}
+        document={document}
+        fieldErrors={fieldErrors}
+        locked={locked}
+        onToggleLock={onToggleLock}
+        onDraftChange={onDraftChange}
+      />
+    </div>
+  );
+}
+
+function GeometrySection({
+  control,
+  document,
+  fieldErrors,
+  locked,
+  onToggleLock,
+  onDraftChange,
+}: {
+  control: Control;
+  document: LayoutDocument;
+  fieldErrors: Map<string, string>;
+  locked: boolean;
+  onToggleLock: (id: string) => void;
+  onDraftChange: (next: LayoutDocument, commit: boolean) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
+          Geometry
+        </h4>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant={locked ? 'secondary' : 'ghost'}
+                size="sm"
+                className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${locked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground'}`}
+                onClick={() => onToggleLock(control.id)}
+              >
+                {locked ? (
+                  <>
+                    <Lock className="size-3" />
+                    Locked
+                  </>
+                ) : (
+                  <>
+                    <Unlock className="size-3" />
+                    Free
+                  </>
+                )}
+              </Button>
+            }
+          />
+          <TooltipContent side="top">
+            {locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      <div className="editor-geometry-card">
+        <div className="editor-geometry-grid">
           <NumberField
             label="X"
             value={control.geometry.position.x}
@@ -732,17 +737,22 @@ function ControlFields({
           />
         </div>
         {fieldErrors.get('geometry') && (
-          <p className="text-[10px] leading-tight text-red-400">
+          <p className="mt-2 text-[11px] leading-tight text-destructive">
             {fieldErrors.get('geometry')}
           </p>
         )}
       </div>
+      <p className="editor-geometry-help">
+        X and Y are relative to the center of the section, in viewport-height
+        fractions. W and H are size in the same units.
+      </p>
     </div>
   );
 }
 
 function NumberField({
   label,
+  labelWidth = 'min-w-6',
   value,
   min,
   max,
@@ -752,6 +762,7 @@ function NumberField({
   onChange,
 }: {
   label: string;
+  labelWidth?: string;
   value: number;
   min?: number;
   max?: number;
@@ -778,8 +789,12 @@ function NumberField({
     (max !== undefined && parsed > max);
 
   return (
-    <div>
-      <Label className="text-[10px] text-muted-foreground">{label}</Label>
+    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+      <Label
+        className={`shrink-0 text-[11px] font-medium text-muted-foreground text-center ${labelWidth}`}
+      >
+        {label}
+      </Label>
       <Input
         value={text}
         onChange={(event) => setText(event.target.value)}
@@ -802,15 +817,17 @@ function NumberField({
             (event.target as HTMLInputElement).blur();
           }
         }}
-        className={`mt-0.5 font-mono text-xs ${
-          invalid
-            ? 'border-red-500 bg-red-900/20 text-red-300 focus-visible:border-red-500 focus-visible:ring-red-500/20'
-            : ''
-        }`}
+        className={`min-w-0 h-7 font-mono text-xs ${invalid ? 'border-destructive bg-destructive/10 text-destructive focus-visible:border-destructive focus-visible:ring-destructive/20' : ''}`}
       />
-      {error && <p className="mt-0.5 text-[10px] text-red-400">{error}</p>}
+      {error && (
+        <p className="col-start-2 text-[11px] leading-tight text-destructive">
+          {error}
+        </p>
+      )}
       {note && !error && (
-        <p className="mt-0.5 text-[10px] text-muted-foreground">{note}</p>
+        <p className="col-start-2 text-[11px] leading-tight text-muted-foreground">
+          {note}
+        </p>
       )}
     </div>
   );

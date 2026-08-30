@@ -33,9 +33,22 @@ import { useInteractGeometry } from '../use-interact-geometry';
 import { ControlOverlay } from './control-overlay';
 
 const PRESETS = [
-  { id: 'se', label: 'SE 667×375', width: 667, height: 375 },
-  { id: 'pixel', label: 'Pixel 844×390', width: 844, height: 390 },
-  { id: 'ipad', label: 'iPad 1024×600', width: 1024, height: 600 },
+  { id: 'se', label: 'SE', fullName: 'iPhone SE', width: 667, height: 375 },
+  {
+    id: 'iphone',
+    label: 'iPhone',
+    fullName: 'iPhone 15',
+    width: 844,
+    height: 390,
+  },
+  { id: 'pixel', label: 'Pixel', fullName: 'Pixel 7', width: 915, height: 412 },
+  {
+    id: 'ultra',
+    label: 'Ultra',
+    fullName: 'Galaxy S Ultra',
+    width: 932,
+    height: 412,
+  },
 ] as const;
 
 const VIEWPORT_MIN_W = 320;
@@ -46,8 +59,12 @@ const VIEWPORT_MAX_H = 1400;
 export interface LayoutCanvasProps {
   document: LayoutDocument;
   selectedControlId: string | null;
+  selectedSectionId?: string | null;
+  hoveredControlId?: string | null;
+  hoveredSectionId?: string | null;
   onSelectControl: (id: string | null) => void;
   onSelectSection: (id: string | null) => void;
+  onHoverSection?: (id: string | null) => void;
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
   locks: Record<string, boolean>;
 }
@@ -57,8 +74,12 @@ const emptyStore = new InputStateStore();
 export function LayoutCanvas({
   document,
   selectedControlId,
+  selectedSectionId,
+  hoveredControlId,
+  hoveredSectionId,
   onSelectControl,
   onSelectSection,
+  onHoverSection,
   onDraftChange,
   locks,
 }: LayoutCanvasProps) {
@@ -224,40 +245,20 @@ export function LayoutCanvas({
       latestRef.current = next;
       onDraftChange(next, false);
     },
-    onDragEnd: () => onDraftChange(latestRef.current, true),
-    onResizeEnd: () => onDraftChange(latestRef.current, true),
+    onDragEnd: () => {
+      onDraftChange(latestRef.current, true);
+    },
+    onResizeEnd: () => {
+      onDraftChange(latestRef.current, true);
+    },
   });
+
+  const viewportSizeLabel = `${Math.round(viewport.width)} × ${Math.round(viewport.height)}`;
 
   return (
     <section className="editor-canvas-panel">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Preview
-        </h2>
-        <div className="flex items-center gap-1">
-          {PRESETS.map((preset) => (
-            <Button
-              key={preset.id}
-              type="button"
-              variant={
-                viewport.width === preset.width &&
-                viewport.height === preset.height
-                  ? 'default'
-                  : 'outline'
-              }
-              size="sm"
-              onClick={() =>
-                setViewport({ width: preset.width, height: preset.height })
-              }
-            >
-              {preset.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-2 flex items-center justify-between gap-6 pt-1">
-        <div className="flex flex-1 items-center gap-6">
+      <div className="editor-canvas-toolbar">
+        <div className="editor-canvas-toolbar__sliders">
           <ViewportSlider
             label="W"
             value={viewport.width}
@@ -273,9 +274,46 @@ export function LayoutCanvas({
             onChange={(height) => setViewport((v) => ({ ...v, height }))}
           />
         </div>
-        <span className="shrink-0 font-mono text-sm font-medium tracking-wide text-white/80">
-          {Math.round(viewport.width)} × {Math.round(viewport.height)}
-        </span>
+        <div className="editor-canvas-toolbar__presets">
+          {PRESETS.map((preset) => (
+            <Tooltip key={preset.id}>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant={
+                      viewport.width === preset.width &&
+                      viewport.height === preset.height
+                        ? 'default'
+                        : 'outline'
+                    }
+                    size="sm"
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() =>
+                      setViewport({
+                        width: preset.width,
+                        height: preset.height,
+                      })
+                    }
+                    aria-pressed={
+                      viewport.width === preset.width &&
+                      viewport.height === preset.height
+                    }
+                  >
+                    {preset.label}
+                  </Button>
+                }
+              />
+              <TooltipContent side="top" className="flex items-center gap-1.5">
+                <span className="font-medium">{preset.fullName}</span>
+                <span className="text-muted-foreground">
+                  {preset.width}×{preset.height}
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+        <span className="editor-canvas-toolbar__size">{viewportSizeLabel}</span>
       </div>
 
       <div
@@ -313,8 +351,21 @@ export function LayoutCanvas({
                 : side === 'right'
                   ? rect.left
                   : 0;
+            const isHoveredSection = hoveredSectionId === section.section.id;
             return (
               <div key={section.section.id}>
+                {isHoveredSection && (
+                  <div
+                    className="editor-section-hover"
+                    style={{
+                      left: rect.left,
+                      top: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                    }}
+                    aria-hidden="true"
+                  />
+                )}
                 {side && (
                   <SectionDivider
                     side={side}
@@ -325,20 +376,6 @@ export function LayoutCanvas({
                     onDraftChange={onDraftChange}
                   />
                 )}
-                <button
-                  type="button"
-                  className={`editor-section-label editor-section-label--${section.section.id}`}
-                  style={{
-                    left: rect.left + 4,
-                    top: 4,
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectSection(section.section.id);
-                  }}
-                >
-                  {section.section.id}
-                </button>
               </div>
             );
           })}
@@ -351,6 +388,18 @@ export function LayoutCanvas({
               const isParent =
                 getHitfillsOf(document, rc.control.id).length > 0;
               const isPeer = selectedPeerIds.has(rc.control.id);
+              const isHovered = hoveredControlId === rc.control.id;
+              const isHoveredPeer =
+                hoveredControlId !== null &&
+                hoveredControlId !== undefined &&
+                (() => {
+                  if (!hoveredControlId) return false;
+                  const hoveredFound = findControl(document, hoveredControlId);
+                  if (!hoveredFound) return false;
+                  if (hoveredFound.control.type === 'hitfill') return false;
+                  const hits = getHitfillsOf(document, hoveredControlId);
+                  return hits.includes(rc.control.id);
+                })();
               return (
                 <ControlHit
                   key={rc.control.id}
@@ -358,7 +407,8 @@ export function LayoutCanvas({
                   rect={rect}
                   isSelected={isSelected}
                   isParent={isParent}
-                  isPeer={isPeer}
+                  isPeer={isPeer || isHoveredPeer}
+                  isHovered={isHovered}
                   viewportHeight={viewport.height}
                   scale={scale}
                   latestRef={latestRef}
@@ -377,6 +427,38 @@ export function LayoutCanvas({
             scale={scale}
             onViewportChange={setViewport}
           />
+
+          {/* Section chips — inside canvas but below controller frame, aligned to sections */}
+          {resolved?.sections.map((section) => {
+            const rect = section.rect;
+            const isSelected =
+              selectedSectionId === section.section.id && !selectedControlId;
+            const isHovered = hoveredSectionId === section.section.id;
+            return (
+              <button
+                key={`chip-${section.section.id}`}
+                type="button"
+                className={cn(
+                  'editor-section-chip editor-section-chip--aligned',
+                  isSelected && 'editor-section-chip--selected',
+                  isHovered && 'editor-section-chip--hovered',
+                )}
+                style={{
+                  left: rect.left + rect.width / 2,
+                  top: rect.height + 10,
+                }}
+                onClick={() => {
+                  onSelectSection(section.section.id);
+                  onSelectControl(null);
+                }}
+                onMouseEnter={() => onHoverSection?.(section.section.id)}
+                onMouseLeave={() => onHoverSection?.(null)}
+                aria-pressed={isSelected}
+              >
+                {section.section.id}
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -389,6 +471,7 @@ function ControlHit({
   isSelected,
   isParent,
   isPeer,
+  isHovered,
   viewportHeight,
   scale,
   latestRef,
@@ -402,6 +485,7 @@ function ControlHit({
   isSelected: boolean;
   isParent: boolean;
   isPeer: boolean;
+  isHovered: boolean;
   viewportHeight: number;
   scale: number;
   latestRef: React.MutableRefObject<LayoutDocument>;
@@ -497,6 +581,7 @@ function ControlHit({
         isHitfill && 'editor-hit-only',
         isSelected && 'editor-control-selected',
         isPeer && !isSelected && 'editor-control-peer',
+        isHovered && !isSelected && !isPeer && 'editor-control-hovered',
       )}
       style={{
         left: rect.left,
@@ -541,8 +626,8 @@ function ViewportSlider({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="flex min-w-0 max-w-[220px] flex-1 items-center gap-2">
-      <span className="w-3 shrink-0 text-[10px] text-muted-foreground">
+    <div className="flex min-w-0 max-w-[180px] flex-1 items-center gap-2">
+      <span className="w-3 shrink-0 text-[10px] font-medium text-muted-foreground">
         {label}
       </span>
       <Slider
