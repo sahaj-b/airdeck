@@ -13,7 +13,7 @@ func baseDoc() Document {
 	minCenter := 0.38
 	minRight := 0.67
 	return Document{
-		ID: "user-layout", Name: "User Layout", SchemaVersion: 2, DefaultOrientation: "landscape",
+		ID: "user-layout", Name: "User Layout", SchemaVersion: 1, DefaultOrientation: "landscape",
 		Sections: []Section{
 			{ID: "left", RelativeWidth: 0.86, RelativeMinWidth: &minLeft, Controls: []Control{{
 				ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",

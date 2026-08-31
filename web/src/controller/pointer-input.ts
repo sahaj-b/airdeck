@@ -260,10 +260,13 @@ export class PointerInput {
           control.bindings,
         );
         if (command === ownership.command) return;
-        if (ownership.command)
-          this.state.setButton(source, ownership.command, false);
+        const prev = ownership.command;
+        if (prev) this.state.setButton(source, prev, false);
         ownership.command = command;
-        if (command) this.state.setButton(source, command, true);
+        if (command) {
+          this.state.setButton(source, command, true);
+          if (prev) this.feedback?.press();
+        }
         const armNames: Partial<
           Record<Command, 'up' | 'down' | 'left' | 'right'>
         > = {
@@ -329,10 +332,13 @@ export class PointerInput {
         control.bindings,
       );
       if (command === ownership.command) return;
-      if (ownership.command)
-        this.state.setButton(source, ownership.command, false);
+      const prev = ownership.command;
+      if (prev) this.state.setButton(source, prev, false);
       ownership.command = command;
-      if (command) this.state.setButton(source, command, true);
+      if (command) {
+        this.state.setButton(source, command, true);
+        if (prev) this.feedback?.press();
+      }
       const armNames: Partial<
         Record<Command, 'up' | 'down' | 'left' | 'right'>
       > = {

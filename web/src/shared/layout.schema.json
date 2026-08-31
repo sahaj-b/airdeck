@@ -23,7 +23,7 @@
       "maxLength": 80
     },
     "schemaVersion": {
-      "const": 2
+      "const": 1
     },
     "defaultOrientation": {
       "enum": ["landscape", "portrait"]

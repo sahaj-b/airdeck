@@ -8,7 +8,7 @@ describe('validateLayout', () => {
   });
 
   it('falls back to the built-in document when a received document is invalid', () => {
-    const result = parseLayoutDocument({ schemaVersion: 2 });
+    const result = parseLayoutDocument({ schemaVersion: 1 });
     expect(result.layout).toBe(DEFAULT_LAYOUT);
     expect(result.diagnostic).toBeDefined();
   });

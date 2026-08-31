@@ -56,7 +56,7 @@ func ValidateJSON(data []byte) (Document, error) {
 var parentIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
 func ValidateDocument(document Document) error {
-	if document.SchemaVersion != 2 {
+	if document.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported layout schema version %d", document.SchemaVersion)
 	}
 	if document.ID == "" || document.Name == "" {

@@ -58,7 +58,7 @@ type Asset struct {
 type Document struct {
 	ID                 string    `json:"id"`
 	Name               string    `json:"name"`
-	SchemaVersion      int       `json:"schemaVersion" tstype:"2"`
+	SchemaVersion      int       `json:"schemaVersion" tstype:"1"`
 	DefaultOrientation string    `json:"defaultOrientation" tstype:"'landscape' | 'portrait'"`
 	Sections           []Section `json:"sections"`
 	Assets             []Asset   `json:"assets"`

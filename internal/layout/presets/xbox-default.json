@@ -1,7 +1,7 @@
 {
   "id": "xbox-default",
   "name": "Xbox default",
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "defaultOrientation": "landscape",
   "sections": [
     {

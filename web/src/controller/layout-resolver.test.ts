@@ -33,7 +33,7 @@ describe('responsive layout resolver', () => {
     const simple: LayoutDocument = {
       id: 'simple',
       name: 'Simple',
-      schemaVersion: 2,
+      schemaVersion: 1,
       defaultOrientation: 'landscape',
       sections: [
         {
@@ -77,7 +77,7 @@ describe('responsive layout resolver', () => {
     const simple: LayoutDocument = {
       id: 'touch',
       name: 'Touch',
-      schemaVersion: 2,
+      schemaVersion: 1,
       defaultOrientation: 'landscape',
       sections: [
         {

@@ -174,6 +174,10 @@ function SectionCard({
 }) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const displayControls = useMemo(
+    () => [...section.controls].slice().reverse(),
+    [section.controls],
+  );
 
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
@@ -220,15 +224,35 @@ function SectionCard({
       setDragState(null);
       return;
     }
-    let toIndex = dragState.overIndex;
-    // Convert visual insertion index to final reorder index
-    // If inserting after dragged item's original position, shift by -1
-    if (toIndex > dragState.fromIndex) toIndex -= 1;
-    if (toIndex !== dragState.fromIndex && onReorderControl) {
-      onReorderControl(section.id, dragState.fromIndex, toIndex);
+    const n = section.controls.length;
+    const fromActual = dragState.fromIndex;
+    const fromDisplay = n - 1 - fromActual;
+    let overDisplay = dragState.overIndex;
+    let toDisplay = overDisplay;
+    if (toDisplay > fromDisplay) toDisplay -= 1;
+    const displayWithout = displayControls.filter(
+      (c) => c.id !== dragState.draggedId,
+    );
+    const dragged = section.controls.find((c) => c.id === dragState.draggedId);
+    if (!dragged) {
+      setDragState(null);
+      return;
+    }
+    const newDisplay = [...displayWithout];
+    newDisplay.splice(toDisplay, 0, dragged);
+    const newActual = [...newDisplay].slice().reverse();
+    const toActual = newActual.findIndex((c) => c.id === dragState.draggedId);
+    if (toActual !== fromActual && onReorderControl) {
+      onReorderControl(section.id, fromActual, toActual);
     }
     setDragState(null);
-  }, [dragState, onReorderControl, section.id]);
+  }, [
+    dragState,
+    onReorderControl,
+    section.id,
+    displayControls,
+    section.controls,
+  ]);
 
   useEffect(() => {
     if (!dragState) return;
@@ -301,19 +325,22 @@ function SectionCard({
             />
           )}
 
-          {section.controls.map((control, index) => {
+          {displayControls.map((control, displayIndex) => {
+            const actualIndex = section.controls.findIndex(
+              (candidate) => candidate.id === control.id,
+            );
             const isDragging = dragState?.draggedId === control.id;
             const showLineAfter =
               dragState !== null &&
               dragState.sectionId === section.id &&
-              dragState.overIndex === index + 1;
+              dragState.overIndex === displayIndex + 1;
 
             return (
               <ControlRow
                 key={control.id}
                 document={document}
                 control={control}
-                index={index}
+                index={displayIndex}
                 count={count}
                 selected={control.id === selectedControlId}
                 isPeer={selectedPeerIds.has(control.id)}
@@ -323,7 +350,9 @@ function SectionCard({
                 dragActive={dragState !== null}
                 showLineAfter={showLineAfter}
                 onSelect={() => onSelectControl(control.id)}
-                onMove={(direction) => onMoveControl(control.id, direction)}
+                onMove={(direction) =>
+                  onMoveControl(control.id, direction === 'up' ? 'down' : 'up')
+                }
                 onDuplicate={() => onDuplicateControl?.(control.id)}
                 onDelete={() => onDeleteControl?.(control.id)}
                 onHover={onHoverControl}
@@ -333,7 +362,7 @@ function SectionCard({
                   );
                   setDragState({
                     sectionId: section.id,
-                    fromIndex: index,
+                    fromIndex: actualIndex,
                     draggedId: control.id,
                     overIndex: null,
                   });

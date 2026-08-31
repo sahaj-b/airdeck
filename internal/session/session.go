@@ -308,12 +308,16 @@ func (s *Session) ApplyInput(id string, generation uint64, frame protocol.Frame)
 		s.mu.Unlock()
 		return errors.New("player device is unavailable")
 	}
+	wasStale := player.State == StateStale
 	player.State = StateActive
 	if !frame.IsNeutral() {
 		player.LastInput = time.Now()
 	}
 	slot := player.Slot
 	s.mu.Unlock()
+	if wasStale {
+		log.Printf("player %s slot %d recovered from stale", id, slot)
+	}
 	return s.devices.Apply(slot, uinput.State{Buttons: frame.Buttons, LX: frame.LX, LY: frame.LY, RX: frame.RX, RY: frame.RY, LT: frame.LT, RT: frame.RT})
 }
 
@@ -330,7 +334,8 @@ func (s *Session) MarkStale(id string, generation uint64) error {
 		s.mu.Unlock()
 		return ErrGeneration
 	}
-	if player.State == StateActive {
+	wasActive := player.State == StateActive
+	if wasActive {
 		player.State = StateStale
 	}
 	slot := player.Slot
@@ -338,8 +343,10 @@ func (s *Session) MarkStale(id string, generation uint64) error {
 	if err := s.devices.Neutralize(slot); err != nil {
 		return err
 	}
-	log.Printf("player %s slot %d marked stale", id, slot)
-	s.emit(Event{Type: "player.stale", Player: s.snapshotByID(id)})
+	if wasActive {
+		log.Printf("player %s slot %d marked stale", id, slot)
+		s.emit(Event{Type: "player.stale", Player: s.snapshotByID(id)})
+	}
 	return nil
 }
 

@@ -58,7 +58,6 @@ func (h *Handler) resetWatchdog(id string, generation uint64, received time.Time
 	}
 	entry = &watchdogEntry{generation: generation, received: received}
 	entry.timer = time.AfterFunc(WatchdogTimeout, func() {
-		fired := time.Now()
 		h.mu.Lock()
 		current := h.timers[id]
 		if current != entry {
@@ -67,11 +66,8 @@ func (h *Handler) resetWatchdog(id string, generation uint64, received time.Time
 		}
 		delete(h.timers, id)
 		gen := entry.generation
-		recv := entry.received
 		h.mu.Unlock()
-		if err := h.session.MarkStale(id, gen); err == nil {
-			log.Printf("watchdog fired player %s slot stale after %s", id, fired.Sub(recv).Truncate(time.Millisecond))
-		}
+		_ = h.session.MarkStale(id, gen)
 	})
 	h.timers[id] = entry
 	h.mu.Unlock()

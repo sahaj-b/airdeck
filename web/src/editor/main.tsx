@@ -586,7 +586,7 @@ function EditorApp() {
         doc = {
           id,
           name: name.trim(),
-          schemaVersion: 2,
+          schemaVersion: 1,
           defaultOrientation: 'landscape',
           sections: [
             { id: 'left', relativeWidth: 0.86, controls: [] },

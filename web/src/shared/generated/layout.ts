@@ -47,7 +47,7 @@ export interface Asset {
 export interface Document {
   id: string;
   name: string;
-  schemaVersion: 2;
+  schemaVersion: 1;
   defaultOrientation: 'landscape' | 'portrait';
   sections: Section[];
   assets: Asset[];
