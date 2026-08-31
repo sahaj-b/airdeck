@@ -106,7 +106,6 @@ export function renderLayout(
         control,
         layout,
         assetBasePath,
-        pointerInput,
       );
       if (!rendered) continue;
       renderedSection.controls.push(rendered);
@@ -115,6 +114,41 @@ export function renderLayout(
     }
     renderedSections.push(renderedSection);
     composition.append(sectionElement);
+  }
+
+  if (interactive && pointerInput) {
+    const visualById = new Map<string, HTMLElement>();
+    for (const section of renderedSections) {
+      for (const rc of section.controls) {
+        if (rc.control.type !== 'hitfill')
+          visualById.set(rc.control.id, rc.visual);
+      }
+    }
+    for (const section of renderedSections) {
+      for (const rc of section.controls) {
+        if (!rc.target) continue;
+        if (rc.control.type === 'hitfill') {
+          const parent = layout.sections
+            .flatMap((s) => s.controls)
+            .find((c) => c.id === rc.control.parentId);
+          if (!parent) continue;
+          const parentVisual = visualById.get(parent.id);
+          const effectiveControl = {
+            ...rc.control,
+            binding: parent.binding,
+            bindings: parent.bindings,
+          } as Control;
+          pointerInput.bind(
+            rc.target,
+            effectiveControl,
+            rc.visual,
+            parentVisual,
+          );
+        } else {
+          pointerInput.bind(rc.target, rc.control, rc.visual);
+        }
+      }
+    }
   }
 
   if (options.chrome && interactive) {
@@ -307,7 +341,6 @@ function renderControl(
   control: Control,
   layout: LayoutDocument,
   assetBasePath: string,
-  pointerInput: PointerInput | null,
 ): RenderedControl | undefined {
   if (control.type === 'label') {
     const label = document.createElement('span');
@@ -335,7 +368,8 @@ function renderControl(
     const parent = layout.sections
       .flatMap((section) => section.controls)
       .find((candidate) => candidate.id === control.parentId);
-    const binding = parent?.binding ?? '';
+    const binding =
+      (parent?.binding as Control['binding'] | undefined) ?? undefined;
     const filler = document.createElement('div');
     filler.className = 'controller-control';
     filler.dataset.controlId = control.id;
@@ -347,11 +381,6 @@ function renderControl(
     target.dataset.controlId = control.id;
     target.dataset.hitShape = effectiveHitShape(control);
     target.append(filler);
-    const effectiveControl = {
-      ...control,
-      binding: binding as Control['binding'],
-    } as Control;
-    pointerInput?.bind(target, effectiveControl, filler);
     return { control, target, visual: filler };
   }
 
@@ -402,7 +431,6 @@ function renderControl(
   target.dataset.controlId = control.id;
   target.dataset.hitShape = effectiveHitShape(control);
   target.append(visual);
-  pointerInput?.bind(target, control, visual);
   return { control, target, visual };
 }
 

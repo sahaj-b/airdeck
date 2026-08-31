@@ -39,6 +39,7 @@ export const JOYSTICK_REARM_THRESHOLD = 0.85;
 interface PointerOwnership {
   target: HTMLElement;
   visual: HTMLElement;
+  parentVisual?: HTMLElement;
   control: Control;
   source: string;
   command?: Command;
@@ -139,9 +140,10 @@ export class PointerInput {
     target: HTMLElement,
     control: Control,
     visual: HTMLElement = target,
+    parentVisual?: HTMLElement,
   ): () => void {
     const onPointerDown = (event: PointerEvent) =>
-      this.pointerDown(event, target, visual, control);
+      this.pointerDown(event, target, visual, control, parentVisual);
     const onPointerMove = (event: PointerEvent) => this.pointerMove(event);
     const onPointerUp = (event: PointerEvent) =>
       this.finishPointer(event.pointerId);
@@ -196,21 +198,37 @@ export class PointerInput {
     target: HTMLElement,
     visual: HTMLElement,
     control: Control,
+    parentVisual?: HTMLElement,
   ): void {
     if (
-      control.type === 'joystick' &&
       control.binding &&
-      this.gyroLocked === control.binding
+      this.gyroLocked === control.binding &&
+      (control.type === 'joystick' ||
+        (control.type === 'hitfill' &&
+          (control.binding === 'leftStick' ||
+            control.binding === 'rightStick')))
     )
       return;
     event.preventDefault();
     this.finishPointer(event.pointerId);
-    if (!control.binding && control.type !== 'dpad') return;
+    if (
+      !control.binding &&
+      control.type !== 'dpad' &&
+      !(control.type === 'hitfill' && control.bindings)
+    )
+      return;
 
     const source = `pointer:${event.pointerId}:${control.id}`;
-    const ownership: PointerOwnership = { target, visual, control, source };
+    const ownership: PointerOwnership = {
+      target,
+      visual,
+      parentVisual,
+      control,
+      source,
+    };
     this.pointers.set(event.pointerId, ownership);
     this.markElement(visual, event.pointerId, true);
+    if (parentVisual) this.markElement(parentVisual, event.pointerId, true);
     try {
       target.setPointerCapture(event.pointerId);
     } catch {
@@ -232,7 +250,72 @@ export class PointerInput {
     event: PointerEvent,
     ownership: PointerOwnership,
   ): void {
-    const { visual, control, source } = ownership;
+    const { visual, control, source, parentVisual } = ownership;
+    if (control.type === 'hitfill') {
+      if (control.bindings) {
+        const rect = (parentVisual ?? visual).getBoundingClientRect();
+        const command = dpadDirection(
+          { x: event.clientX, y: event.clientY },
+          rect,
+          control.bindings,
+        );
+        if (command === ownership.command) return;
+        if (ownership.command)
+          this.state.setButton(source, ownership.command, false);
+        ownership.command = command;
+        if (command) this.state.setButton(source, command, true);
+        const armNames: Partial<
+          Record<Command, 'up' | 'down' | 'left' | 'right'>
+        > = {
+          dpadUp: 'up',
+          dpadDown: 'down',
+          dpadLeft: 'left',
+          dpadRight: 'right',
+        };
+        const direction = (command && armNames[command]) || '';
+        visual.dataset.direction = direction;
+        if (parentVisual) parentVisual.dataset.direction = direction;
+        return;
+      }
+      if (!control.binding) return;
+      if (
+        control.binding === 'leftTrigger' ||
+        control.binding === 'rightTrigger'
+      ) {
+        this.state.setTrigger(source, control.binding as TriggerCommand, 1);
+        visual.setAttribute('aria-valuenow', '255');
+        parentVisual?.setAttribute('aria-valuenow', '255');
+        return;
+      }
+      if (control.binding === 'leftStick' || control.binding === 'rightStick') {
+        const rect = (parentVisual ?? visual).getBoundingClientRect();
+        const value = normalizeJoystickPoint(
+          { x: event.clientX, y: event.clientY },
+          rect,
+          this.joystickOptions,
+        );
+        this.state.setStick(
+          source,
+          control.binding as StickCommand,
+          value.x,
+          value.y,
+        );
+        const thumbOffset = joystickVisualOffset(
+          { x: event.clientX, y: event.clientY },
+          rect,
+        );
+        const thumbTarget = parentVisual ?? visual;
+        thumbTarget.style.setProperty('--axis-x', `${thumbOffset.x * 100}%`);
+        thumbTarget.style.setProperty('--axis-y', `${thumbOffset.y * 100}%`);
+        this.maybeTriggerJoystickEdge(
+          source,
+          Math.hypot(thumbOffset.x, thumbOffset.y),
+        );
+        return;
+      }
+      this.state.setButton(source, control.binding, true);
+      return;
+    }
     if (control.type === 'button') {
       if (control.binding) this.state.setButton(source, control.binding, true);
       return;
@@ -325,10 +408,22 @@ export class PointerInput {
     this.joystickArmed.delete(ownership.source);
     this.state.clearSource(ownership.source);
     this.markElement(ownership.visual, pointerId, false);
+    if (ownership.parentVisual)
+      this.markElement(ownership.parentVisual, pointerId, false);
     ownership.visual.style.setProperty('--axis-x', '0%');
     ownership.visual.style.setProperty('--axis-y', '0%');
     ownership.visual.setAttribute('aria-valuenow', '0');
     ownership.visual.dataset.direction = '';
+    if (ownership.parentVisual) {
+      const stillPressed = this.elementPointers.get(ownership.parentVisual);
+      const hasRemaining = !!stillPressed && stillPressed.size > 0;
+      if (!hasRemaining) {
+        ownership.parentVisual.style.setProperty('--axis-x', '0%');
+        ownership.parentVisual.style.setProperty('--axis-y', '0%');
+        ownership.parentVisual.setAttribute('aria-valuenow', '0');
+        ownership.parentVisual.dataset.direction = '';
+      }
+    }
   }
 
   private cancelElement(element: HTMLElement): void {
