@@ -90,7 +90,7 @@ export function AddControlDialog({
         geometry: { position: pos, size },
         label: '',
         parentId,
-        shape: 'rect',
+        shape,
       };
       return control;
     }
@@ -187,6 +187,26 @@ export function AddControlDialog({
 
           {type === 'hitfill' ? (
             <>
+              <div className="grid gap-1.5">
+                <Label htmlFor="add-hitfill-shape">Shape</Label>
+                <Select
+                  value={shape}
+                  onValueChange={(value) => {
+                    if (value) setShape(value as 'round' | 'rect');
+                  }}
+                >
+                  <SelectTrigger id="add-hitfill-shape" className="capitalize">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="round">Round</SelectItem>
+                    <SelectItem value="rect">Rect</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] leading-tight text-muted-foreground">
+                  Round gives an elliptical hit area, rect is the full box.
+                </p>
+              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="add-parent">Parent (required)</Label>
                 <Select

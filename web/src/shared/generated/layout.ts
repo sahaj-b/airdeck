@@ -28,6 +28,7 @@ export interface Control {
   geometry: Geometry;
   label: string;
   shape?: 'round' | 'rect';
+  hitShape?: 'rect';
   binding?: Command;
   bindings?: DPadBindings;
   asset?: string;

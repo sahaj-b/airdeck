@@ -287,6 +287,21 @@ export function renderLayout(
   };
 }
 
+function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
+  if (control.type === 'dpad') return 'rect';
+  if (control.type === 'hitfill') {
+    // Hitfills can be round per operator request; otherwise rect.
+    // hitShape is forbidden on hitfill, but handle defensively.
+    if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
+      return 'rect';
+    return control.shape === 'round' ? 'ellipse' : 'rect';
+  }
+  if (control.type === 'label' || control.type === 'image') return 'rect';
+  if (control.hitShape === 'rect') return 'rect';
+  if (control.shape === 'round') return 'ellipse';
+  return 'rect';
+}
+
 function renderControl(
   document: Document,
   control: Control,
@@ -330,6 +345,7 @@ function renderControl(
     const target = document.createElement('div');
     target.className = 'controller-hit-target';
     target.dataset.controlId = control.id;
+    target.dataset.hitShape = effectiveHitShape(control);
     target.append(filler);
     const effectiveControl = {
       ...control,
@@ -384,6 +400,7 @@ function renderControl(
   const target = document.createElement('div');
   target.className = 'controller-hit-target';
   target.dataset.controlId = control.id;
+  target.dataset.hitShape = effectiveHitShape(control);
   target.append(visual);
   pointerInput?.bind(target, control, visual);
   return { control, target, visual };

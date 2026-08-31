@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
@@ -411,6 +412,43 @@ function ControlFields({
           )}
         </div>
 
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
+              Shape
+            </Label>
+            <Select
+              value={control.shape ?? 'rect'}
+              onValueChange={(value) => {
+                if (value) update({ shape: value as 'round' | 'rect' });
+              }}
+            >
+              <SelectTrigger className="flex-1 h-8 capitalize">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="round">Round</SelectItem>
+                <SelectItem value="rect">Rect</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {control.shape === 'round' ? (
+            <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
+              Round hitfill. Touch follows the ellipse when round, otherwise
+              rectangle.
+            </p>
+          ) : (
+            <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
+              Rectangular hit area.
+            </p>
+          )}
+          {fieldErrors.get('shape') && (
+            <p className="ml-17 text-[11px] text-destructive">
+              {fieldErrors.get('shape')}
+            </p>
+          )}
+        </div>
+
         <GeometrySection
           control={control}
           document={document}
@@ -548,11 +586,66 @@ function ControlFields({
             </SelectContent>
           </Select>
         </div>
-        {control.shape === 'round' && (
-          <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
-            Shape is visual only. Touch area is always the bounding rectangle.
-          </p>
-        )}
+        {(() => {
+          const canUseHitShape =
+            control.type !== 'dpad' &&
+            control.type !== 'hitfill' &&
+            control.type !== 'label' &&
+            control.type !== 'image';
+          if (control.shape === 'round' && canUseHitShape) {
+            const hitRect = control.hitShape === 'rect';
+            return (
+              <>
+                <div className="ml-17 flex items-center gap-2 py-1">
+                  <Switch
+                    id={`hitShape-${control.id}`}
+                    checked={hitRect}
+                    onCheckedChange={(checked) => {
+                      const next = structuredClone(document);
+                      const found = findControl(next, control.id);
+                      if (!found) return;
+                      if (checked) {
+                        (
+                          found.control as unknown as Record<string, unknown>
+                        ).hitShape = 'rect';
+                      } else {
+                        delete (
+                          found.control as unknown as Record<string, unknown>
+                        ).hitShape;
+                      }
+                      onDraftChange(next, true);
+                    }}
+                    size="sm"
+                  />
+                  <Label
+                    htmlFor={`hitShape-${control.id}`}
+                    className="text-xs font-normal text-muted-foreground cursor-pointer"
+                  >
+                    Full bounding-box hit
+                  </Label>
+                </div>
+                <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
+                  {hitRect
+                    ? 'Touch uses the full rectangle, corners included.'
+                    : 'Touch follows the elliptical shape, corners fall through.'}
+                </p>
+                {fieldErrors.get('hitShape') && (
+                  <p className="ml-17 text-[11px] text-destructive">
+                    {fieldErrors.get('hitShape')}
+                  </p>
+                )}
+              </>
+            );
+          }
+          if (control.shape === 'round') {
+            return (
+              <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
+                Round visual. Touch follows the ellipse (corners fall through).
+              </p>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {onAddHitfill &&

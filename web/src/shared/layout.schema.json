@@ -163,6 +163,10 @@
           "description": "Visual shape applied by the renderer. Defaults to rect.",
           "enum": ["round", "rect"]
         },
+        "hitShape": {
+          "description": "Hit shape override. When rect, touch uses the bounding box. Omit to follow the visual shape.",
+          "enum": ["rect"]
+        },
         "label": {
           "type": "string",
           "maxLength": 40
@@ -209,7 +213,15 @@
           "if": { "properties": { "type": { "const": "hitfill" } } },
           "then": {
             "properties": {
-              "shape": { "enum": ["rect"] }
+              "shape": { "enum": ["round", "rect"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "then": {
+            "properties": {
+              "hitShape": false
             }
           }
         }

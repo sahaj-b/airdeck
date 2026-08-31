@@ -176,9 +176,14 @@ func validateControl(control Control, section Section, assetIDs map[string]struc
 	isHitfill := control.Type == "hitfill"
 	if isHitfill {
 		switch control.Shape {
-		case "", "rect":
+		case "", "round", "rect":
 		default:
-			return fmt.Errorf("hitfill shape must be rect, got %q", control.Shape)
+			return fmt.Errorf("unsupported control shape %q", control.Shape)
+		}
+		switch control.HitShape {
+		case "":
+		default:
+			return errors.New("hitfill must not have hitShape")
 		}
 		if control.ParentID == "" {
 			return errors.New("hitfill requires parentId")
@@ -200,6 +205,11 @@ func validateControl(control Control, section Section, assetIDs map[string]struc
 		case "", "round", "rect":
 		default:
 			return fmt.Errorf("unsupported control shape %q", control.Shape)
+		}
+		switch control.HitShape {
+		case "", "rect":
+		default:
+			return fmt.Errorf("unsupported hitShape %q", control.HitShape)
 		}
 		if control.ParentID != "" {
 			return errors.New("only hitfill controls may have parentId")

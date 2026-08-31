@@ -286,10 +286,20 @@ export function getControlErrors(
         message: `invalid parentId ${control.parentId}`,
       });
     }
-    if (control.shape && control.shape !== 'rect') {
+    if (
+      control.shape &&
+      control.shape !== 'round' &&
+      control.shape !== 'rect'
+    ) {
       errors.push({
         path: 'shape',
-        message: `hitfill shape must be rect, got ${control.shape}`,
+        message: `unsupported shape ${control.shape}`,
+      });
+    }
+    if ((control as Control & { hitShape?: string }).hitShape) {
+      errors.push({
+        path: 'hitShape',
+        message: 'hitfill must not have hitShape',
       });
     }
     if (control.binding) {
@@ -307,15 +317,6 @@ export function getControlErrors(
     if (control.asset) {
       errors.push({ path: 'asset', message: 'hitfill must not have an asset' });
     }
-    if (
-      control.type !== 'hitfill' &&
-      (control as unknown as Record<string, unknown>).parentId
-    ) {
-      errors.push({
-        path: 'parentId',
-        message: 'only hitfill may have parentId',
-      });
-    }
   } else {
     if (control.parentId) {
       errors.push({
@@ -327,6 +328,12 @@ export function getControlErrors(
       errors.push({
         path: 'shape',
         message: `unsupported shape ${control.shape}`,
+      });
+    const hitShape = (control as Control & { hitShape?: string }).hitShape;
+    if (hitShape && hitShape !== 'rect')
+      errors.push({
+        path: 'hitShape',
+        message: `unsupported hitShape ${hitShape}`,
       });
   }
   if (control.type === 'image' && !control.asset)

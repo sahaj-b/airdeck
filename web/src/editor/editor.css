@@ -142,6 +142,15 @@
   background: color-mix(in oklch, var(--editor-accent) 10%, transparent);
 }
 
+/* Hit shape preview: ellipse vs rect. Selection frame stays rect. */
+.editor-control-hit[data-hit-shape="ellipse"] {
+  border-radius: 50%;
+}
+.editor-control-hit[data-hit-shape="ellipse"].editor-control-peer,
+.editor-control-hit[data-hit-shape="ellipse"].editor-hit-only {
+  border-radius: 50%;
+}
+
 .editor-interaction-layer {
   position: absolute;
   inset: 0;

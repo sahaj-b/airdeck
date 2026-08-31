@@ -5,7 +5,8 @@ import type { FrameSender } from '../controller/frame-sender';
 import type { RenderedLayout } from '../controller/layout-renderer';
 import { resolveLayout } from '../controller/layout-resolver';
 import type { InputStateStore } from '../controller/state';
-import type { LayoutDocument } from '../shared/layout';
+import { useInteractGeometry } from '../editor/use-interact-geometry';
+import type { Control, LayoutDocument } from '../shared/layout';
 import { validateLayout } from '../shared/layout';
 import {
   clampDrag,
@@ -18,7 +19,6 @@ import {
   resizeControl,
   updateControlGeometry,
 } from '../shared/layout-editor';
-import { useInteractGeometry } from '../editor/use-interact-geometry';
 import {
   loadPersonalLayouts,
   savePersonalLayout,
@@ -26,6 +26,17 @@ import {
 } from './personal-layouts';
 
 const ONBOARDING_KEY = 'airdeck.phoneEditorOnboarded';
+
+function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
+  if (control.type === 'dpad') return 'rect';
+  if (control.type === 'hitfill')
+    return control.shape === 'round' ? 'ellipse' : 'rect';
+  if (control.type === 'label' || control.type === 'image') return 'rect';
+  if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
+    return 'rect';
+  if (control.shape === 'round') return 'ellipse';
+  return 'rect';
+}
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -481,6 +492,7 @@ function PhoneEditorIsland({
             const isSelected = rc.control.id === selectedId;
             const isHitfill = rc.control.type === 'hitfill';
             const isPeer = selectedPeerIds.has(rc.control.id);
+            const hitShape = effectiveHitShape(rc.control as Control);
             return (
               <button
                 type="button"
@@ -504,8 +516,10 @@ function PhoneEditorIsland({
                   top: rc.visual.top,
                   width: rc.visual.width,
                   height: rc.visual.height,
+                  borderRadius: hitShape === 'ellipse' ? '50%' : undefined,
                 }}
                 data-control-id={rc.control.id}
+                data-hit-shape={hitShape}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedId(rc.control.id);

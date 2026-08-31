@@ -23,8 +23,8 @@
             }
           },
           "label": "LT",
-          "binding": "leftTrigger",
-          "shape": "rect"
+          "shape": "rect",
+          "binding": "leftTrigger"
         },
         {
           "id": "lb",
@@ -40,8 +40,8 @@
             }
           },
           "label": "LB",
-          "binding": "leftShoulder",
-          "shape": "rect"
+          "shape": "rect",
+          "binding": "leftShoulder"
         },
         {
           "id": "left-stick",
@@ -57,8 +57,8 @@
             }
           },
           "label": "Left stick",
-          "binding": "leftStick",
-          "shape": "round"
+          "shape": "round",
+          "binding": "leftStick"
         },
         {
           "id": "dpad",
@@ -102,8 +102,8 @@
             }
           },
           "label": "Back",
-          "binding": "back",
-          "shape": "round"
+          "shape": "round",
+          "binding": "back"
         },
         {
           "id": "start",
@@ -119,8 +119,8 @@
             }
           },
           "label": "Start",
-          "binding": "start",
-          "shape": "round"
+          "shape": "round",
+          "binding": "start"
         }
       ]
     },
@@ -143,8 +143,8 @@
             }
           },
           "label": "RT",
-          "binding": "rightTrigger",
-          "shape": "rect"
+          "shape": "rect",
+          "binding": "rightTrigger"
         },
         {
           "id": "rb",
@@ -160,8 +160,8 @@
             }
           },
           "label": "RB",
-          "binding": "rightShoulder",
-          "shape": "rect"
+          "shape": "rect",
+          "binding": "rightShoulder"
         },
         {
           "id": "right-stick",
@@ -177,76 +177,76 @@
             }
           },
           "label": "Right stick",
-          "binding": "rightStick",
-          "shape": "round"
+          "shape": "round",
+          "binding": "rightStick"
         },
         {
           "id": "xyab-fill-n",
           "type": "hitfill",
           "geometry": {
             "position": {
-              "x": 0.1175,
-              "y": 0.065
+              "x": 0.11499690933137954,
+              "y": 0.007969442363635544
             },
             "size": {
-              "width": 0.05,
-              "height": 0.05
+              "width": 0.07806137466617856,
+              "height": 0.1367681964150509
             }
           },
           "label": "",
-          "parentId": "north",
-          "shape": "rect"
+          "shape": "round",
+          "parentId": "north"
         },
         {
           "id": "xyab-fill-s",
           "type": "hitfill",
           "geometry": {
             "position": {
-              "x": 0.1175,
-              "y": 0.135
+              "x": 0.11382557793824537,
+              "y": 0.161304842727782
             },
             "size": {
-              "width": 0.05,
-              "height": 0.05
+              "width": 0.0727110104130383,
+              "height": 0.11879963708150106
             }
           },
           "label": "",
-          "parentId": "south",
-          "shape": "rect"
+          "shape": "round",
+          "parentId": "south"
         },
         {
           "id": "xyab-fill-w",
           "type": "hitfill",
           "geometry": {
             "position": {
-              "x": 0.085,
-              "y": 0.1
+              "x": 0.03723540573312498,
+              "y": 0.09073398581645722
             },
             "size": {
-              "width": 0.05,
-              "height": 0.05
+              "width": 0.1381808034202272,
+              "height": 0.07571934259776489
             }
           },
           "label": "",
-          "parentId": "west",
-          "shape": "rect"
+          "shape": "round",
+          "parentId": "west"
         },
         {
           "id": "xyab-fill-e",
           "type": "hitfill",
           "geometry": {
             "position": {
-              "x": 0.15,
-              "y": 0.1
+              "x": 0.18783252873772077,
+              "y": 0.09190503689054488
             },
             "size": {
-              "width": 0.05,
-              "height": 0.05
+              "width": 0.1418549451629352,
+              "height": 0.06653384808147138
             }
           },
           "label": "",
-          "parentId": "east",
-          "shape": "rect"
+          "shape": "round",
+          "parentId": "east"
         },
         {
           "id": "north",
@@ -262,8 +262,8 @@
             }
           },
           "label": "Y",
-          "binding": "north",
-          "shape": "round"
+          "shape": "round",
+          "binding": "north"
         },
         {
           "id": "west",
@@ -279,8 +279,8 @@
             }
           },
           "label": "X",
-          "binding": "west",
-          "shape": "round"
+          "shape": "round",
+          "binding": "west"
         },
         {
           "id": "east",
@@ -296,8 +296,8 @@
             }
           },
           "label": "B",
-          "binding": "east",
-          "shape": "round"
+          "shape": "round",
+          "binding": "east"
         },
         {
           "id": "south",
@@ -313,8 +313,8 @@
             }
           },
           "label": "A",
-          "binding": "south",
-          "shape": "round"
+          "shape": "round",
+          "binding": "south"
         }
       ]
     }

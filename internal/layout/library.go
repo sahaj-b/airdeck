@@ -36,6 +36,7 @@ type Control struct {
 	Geometry Geometry         `json:"geometry"`
 	Label    string           `json:"label"`
 	Shape    string           `json:"shape,omitempty" tstype:"'round' | 'rect'"`
+	HitShape string           `json:"hitShape,omitempty" tstype:"'rect'"`
 	Binding  protocol.Command `json:"binding,omitempty"`
 	Bindings *DPadBindings    `json:"bindings,omitempty"`
 	Asset    string           `json:"asset,omitempty"`

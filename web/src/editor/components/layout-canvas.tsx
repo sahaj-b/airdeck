@@ -17,7 +17,10 @@ import {
 } from '@/controller/layout-resolver';
 import { InputStateStore } from '@/controller/state';
 import { cn } from '@/lib/utils';
-import type { Document as LayoutDocument } from '@/shared/generated/layout';
+import type {
+  Control,
+  Document as LayoutDocument,
+} from '@/shared/generated/layout';
 import {
   clampDrag,
   clampSectionDivider,
@@ -467,6 +470,17 @@ export function LayoutCanvas({
   );
 }
 
+function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
+  if (control.type === 'dpad') return 'rect';
+  if (control.type === 'hitfill')
+    return control.shape === 'round' ? 'ellipse' : 'rect';
+  if (control.type === 'label' || control.type === 'image') return 'rect';
+  if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
+    return 'rect';
+  if (control.shape === 'round') return 'ellipse';
+  return 'rect';
+}
+
 function ControlHit({
   control,
   rect,
@@ -482,7 +496,7 @@ function ControlHit({
   onSelectSection,
   onDraftChange,
 }: {
-  control: LayoutDocument['sections'][number]['controls'][number];
+  control: Control;
   rect: { left: number; top: number; width: number; height: number };
   isSelected: boolean;
   isParent: boolean;
@@ -506,6 +520,7 @@ function ControlHit({
   const onSelectSectionRef = useRef(onSelectSection);
   const startWasSelectedRef = useRef(false);
   const isHitfill = control.type === 'hitfill';
+  const hitShape = effectiveHitShape(control);
 
   useEffect(() => {
     scaleRef.current = scale;
@@ -592,6 +607,7 @@ function ControlHit({
         height: rect.height,
       }}
       data-control-id={control.id}
+      data-hit-shape={hitShape}
       onClick={(event) => {
         event.stopPropagation();
         onSelectControl(control.id);
