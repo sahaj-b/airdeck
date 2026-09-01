@@ -475,7 +475,7 @@ html[data-skin] .dpad-direction.dpad-right {
 
 .fullscreen-button {
   position: absolute;
-  bottom: 0.55rem;
+  bottom: 1.35rem;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -593,4 +593,65 @@ html[data-skin] .dpad-direction.dpad-right {
   .dpad-direction {
     transition: none;
   }
+}
+
+/* Phone editor hatches — copied from editor.css so the join page has them without loading editor.css */
+:root {
+  --editor-accent: oklch(0.62 0.19 277);
+}
+.dark {
+  --editor-accent: oklch(0.68 0.17 277);
+}
+.editor-forgiving-hatch,
+.editor-hitzone-hatch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  background-color: var(--editor-accent);
+}
+.editor-hitzone-hatch {
+  z-index: 0;
+  opacity: 0.52;
+  -webkit-mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px);
+  mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+.editor-forgiving-hatch {
+  z-index: 0;
+  opacity: 0.52;
+  -webkit-mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px),
+    radial-gradient(
+      ellipse closest-side at 50% 50%,
+      transparent 99.5%,
+      black 100%
+    );
+  mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px),
+    radial-gradient(
+      ellipse closest-side at 50% 50%,
+      transparent 99.5%,
+      black 100%
+    );
+  -webkit-mask-size:
+    auto,
+    auto,
+    100% 100%;
+  mask-size:
+    auto,
+    auto,
+    100% 100%;
+  -webkit-mask-repeat: repeat, repeat, no-repeat;
+  mask-repeat: repeat, repeat, no-repeat;
+  -webkit-mask-composite: source-in, source-in;
+  mask-composite: intersect, intersect;
 }

@@ -1,5 +1,6 @@
 import interact from 'interactjs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Lock, LockOpen, Trash2 } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { FrameSender } from '../controller/frame-sender';
 import type { RenderedLayout } from '../controller/layout-renderer';
@@ -10,7 +11,9 @@ import type { Control, LayoutDocument } from '../shared/layout';
 import { validateLayout } from '../shared/layout';
 import {
   clampDrag,
+  clampGeometry,
   cloneDocument,
+  deleteControl,
   findControl,
   getHitzonesOf,
   isDefaultLocked,
@@ -36,10 +39,6 @@ function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
     return 'rect';
   if (control.shape === 'round') return 'ellipse';
   return 'rect';
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 interface IslandProps {
@@ -80,143 +79,151 @@ function PhoneEditorIsland({
   const historyRef = useRef<LayoutHistory>(new LayoutHistory(50));
   const selectedRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const canvasWrapRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef({ zoom: 1, pan: { x: 0, y: 0 } });
-  const [zoom, setZoom] = useState(1);
-  const [viewport, setViewport] = useState(() => ({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  }));
+  const getHostViewport = (): { width: number; height: number } => {
+    if (renderer?.root) {
+      const comp = renderer.root.querySelector(
+        '.controller-composition',
+      ) as HTMLElement | null;
+      if (comp) {
+        const r = comp.getBoundingClientRect();
+        if (r.width > 2 && r.height > 2) return { width: r.width, height: r.height };
+      }
+      const hostEl = document.querySelector('.controller-host') as HTMLElement | null;
+      if (hostEl) {
+        const r = hostEl.getBoundingClientRect();
+        const cs = getComputedStyle(hostEl);
+        const padL = parseFloat(cs.paddingLeft) || 0;
+        const padR = parseFloat(cs.paddingRight) || 0;
+        const padT = parseFloat(cs.paddingTop) || 0;
+        const padB = parseFloat(cs.paddingBottom) || 0;
+        return { width: Math.max(1, r.width - padL - padR), height: Math.max(1, r.height - padT - padB) };
+      }
+    }
+    return { width: window.innerWidth, height: window.innerHeight };
+  };
+  const getHostOrigin = (): { x: number; y: number } => {
+    if (renderer?.root) {
+      const comp = renderer.root.querySelector('.controller-composition') as HTMLElement | null;
+      if (comp) {
+        const r = comp.getBoundingClientRect();
+        return { x: r.left, y: r.top };
+      }
+    }
+    const hostEl = document.querySelector('.controller-host') as HTMLElement | null;
+    if (hostEl) {
+      const r = hostEl.getBoundingClientRect();
+      const cs = getComputedStyle(hostEl);
+      return { x: r.left + (parseFloat(cs.paddingLeft) || 0), y: r.top + (parseFloat(cs.paddingTop) || 0) };
+    }
+    return { x: 0, y: 0 };
+  };
+  const [viewport, setViewport] = useState(() => getHostViewport());
 
-  // sync refs
+  // host viewport — matches runtime renderer composition size for pixel-perfect overlay
+  useEffect(() => {
+    const compute = () => {
+      let w = window.innerWidth;
+      let h = window.innerHeight;
+      if (renderer?.root) {
+        const comp = renderer.root.querySelector(
+          '.controller-composition',
+        ) as HTMLElement | null;
+        if (comp) {
+          const r = comp.getBoundingClientRect();
+          if (r.width > 2 && r.height > 2) {
+            w = r.width;
+            h = r.height;
+          }
+        } else {
+          const hostEl = document.querySelector(
+            '.controller-host',
+          ) as HTMLElement | null;
+          if (hostEl) {
+            const r = hostEl.getBoundingClientRect();
+            const cs = getComputedStyle(hostEl);
+            const padL = parseFloat(cs.paddingLeft) || 0;
+            const padR = parseFloat(cs.paddingRight) || 0;
+            const padT = parseFloat(cs.paddingTop) || 0;
+            const padB = parseFloat(cs.paddingBottom) || 0;
+            w = Math.max(1, r.width - padL - padR);
+            h = Math.max(1, r.height - padT - padB);
+          }
+        }
+      }
+      setViewport({ width: w, height: h });
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    window.addEventListener('orientationchange', compute);
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(compute)
+        : null;
+    const hostEl = document.querySelector('.controller-host');
+    if (hostEl && ro) ro.observe(hostEl);
+    const compEl = renderer?.root?.querySelector('.controller-composition');
+    if (compEl && ro) ro.observe(compEl);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('orientationchange', compute);
+      ro?.disconnect();
+    };
+  }, [renderer]);
+
+  const [hostOrigin, setHostOrigin] = useState(() => getHostOrigin());
+  useEffect(() => {
+    const computeOrigin = () => setHostOrigin(getHostOrigin());
+    computeOrigin();
+    window.addEventListener('resize', computeOrigin);
+    window.addEventListener('orientationchange', computeOrigin);
+    return () => {
+      window.removeEventListener('resize', computeOrigin);
+      window.removeEventListener('orientationchange', computeOrigin);
+    };
+  }, [renderer, viewport]);
+
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
 
-  // init history + pause sender
+  // live-sync the underlying renderer so the skin moves with the hit overlay
+  useEffect(() => {
+    if (!renderer) return;
+    try {
+      renderer.update(draft, {
+        width: viewport.width,
+        height: viewport.height,
+      });
+    } catch {
+      try {
+        renderer.update(draft);
+      } catch {}
+    }
+  }, [draft, viewport, renderer]);
+
+  const initialViewportRef = useRef(viewport);
   useEffect(() => {
     historyRef.current.reset(initialDoc);
     const wasRunning = sender.isRunning;
     if (wasRunning) sender.stop();
     renderer?.cancelPointers();
     state.reset();
+    initialViewportRef.current = viewport;
     return () => {
       if (wasRunning) sender.start();
+      try {
+        renderer?.update(initialDoc, {
+          width: initialViewportRef.current.width,
+          height: initialViewportRef.current.height,
+        });
+      } catch {
+        try {
+          renderer?.update(initialDoc);
+        } catch {}
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDoc, sender, state, renderer]);
-
-  // keep viewport updated
-  useEffect(() => {
-    const onResize = () => {
-      setViewport({ width: window.innerWidth, height: window.innerHeight });
-    };
-    window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
-    };
-  }, []);
-
-  // JS pinch-zoom + 2-finger tap undo via gesturable — overlay owns it, ignores controls/bar
-  // if you instantly lift 2 fingers (no pinch) -> undo, if you pinch -> zoom
-  useEffect(() => {
-    const el = overlayRef.current;
-    const wrap = canvasWrapRef.current;
-    if (!el || !wrap) return;
-    let startZoom = 1;
-    let startTime = 0;
-    let didPinch = false;
-    const gesturable = (
-      interact(el) as unknown as {
-        gesturable: (opts: unknown) => { unset: () => void };
-      }
-    ).gesturable;
-    if (!gesturable) return;
-    const inst = gesturable({
-      ignoreFrom:
-        '[data-phone-hit], [data-phone-handles], [data-phone-bar], [data-phone-onboarding]',
-      listeners: {
-        start() {
-          startZoom = zoomRef.current.zoom;
-          startTime = Date.now();
-          didPinch = false;
-        },
-        move(event: unknown) {
-          const e = event as {
-            scale: number;
-            clientX: number;
-            clientY: number;
-            dx: number;
-            dy: number;
-          };
-          if (
-            Math.abs(e.scale - 1) > 0.06 ||
-            Math.hypot(e.dx ?? 0, e.dy ?? 0) > 14
-          )
-            didPinch = true;
-          if (!didPinch) return;
-          const rect = wrap.getBoundingClientRect();
-          const cx = e.clientX - rect.left;
-          const cy = e.clientY - rect.top;
-          const next = clampNumber(startZoom * e.scale, 1, 5);
-          const k = next / zoomRef.current.zoom;
-          zoomRef.current.pan.x = cx - (cx - zoomRef.current.pan.x) * k;
-          zoomRef.current.pan.y = cy - (cy - zoomRef.current.pan.y) * k;
-          zoomRef.current.zoom = next;
-          wrap.style.transform = `translate(${zoomRef.current.pan.x}px, ${zoomRef.current.pan.y}px) scale(${next})`;
-          setZoom(next);
-        },
-        end(event: unknown) {
-          const e = event as { scale: number };
-          const dt = Date.now() - startTime;
-          const scaleDelta = Math.abs(startZoom * (e.scale ?? 1) - startZoom);
-          if (!didPinch && dt < 300 && scaleDelta < 0.06) {
-            const prev = historyRef.current.undo();
-            if (prev) {
-              draftRef.current = prev;
-              setDraft(prev);
-            }
-          }
-        },
-      },
-    });
-    return () => inst.unset();
-  }, []);
-
-  // 3-finger quick tap -> redo (2-finger tap is now undo via gesturable)
-  useEffect(() => {
-    const el = overlayRef.current;
-    if (!el) return;
-    let startTime = 0;
-    const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 3) startTime = Date.now();
-    };
-    const onTouchEnd = (event: TouchEvent) => {
-      if (
-        event.touches.length === 0 &&
-        Date.now() - startTime < 300 &&
-        startTime !== 0
-      ) {
-        // check that it was a 3-finger lift (changedTouches)
-        const changed = (event as TouchEvent).changedTouches;
-        if (changed.length === 3) {
-          const next = historyRef.current.redo();
-          if (next) {
-            draftRef.current = next;
-            setDraft(next);
-          }
-        }
-        startTime = 0;
-      }
-    };
-    el.addEventListener('touchstart', onTouchStart);
-    el.addEventListener('touchend', onTouchEnd);
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchend', onTouchEnd);
-    };
-  }, []);
 
   const resolved = useMemo(() => {
     return resolveLayout(draft, viewport, 'landscape');
@@ -297,12 +304,20 @@ function PhoneEditorIsland({
     historyRef.current.push(draftRef.current);
   }, []);
 
+  const handleDelete = useCallback(() => {
+    if (!selectedId) return;
+    const next = deleteControl(draftRef.current, selectedId);
+    draftRef.current = next;
+    setDraft(next);
+    historyRef.current.push(next);
+    setSelectedId(null);
+  }, [selectedId]);
+
   useInteractGeometry({
     enabled: Boolean(selectedRect && selectedId),
     targetRef: selectedRef,
     viewportHeight: viewport.height,
     scale: 1,
-    getScale: () => zoomRef.current.zoom,
     key: selectedId ?? undefined,
     locked,
     edges: {
@@ -316,6 +331,152 @@ function PhoneEditorIsland({
     onDragEnd: commit,
     onResizeEnd: commit,
   });
+
+  // native pinch + 2/3 finger tap undo/redo — replaces interact gesturable
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
+  const locksRef = useRef(locks);
+  locksRef.current = locks;
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+
+    let startDist = 0;
+    let startTime = 0;
+    let startSize: { w: number; h: number } | null = null;
+    let startLocked = true;
+    let didPinch = false;
+    let peakTouches = 0;
+
+    const dist = (a: Touch, b: Touch) =>
+      Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      peakTouches = Math.max(peakTouches, e.touches.length);
+      if (e.touches.length === 2) {
+        startTime = Date.now();
+        didPinch = false;
+        const sid = selectedIdRef.current;
+        if (sid) {
+          const found = findControl(draftRef.current, sid);
+          if (found) {
+            startSize = {
+              w: found.control.geometry.size.width,
+              h: found.control.geometry.size.height,
+            };
+            startLocked =
+              (locksRef.current[sid] ??
+                isDefaultLocked(found.control as never)) === true;
+            startDist = dist(e.touches[0], e.touches[1]);
+          } else {
+            startSize = null;
+            startDist = dist(e.touches[0], e.touches[1]);
+          }
+        } else {
+          startSize = null;
+          startDist = dist(e.touches[0], e.touches[1]);
+        }
+      } else if (e.touches.length === 3) {
+        startTime = Date.now();
+        didPinch = false;
+        startDist = 0;
+        startSize = null;
+      } else if (e.touches.length === 1) {
+        startDist = 0;
+        startSize = null;
+        if (peakTouches < 2) startTime = Date.now();
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      peakTouches = Math.max(peakTouches, e.touches.length);
+      if (e.touches.length === 2 && startSize && startDist > 0) {
+        const curDist = dist(e.touches[0], e.touches[1]);
+        const scale = curDist / startDist;
+        if (Math.abs(scale - 1) < 0.04) return;
+        didPinch = true;
+        // prevent page scroll/zoom while pinching the control
+        e.preventDefault();
+        let targetW = startSize.w * scale;
+        let targetH = startSize.h * scale;
+        if (startLocked) {
+          const ratio = startSize.w / startSize.h || 1;
+          if (
+            Math.abs(targetW - startSize.w) > Math.abs(targetH - startSize.h)
+          ) {
+            targetH = targetW / ratio;
+          } else {
+            targetW = targetH * ratio;
+          }
+        }
+        const sid = selectedIdRef.current;
+        if (!sid) return;
+        const found = findControl(draftRef.current, sid);
+        if (!found) return;
+        const candidate = {
+          position: { ...found.control.geometry.position },
+          size: { width: targetW, height: targetH },
+        };
+        const clamped = clampGeometry(candidate, found.section);
+        const next = updateControlGeometry(draftRef.current, sid, clamped);
+        draftRef.current = next;
+        setDraft(next);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length !== 0) return;
+      const dt = Date.now() - startTime;
+      if (!didPinch && dt < 350 && dt > 0 && peakTouches >= 2) {
+        if (peakTouches === 2) {
+          const prev = historyRef.current.undo();
+          if (prev) {
+            draftRef.current = prev;
+            setDraft(prev);
+          }
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (peakTouches === 3) {
+          const next = historyRef.current.redo();
+          if (next) {
+            draftRef.current = next;
+            setDraft(next);
+          }
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      } else if (didPinch) {
+        historyRef.current.push(draftRef.current);
+      }
+      startSize = null;
+      startDist = 0;
+      didPinch = false;
+      startTime = 0;
+      peakTouches = 0;
+    };
+
+    // use capture + non-passive so we can preventDefault on pinch move
+    el.addEventListener('touchstart', onTouchStart, {
+      passive: false,
+      capture: true,
+    });
+    el.addEventListener('touchmove', onTouchMove, {
+      passive: false,
+      capture: true,
+    });
+    el.addEventListener('touchend', onTouchEnd, { capture: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart, {
+        capture: true,
+      } as unknown as EventListenerOptions);
+      el.removeEventListener('touchmove', onTouchMove, {
+        capture: true,
+      } as unknown as EventListenerOptions);
+      el.removeEventListener('touchend', onTouchEnd, {
+        capture: true,
+      } as unknown as EventListenerOptions);
+    };
+  }, []);
 
   const handleSave = () => {
     const trimmed = name.trim();
@@ -365,6 +526,16 @@ function PhoneEditorIsland({
 
   const handleBack = () => {
     state.reset();
+    try {
+      renderer?.update(initialDoc, {
+        width: viewport.width,
+        height: viewport.height,
+      });
+    } catch {
+      try {
+        renderer?.update(initialDoc);
+      } catch {}
+    }
     onCancel();
   };
 
@@ -398,7 +569,7 @@ function PhoneEditorIsland({
       ref={overlayRef}
       className="phone-editor-overlay fixed inset-0 z-40 touch-none select-none"
       data-phone-overlay
-      onPointerDown={(event) => {
+      onClick={(event) => {
         if (event.target === event.currentTarget) setSelectedId(null);
       }}
     >
@@ -443,21 +614,6 @@ function PhoneEditorIsland({
         >
           ↪
         </button>
-        {zoom !== 1 && (
-          <button
-            type="button"
-            className="rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-white text-[11px] cursor-pointer"
-            onClick={() => {
-              zoomRef.current = { zoom: 1, pan: { x: 0, y: 0 } };
-              if (canvasWrapRef.current) {
-                canvasWrapRef.current.style.transform = '';
-              }
-              setZoom(1);
-            }}
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-        )}
         <button
           type="button"
           className="h-[22px] w-[50px] shrink-0 rounded-md border border-white/20 bg-white text-black text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90"
@@ -476,93 +632,67 @@ function PhoneEditorIsland({
       )}
 
       <div
-        ref={canvasWrapRef}
-        className="absolute inset-x-0 bottom-0 top-7 origin-top-left will-change-transform pointer-events-none"
+        className="absolute inset-0 pointer-events-none"
         data-phone-canvas-wrap
-        style={
-          zoom !== 1
-            ? {
-                transform: `translate(${zoomRef.current.pan.x}px, ${zoomRef.current.pan.y}px) scale(${zoom})`,
-              }
-            : undefined
-        }
+        style={{ top: 28 }}
+        onClick={(e) => {
+          // clicking empty canvas (where no hit) deselects — the hit buttons stop propagation
+          if (e.target === e.currentTarget) setSelectedId(null);
+        }}
       >
         {resolved.sections.flatMap((section) =>
           section.controls.map((rc) => {
             const isSelected = rc.control.id === selectedId;
             const isHitzone = rc.control.type === 'hitzone';
-            const isPeer = selectedPeerIds.has(rc.control.id);
             const hitShape = effectiveHitShape(rc.control as Control);
+            const BAR_H = 28;
+            const left = hostOrigin.x + rc.visual.left;
+            const top = hostOrigin.y + rc.visual.top - BAR_H;
+            const isPeer = selectedPeerIds.has(rc.control.id);
+            const isForgiving =
+              isSelected &&
+              hitShape === 'rect' &&
+              rc.control.shape === 'round' &&
+              !isHitzone &&
+              rc.control.type !== 'label' &&
+              rc.control.type !== 'dpad';
+            const showHitzoneHatch = isHitzone && (isPeer || isSelected);
             return (
-              <button
-                type="button"
+              <PhoneHit
                 key={rc.control.id}
-                data-phone-hit
-                className={
-                  'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
-                  (isSelected
-                    ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] '
-                    : isHitzone
-                      ? 'border-dashed border-white/35 bg-white/[0.06] opacity-35 '
-                      : 'border-transparent ') +
-                  (isPeer && !isSelected
-                    ? '!border-dashed !border-[rgb(250_204_21/0.95)] !bg-[rgb(250_204_21/0.12)] ' +
-                      (isHitzone ? '!bg-[rgb(250_204_21/0.14)] ' : '')
-                    : '') +
-                  (isSelected && isHitzone ? '!opacity-60 ' : '')
-                }
-                style={{
-                  left: rc.visual.left,
-                  top: rc.visual.top,
-                  width: rc.visual.width,
-                  height: rc.visual.height,
-                  borderRadius: hitShape === 'ellipse' ? '50%' : undefined,
+                control={rc.control}
+                left={left}
+                top={top}
+                width={rc.visual.width}
+                height={rc.visual.height}
+                hitShape={hitShape}
+                isSelected={isSelected}
+                isHitzone={isHitzone}
+                isPeer={isPeer}
+                isForgiving={isForgiving}
+                showHitzoneHatch={showHitzoneHatch}
+                viewportHeight={viewport.height}
+                draftRef={draftRef}
+                selectedId={selectedId}
+                onSelect={(id) => setSelectedId(id)}
+                onDraftChange={(next, commit) => {
+                  draftRef.current = next;
+                  setDraft(next);
+                  if (commit) historyRef.current.push(next);
                 }}
-                data-control-id={rc.control.id}
-                data-hit-shape={hitShape}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedId(rc.control.id);
+                selectedRef={selectedRef}
+                locked={locked}
+                onToggleLock={() => {
+                  setLocks((prev) => {
+                    const cur =
+                      prev[rc.control.id] ??
+                      isDefaultLocked(rc.control as never);
+                    return { ...prev, [rc.control.id]: !cur };
+                  });
                 }}
-              >
-                {isSelected && (
-                  <div
-                    ref={selectedRef}
-                    className="absolute inset-0 pointer-events-auto touch-none"
-                    data-phone-handles
-                  >
-                    <span className="phone-editor-handle tl absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none top-[-4px] left-[-4px]" />
-                    <span className="phone-editor-handle tr absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none top-[-4px] right-[-4px]" />
-                    <span className="phone-editor-handle bl absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none bottom-[-4px] left-[-4px]" />
-                    <span className="phone-editor-handle br absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none bottom-[-4px] right-[-4px]" />
-                    <div className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md text-[11px] text-white whitespace-nowrap pointer-events-auto">
-                      <button
-                        type="button"
-                        className="rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-white text-[11px] cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLocks((prev) => {
-                            const next = { ...prev };
-                            const cur =
-                              prev[rc.control.id] ??
-                              isDefaultLocked(rc.control as never);
-                            next[rc.control.id] = !cur;
-                            return next;
-                          });
-                        }}
-                        title={
-                          locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'
-                        }
-                      >
-                        {locked ? '🔒' : '🔓'}
-                      </button>
-                      {isSelectedHitzone && (
-                        <span title="hitzone">◈ hitzone</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </button>
+                onDelete={handleDelete}
+                isSelectedHitzone={isSelectedHitzone}
+              />
             );
           }),
         )}
@@ -576,9 +706,10 @@ function PhoneEditorIsland({
           aria-label="Editor tips"
         >
           <p>
-            Drag to move, drag corners to resize.
+            Drag any control to move, drag corners to resize.
             <br />
-            Pinch to zoom, 2-finger tap undo, 3-finger tap redo.
+            Pinch selected control to resize, 2-finger tap undo, 3-finger tap
+            redo.
           </p>
           <button
             type="button"
@@ -592,6 +723,205 @@ function PhoneEditorIsland({
     </div>
   );
 }
+
+const PhoneHit = memo(function PhoneHit({
+  control,
+  left,
+  top,
+  width,
+  height,
+  hitShape,
+  isSelected,
+  isHitzone,
+  isPeer,
+  isForgiving,
+  showHitzoneHatch,
+  viewportHeight,
+  draftRef,
+  selectedId,
+  onSelect,
+  onDraftChange,
+  selectedRef,
+  locked,
+  onToggleLock,
+  onDelete,
+  isSelectedHitzone,
+}: {
+  control: Control;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  hitShape: 'rect' | 'ellipse';
+  isSelected: boolean;
+  isHitzone: boolean;
+  isPeer: boolean;
+  isForgiving: boolean;
+  showHitzoneHatch: boolean;
+  viewportHeight: number;
+  draftRef: React.MutableRefObject<LayoutDocument>;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onDraftChange: (next: LayoutDocument, commit: boolean) => void;
+  selectedRef: React.RefObject<HTMLDivElement | null>;
+  locked: boolean;
+  onToggleLock: () => void;
+  onDelete: () => void;
+  isSelectedHitzone: boolean;
+}) {
+  const hitRef = useRef<HTMLButtonElement>(null);
+  const vhRef = useRef(viewportHeight);
+  const selectedIdRef = useRef(selectedId);
+  const isSelectedRef = useRef(isSelected);
+  const onSelectRef = useRef(onSelect);
+  const onDraftRef = useRef(onDraftChange);
+  vhRef.current = viewportHeight;
+  selectedIdRef.current = selectedId;
+  isSelectedRef.current = isSelected;
+  onSelectRef.current = onSelect;
+  onDraftRef.current = onDraftChange;
+  const startWasSelectedRef = useRef(false);
+  const isParentRef = useRef(false);
+  const isDpad = control.type === 'dpad';
+  // keep parent check fresh without re-binding interact
+  const parentCheck = getHitzonesOf(draftRef.current, control.id).length > 0;
+  isParentRef.current = parentCheck && control.type !== 'hitzone';
+
+  useEffect(() => {
+    const el = hitRef.current;
+    if (!el) return;
+    const instance = interact(el).draggable({
+      // don't steal handles — those are handled by useInteractGeometry on selectedRef
+      ignoreFrom: '[data-phone-handles], [data-phone-handles] *',
+      listeners: {
+        start() {
+          startWasSelectedRef.current = isSelectedRef.current;
+          if (!isSelectedRef.current) {
+            onSelectRef.current(control.id);
+          }
+        },
+        move(event: { dx: number; dy: number }) {
+          if (startWasSelectedRef.current) return;
+          const vh = Math.max(1, vhRef.current);
+          const deltaX = event.dx / vh;
+          const deltaY = event.dy / vh;
+          const latest = draftRef.current;
+          if (isParentRef.current) {
+            const next = moveParentWithHitzones(
+              latest,
+              control.id,
+              deltaX,
+              deltaY,
+            );
+            draftRef.current = next;
+            onDraftRef.current(next, false);
+          } else {
+            const found = findControl(latest, control.id);
+            if (!found) return;
+            const next = updateControlGeometry(
+              latest,
+              control.id,
+              clampDrag(found.control.geometry, deltaX, deltaY, found.section),
+            );
+            draftRef.current = next;
+            onDraftRef.current(next, false);
+          }
+        },
+        end() {
+          if (startWasSelectedRef.current) return;
+          onDraftRef.current(draftRef.current, true);
+        },
+      },
+    });
+    return () => instance.unset();
+  }, [control.id, draftRef]);
+
+  return (
+    <button
+      type="button"
+      ref={hitRef}
+      data-phone-hit
+      className={
+        'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
+        (isDpad
+          ? 'border-transparent bg-transparent ' + (isSelected ? 'z-10 ' : '')
+          : isSelected
+            ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] z-10 '
+            : isHitzone
+              ? 'border-dashed border-white/35 bg-white/[0.06] opacity-35 '
+              : 'border-white/10 bg-transparent ') +
+        (isPeer && !isSelected && !isDpad
+          ? '!border-dashed !border-[rgb(250_204_21/0.95)] !bg-[rgb(250_204_21/0.12)] ' +
+            (isHitzone ? '!bg-[rgb(250_204_21/0.14)] ' : '')
+          : '') +
+        (isSelected && isHitzone ? '!opacity-60 ' : '')
+      }
+      style={{
+        left,
+        top,
+        width,
+        height,
+        borderRadius: hitShape === 'ellipse' ? '50%' : undefined,
+      }}
+      data-control-id={control.id}
+      data-hit-shape={hitShape}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(control.id);
+      }}
+    >
+      {isForgiving && (
+        <div className="editor-forgiving-hatch" aria-hidden="true" />
+      )}
+      {showHitzoneHatch && (
+        <div className="editor-hitzone-hatch" aria-hidden="true" />
+      )}
+      {isSelected && (
+        <div
+          ref={selectedRef}
+          className="absolute inset-0 pointer-events-auto touch-none"
+          data-phone-handles
+        >
+          <span className="phone-editor-handle tl absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none top-[-4px] left-[-4px]" />
+          <span className="phone-editor-handle tr absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none top-[-4px] right-[-4px]" />
+          <span className="phone-editor-handle bl absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none bottom-[-4px] left-[-4px]" />
+          <span className="phone-editor-handle br absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none bottom-[-4px] right-[-4px]" />
+          <div className="absolute left-1/2 -translate-x-1/2 -top-8 flex items-center gap-1 bg-black/75 backdrop-blur-md px-1.5 py-1 rounded-md text-white whitespace-nowrap pointer-events-auto shadow-lg">
+            <button
+              type="button"
+              className="grid place-items-center size-6 rounded bg-white/10 hover:bg-white/20 border border-white/15 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLock();
+              }}
+              title={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+              aria-label={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+            >
+              {locked ? <Lock size={12} /> : <LockOpen size={12} />}
+            </button>
+            <button
+              type="button"
+              className="grid place-items-center size-6 rounded bg-red-500/90 hover:bg-red-500 border border-white/15 cursor-pointer text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title="Delete control"
+              aria-label="Delete control"
+            >
+              <Trash2 size={12} />
+            </button>
+            {isSelectedHitzone && (
+              <span className="text-[11px] opacity-80" title="hitzone">
+                ◈ hitzone
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </button>
+  );
+});
 
 export interface PhoneEditorHandle {
   unmount: () => void;

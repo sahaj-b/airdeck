@@ -455,6 +455,7 @@ function showController(options: {
   let currentLayoutId = '';
   let currentLayoutDoc: LayoutDocument = DEFAULT_LAYOUT;
   let playerId = '';
+  let currentPlayerDisplayName = options.displayName || '';
   let connectionText = CONNECTION_LABELS.connecting;
   let pingText = '—';
   let island: import('./settings-island').SettingsIsland | undefined;
@@ -541,7 +542,14 @@ function showController(options: {
   const handleEditPersonal = async (editId: string) => {
     let docToEdit: LayoutDocument | undefined;
     if (editId === '__new_from_current') {
-      docToEdit = currentLayoutDoc;
+      const base = currentLayoutDoc;
+      const rawPlayer =
+        currentPlayerDisplayName || readStorage(DISPLAY_NAME_KEY) || '';
+      const isDefault =
+        !rawPlayer.trim() || DEFAULT_NAME_PATTERN.test(rawPlayer.trim());
+      const suffix = isDefault ? 'Copy' : rawPlayer.trim();
+      const newName = `${base.name} ${suffix}`.trim();
+      docToEdit = { ...structuredClone(base), name: newName };
     } else {
       docToEdit = loadPersonalLayouts()[editId];
       if (!docToEdit) docToEdit = currentLayoutDoc;
@@ -829,6 +837,7 @@ function showController(options: {
       applyWelcome(welcome, slot, name, shell);
       availableLayouts = welcome.availableLayouts;
       playerId = welcome.playerId;
+      currentPlayerDisplayName = welcome.displayName || currentPlayerDisplayName;
       const stored = readStorage(SELECTED_LAYOUT_KEY);
       if (stored && isPersonalLayout(stored)) {
         const personalDoc = loadPersonalLayouts()[stored];

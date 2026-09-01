@@ -798,6 +798,7 @@ const ControlHit = memo(function ControlHit({
   const onSelectSectionRef = useRef(onSelectSection);
   const startWasSelectedRef = useRef(false);
   const isHitzone = control.type === 'hitzone';
+  const isDpad = control.type === 'dpad';
   const hitShape = effectiveHitShape(control);
 
   // direct sync without effects - cheaper than 7 useEffects
@@ -869,10 +870,11 @@ const ControlHit = memo(function ControlHit({
       ref={hitRef}
       className={cn(
         'editor-control-hit',
+        isDpad && 'editor-control-dpad',
         isHitzone && 'editor-hit-only',
-        isSelected && 'editor-control-selected',
-        isPeer && !isSelected && 'editor-control-peer',
-        isHovered && !isSelected && !isPeer && 'editor-control-hovered',
+        !isDpad && isSelected && 'editor-control-selected',
+        !isDpad && isPeer && !isSelected && 'editor-control-peer',
+        !isDpad && isHovered && !isSelected && !isPeer && 'editor-control-hovered',
       )}
       style={{
         left: rect.left,
@@ -903,7 +905,7 @@ const ControlHit = memo(function ControlHit({
       )}
       {isSelected && (
         <div ref={selectedRef} className="editor-interaction-layer">
-          <ControlOverlay selected isHitzone={isHitzone} />
+          <ControlOverlay selected isHitzone={isHitzone} isDpad={isDpad} />
         </div>
       )}
     </button>
