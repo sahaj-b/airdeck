@@ -1,5 +1,5 @@
 import { Copy, GripVertical, PanelLeftClose, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -133,7 +133,7 @@ export function SectionsPanel({
   );
 }
 
-function SectionCard({
+const SectionCard = memo(function SectionCard({
   section,
   document,
   selectedControlId,
@@ -173,23 +173,34 @@ function SectionCard({
   onHoverControl?: (id: string | null) => void;
 }) {
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+  dragStateRef.current = dragState;
   const listRef = useRef<HTMLUListElement>(null);
   const displayControls = useMemo(
     () => [...section.controls].slice().reverse(),
     [section.controls],
   );
 
-  const handlePointerMove = useCallback(
-    (event: PointerEvent) => {
-      if (!dragState || !listRef.current) return;
+  const onReorderRef = useRef(onReorderControl);
+  onReorderRef.current = onReorderControl;
+  const displayControlsRef = useRef(displayControls);
+  displayControlsRef.current = displayControls;
+  const sectionRef = useRef(section);
+  sectionRef.current = section;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run only when drag starts/ends
+  useEffect(() => {
+    const state = dragStateRef.current;
+    if (!state) return;
+    const handleMove = (event: PointerEvent): void => {
+      const cur = dragStateRef.current;
+      if (!cur || !listRef.current) return;
       const rows = Array.from(
         listRef.current.querySelectorAll<HTMLLIElement>('[data-control-row]'),
       );
       if (rows.length === 0) return;
-
       const y = event.clientY;
       let overIndex: number | null = null;
-
       for (let i = 0; i < rows.length; i++) {
         const rect = rows[i].getBoundingClientRect();
         if (y >= rect.top && y <= rect.bottom) {
@@ -198,82 +209,90 @@ function SectionCard({
           break;
         }
       }
-
       if (overIndex === null) {
         const firstRect = rows[0].getBoundingClientRect();
         const lastRect = rows[rows.length - 1].getBoundingClientRect();
         if (y < firstRect.top) overIndex = 0;
         else if (y > lastRect.bottom) overIndex = rows.length;
       }
-
       if (overIndex !== null) {
-        // Clamp to valid insertion range 0..count
-        const count = rows.length;
-        overIndex = Math.max(0, Math.min(overIndex, count));
-        // Adjust for dragged item still in list visually
-        // If dragging forward, insertion index in terms of final array after removal
-        // For visual line, we can keep raw insertion index and adjust on drop
+        overIndex = Math.max(0, Math.min(overIndex, rows.length));
         setDragState((prev) => (prev ? { ...prev, overIndex } : prev));
       }
-    },
-    [dragState],
-  );
-
-  const handlePointerUp = useCallback(() => {
-    if (!dragState || dragState.overIndex === null) {
-      setDragState(null);
-      return;
-    }
-    const n = section.controls.length;
-    const fromActual = dragState.fromIndex;
-    const fromDisplay = n - 1 - fromActual;
-    let overDisplay = dragState.overIndex;
-    let toDisplay = overDisplay;
-    if (toDisplay > fromDisplay) toDisplay -= 1;
-    const displayWithout = displayControls.filter(
-      (c) => c.id !== dragState.draggedId,
-    );
-    const dragged = section.controls.find((c) => c.id === dragState.draggedId);
-    if (!dragged) {
-      setDragState(null);
-      return;
-    }
-    const newDisplay = [...displayWithout];
-    newDisplay.splice(toDisplay, 0, dragged);
-    const newActual = [...newDisplay].slice().reverse();
-    const toActual = newActual.findIndex((c) => c.id === dragState.draggedId);
-    if (toActual !== fromActual && onReorderControl) {
-      onReorderControl(section.id, fromActual, toActual);
-    }
-    setDragState(null);
-  }, [
-    dragState,
-    onReorderControl,
-    section.id,
-    displayControls,
-    section.controls,
-  ]);
-
-  useEffect(() => {
-    if (!dragState) return;
-    const onMove = (e: PointerEvent) => handlePointerMove(e);
-    const onUp = () => handlePointerUp();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDragState(null);
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('keydown', onKey);
+    const handleUp = (): void => {
+      const cur = dragStateRef.current;
+      if (!cur || cur.overIndex === null) {
+        setDragState(null);
+        return;
+      }
+      const sec = sectionRef.current;
+      const n = sec.controls.length;
+      const fromActual = cur.fromIndex;
+      const fromDisplay = n - 1 - fromActual;
+      let toDisplay = cur.overIndex;
+      if (toDisplay > fromDisplay) toDisplay -= 1;
+      const displayWithout = displayControlsRef.current.filter(
+        (c) => c.id !== cur.draggedId,
+      );
+      const dragged = sec.controls.find((c) => c.id === cur.draggedId);
+      if (!dragged) {
+        setDragState(null);
+        return;
+      }
+      const newDisplay = [...displayWithout];
+      newDisplay.splice(toDisplay, 0, dragged);
+      const newActual = [...newDisplay].slice().reverse();
+      const toActual = newActual.findIndex((c) => c.id === cur.draggedId);
+      if (toActual !== fromActual && onReorderRef.current) {
+        onReorderRef.current(sec.id, fromActual, toActual);
+      }
+      setDragState(null);
+    };
+    const handleKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setDragState(null);
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('keydown', handleKey);
     return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('keydown', handleKey);
     };
-  }, [dragState, handlePointerMove, handlePointerUp]);
+  }, [dragState !== null]);
 
   const count = section.controls.length;
   const isSectionSelected =
     selectedSectionId === section.id && !selectedControlId;
+
+  const parentHintMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const byId = new Map<string, Control>();
+    for (const s of document.sections) {
+      for (const c of s.controls) byId.set(c.id, c as Control);
+    }
+    for (const c of section.controls) {
+      if (c.type === 'hitfill' && c.parentId) {
+        const parent = byId.get(c.parentId);
+        if (!parent) {
+          map.set(c.id, c.parentId);
+          continue;
+        }
+        const binding = parent.binding;
+        const parentIdCap =
+          parent.id.charAt(0).toUpperCase() + parent.id.slice(1);
+        if (!binding) map.set(c.id, parentIdCap);
+        else {
+          const bindingCap = binding.charAt(0).toUpperCase() + binding.slice(1);
+          if (parent.id.toLowerCase() === binding.toLowerCase())
+            map.set(c.id, parentIdCap);
+          else map.set(c.id, `${parentIdCap} (${bindingCap})`);
+        }
+      }
+    }
+    return map;
+  }, [document, section.controls]);
 
   return (
     <div
@@ -317,7 +336,6 @@ function SectionCard({
             </li>
           )}
 
-          {/* drop indicator at top if needed */}
           {dragState && dragState.overIndex === 0 && (
             <div
               className="editor-control-row__drop-indicator editor-control-row__drop-indicator--top"
@@ -338,7 +356,6 @@ function SectionCard({
             return (
               <ControlRow
                 key={control.id}
-                document={document}
                 control={control}
                 index={displayIndex}
                 count={count}
@@ -349,6 +366,7 @@ function SectionCard({
                 isDragging={isDragging}
                 dragActive={dragState !== null}
                 showLineAfter={showLineAfter}
+                parentHint={parentHintMap.get(control.id) ?? null}
                 onSelect={() => onSelectControl(control.id)}
                 onMove={(direction) =>
                   onMoveControl(control.id, direction === 'up' ? 'down' : 'up')
@@ -395,10 +413,9 @@ function SectionCard({
       </div>
     </div>
   );
-}
+});
 
-function ControlRow({
-  document,
+const ControlRow = memo(function ControlRow({
   control,
   index,
   count,
@@ -409,6 +426,7 @@ function ControlRow({
   isDragging,
   dragActive,
   showLineAfter,
+  parentHint,
   onSelect,
   onMove,
   onDuplicate,
@@ -416,7 +434,6 @@ function ControlRow({
   onHover,
   onDragStart,
 }: {
-  document: LayoutDocument;
   control: Control;
   index: number;
   count: number;
@@ -427,6 +444,7 @@ function ControlRow({
   isDragging: boolean;
   dragActive: boolean;
   showLineAfter: boolean;
+  parentHint: string | null;
   onSelect: () => void;
   onMove: (direction: 'up' | 'down') => void;
   onDuplicate: () => void;
@@ -435,19 +453,6 @@ function ControlRow({
   onDragStart: (e: React.PointerEvent) => void;
 }) {
   const isHitfill = control.type === 'hitfill';
-  const parentHint = (() => {
-    if (!isHitfill || !control.parentId) return null;
-    const parent = document.sections
-      .flatMap((s) => s.controls)
-      .find((c) => c.id === control.parentId);
-    if (!parent) return control.parentId;
-    const binding = parent.binding;
-    const parentIdCap = parent.id.charAt(0).toUpperCase() + parent.id.slice(1);
-    if (!binding) return parentIdCap;
-    const bindingCap = binding.charAt(0).toUpperCase() + binding.slice(1);
-    if (parent.id.toLowerCase() === binding.toLowerCase()) return parentIdCap;
-    return `${parentIdCap} (${bindingCap})`;
-  })();
 
   return (
     <li
@@ -566,4 +571,4 @@ function ControlRow({
       </div>
     </li>
   );
-}
+});

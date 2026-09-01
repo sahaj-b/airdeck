@@ -32,39 +32,23 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
   const scaleRef = useRef(options.scale);
   const edgesRef = useRef(options.edges);
   const shiftHeldRef = useRef(false);
-  useEffect(() => {
-    onDragRef.current = options.onDrag;
-  }, [options.onDrag]);
-  useEffect(() => {
-    onResizeRef.current = options.onResize;
-  }, [options.onResize]);
-  useEffect(() => {
-    onDragEndRef.current = options.onDragEnd;
-  }, [options.onDragEnd]);
-  useEffect(() => {
-    onResizeEndRef.current = options.onResizeEnd;
-  }, [options.onResizeEnd]);
-  useEffect(() => {
-    getScaleRef.current = options.getScale;
-  }, [options.getScale]);
-  useEffect(() => {
-    lockedRef.current = options.locked;
-  }, [options.locked]);
-  useEffect(() => {
-    viewportHeightRef.current = options.viewportHeight;
-  }, [options.viewportHeight]);
-  useEffect(() => {
-    scaleRef.current = options.scale;
-  }, [options.scale]);
-  useEffect(() => {
-    edgesRef.current = options.edges;
-  }, [options.edges]);
+
+  // direct sync without effects - cheaper than 9 useEffects
+  onDragRef.current = options.onDrag;
+  onResizeRef.current = options.onResize;
+  onDragEndRef.current = options.onDragEnd;
+  onResizeEndRef.current = options.onResizeEnd;
+  getScaleRef.current = options.getScale;
+  lockedRef.current = options.locked;
+  viewportHeightRef.current = options.viewportHeight;
+  scaleRef.current = options.scale;
+  edgesRef.current = options.edges;
 
   useEffect(() => {
-    const update = (event: KeyboardEvent) => {
+    const update = (event: KeyboardEvent): void => {
       shiftHeldRef.current = event.shiftKey;
     };
-    const clear = () => {
+    const clear = (): void => {
       shiftHeldRef.current = false;
     };
     window.addEventListener('keydown', update);
@@ -133,11 +117,5 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
     return () => {
       instance.unset();
     };
-  }, [
-    options.enabled,
-    options.targetRef,
-    options.viewportHeight,
-    options.scale,
-    options.key,
-  ]);
+  }, [options.enabled, options.targetRef, options.key]);
 }

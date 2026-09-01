@@ -1,5 +1,5 @@
 import interact from 'interactjs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -91,9 +91,7 @@ export function LayoutCanvas({
   const rendererRef = useRef<RenderedLayout | null>(null);
   const selectedRef = useRef<HTMLDivElement>(null);
   const latestRef = useRef<LayoutDocument>(document);
-  useEffect(() => {
-    latestRef.current = document;
-  }, [document]);
+  latestRef.current = document;
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   const [viewport, setViewport] = useState({ width: 844, height: 390 });
 
@@ -169,6 +167,13 @@ export function LayoutCanvas({
     const hitfills = getHitfillsOf(document, selectedControlId);
     return new Set<string>(hitfills);
   }, [document, selectedControlId]);
+
+  const hoveredPeerIds = useMemo(() => {
+    if (!hoveredControlId) return new Set<string>();
+    const found = findControl(document, hoveredControlId);
+    if (!found || found.control.type === 'hitfill') return new Set<string>();
+    return new Set<string>(getHitfillsOf(document, hoveredControlId));
+  }, [document, hoveredControlId]);
 
   const locked = selectedControl
     ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
@@ -393,19 +398,10 @@ export function LayoutCanvas({
               const isSelected = rc.control.id === selectedControlId;
               const isParent =
                 getHitfillsOf(document, rc.control.id).length > 0;
-              const isPeer = selectedPeerIds.has(rc.control.id);
+              const isPeer =
+                selectedPeerIds.has(rc.control.id) ||
+                hoveredPeerIds.has(rc.control.id);
               const isHovered = hoveredControlId === rc.control.id;
-              const isHoveredPeer =
-                hoveredControlId !== null &&
-                hoveredControlId !== undefined &&
-                (() => {
-                  if (!hoveredControlId) return false;
-                  const hoveredFound = findControl(document, hoveredControlId);
-                  if (!hoveredFound) return false;
-                  if (hoveredFound.control.type === 'hitfill') return false;
-                  const hits = getHitfillsOf(document, hoveredControlId);
-                  return hits.includes(rc.control.id);
-                })();
               return (
                 <ControlHit
                   key={rc.control.id}
@@ -413,7 +409,7 @@ export function LayoutCanvas({
                   rect={rect}
                   isSelected={isSelected}
                   isParent={isParent}
-                  isPeer={isPeer || isHoveredPeer}
+                  isPeer={isPeer}
                   isHovered={isHovered}
                   viewportHeight={viewport.height}
                   scale={scale}
@@ -482,7 +478,7 @@ function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
   return 'rect';
 }
 
-function ControlHit({
+const ControlHit = memo(function ControlHit({
   control,
   rect,
   isSelected,
@@ -523,27 +519,14 @@ function ControlHit({
   const isHitfill = control.type === 'hitfill';
   const hitShape = effectiveHitShape(control);
 
-  useEffect(() => {
-    scaleRef.current = scale;
-  }, [scale]);
-  useEffect(() => {
-    vhRef.current = viewportHeight;
-  }, [viewportHeight]);
-  useEffect(() => {
-    onSelectRef.current = onSelectControl;
-  }, [onSelectControl]);
-  useEffect(() => {
-    onDraftRef.current = onDraftChange;
-  }, [onDraftChange]);
-  useEffect(() => {
-    isSelectedRef.current = isSelected;
-  }, [isSelected]);
-  useEffect(() => {
-    isParentRef.current = isParent;
-  }, [isParent]);
-  useEffect(() => {
-    onSelectSectionRef.current = onSelectSection;
-  }, [onSelectSection]);
+  // direct sync without effects - cheaper than 7 useEffects
+  scaleRef.current = scale;
+  vhRef.current = viewportHeight;
+  onSelectRef.current = onSelectControl;
+  onDraftRef.current = onDraftChange;
+  isSelectedRef.current = isSelected;
+  isParentRef.current = isParent;
+  onSelectSectionRef.current = onSelectSection;
 
   useEffect(() => {
     const el = hitRef.current;
@@ -588,7 +571,7 @@ function ControlHit({
       },
     });
     return () => instance.unset();
-  }, [control.id]);
+  }, [control.id, control.type, latestRef]);
 
   return (
     <button
@@ -629,7 +612,7 @@ function ControlHit({
       )}
     </button>
   );
-}
+});
 
 function ViewportSlider({
   label,
@@ -687,18 +670,11 @@ function SectionDivider({
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onDraftChangeRef = useRef(onDraftChange);
-  useEffect(() => {
-    documentRef.current = document;
-  }, [document]);
-  useEffect(() => {
-    viewportRef.current = viewport;
-  }, [viewport]);
-  useEffect(() => {
-    scaleRef.current = scale;
-  }, [scale]);
-  useEffect(() => {
-    onDraftChangeRef.current = onDraftChange;
-  }, [onDraftChange]);
+  documentRef.current = document;
+  viewportRef.current = viewport;
+  scaleRef.current = scale;
+  onDraftChangeRef.current = onDraftChange;
+  startScaleRef.current = scale;
 
   useEffect(() => {
     const el = ref.current;
@@ -778,15 +754,9 @@ function ViewportEdgeHandles({
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onViewportChangeRef = useRef(onViewportChange);
-  useEffect(() => {
-    viewportRef.current = viewport;
-  }, [viewport]);
-  useEffect(() => {
-    scaleRef.current = scale;
-  }, [scale]);
-  useEffect(() => {
-    onViewportChangeRef.current = onViewportChange;
-  }, [onViewportChange]);
+  viewportRef.current = viewport;
+  scaleRef.current = scale;
+  onViewportChangeRef.current = onViewportChange;
 
   useEffect(() => {
     const el = rightRef.current;
@@ -908,19 +878,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function structureSignature(document: LayoutDocument): string {
-  return JSON.stringify(
-    document.sections.map((section) => ({
-      id: section.id,
-      controls: section.controls.map((control) => ({
-        id: control.id,
-        type: control.type,
-        parentId: control.parentId,
-        shape: control.shape,
-        asset: control.asset,
-        binding: control.binding,
-        bindings: control.bindings,
-        label: control.label,
-      })),
-    })),
-  );
+  // lightweight signature without JSON.stringify allocation per control
+  let sig = '';
+  for (const section of document.sections) {
+    sig += `${section.id}|`;
+    for (const c of section.controls) {
+      sig += `${c.id},${c.type},${c.parentId ?? ''},${c.shape ?? ''},${c.asset ?? ''},${c.binding ?? ''},${c.label};`;
+    }
+    sig += '||';
+  }
+  return sig;
 }

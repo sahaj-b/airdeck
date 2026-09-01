@@ -27,6 +27,7 @@ import {
   getAllowedBindings,
   isDefaultLocked,
 } from '@/shared/layout-editor';
+import { useIsShiftHeld } from '../hooks/use-is-shift-held';
 
 export interface InspectorProps {
   document: LayoutDocument;
@@ -64,6 +65,7 @@ export function Inspector({
   const control = selectedControl?.control ?? null;
   const section = selectedControl?.section ?? selectedSection ?? null;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedControl derived from selectedControlId/document; depend on IDs to avoid object identity churn
   const fieldErrors = useMemo(() => {
     const map = new Map<string, string>();
     let prefix: string | null = null;
@@ -79,13 +81,13 @@ export function Inspector({
       map.set(parts[parts.length - 1], error.message);
     }
     return map;
-  }, [errors, selectedControl, selectedSectionId]);
+  }, [errors, selectedControlId, selectedSectionId]);
 
   // Top-level summary without raw path dump
   const relevantErrors = useMemo(() => {
-    if (selectedControl || selectedSectionId) return [];
+    if (selectedControlId || selectedSectionId) return [];
     return errors.slice(0, 3);
-  }, [errors, selectedControl, selectedSectionId]);
+  }, [errors, selectedControlId, selectedSectionId]);
 
   return (
     <section className="flex min-h-0 w-full flex-col gap-3 bg-transparent p-2 overflow-y-auto overscroll-contain">
@@ -826,19 +828,7 @@ function GeometrySection({
   onToggleLock: (id: string) => void;
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
 }) {
-  const [shiftHeld, setShiftHeld] = useState(false);
-  useEffect(() => {
-    const update = (event: KeyboardEvent) => setShiftHeld(event.shiftKey);
-    const clear = () => setShiftHeld(false);
-    window.addEventListener('keydown', update);
-    window.addEventListener('keyup', update);
-    window.addEventListener('blur', clear);
-    return () => {
-      window.removeEventListener('keydown', update);
-      window.removeEventListener('keyup', update);
-      window.removeEventListener('blur', clear);
-    };
-  }, []);
+  const shiftHeld = useIsShiftHeld();
   const displayLocked = locked || shiftHeld;
   return (
     <div className="space-y-3 border-t border-border/60 pt-5">
