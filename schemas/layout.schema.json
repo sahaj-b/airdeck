@@ -30,7 +30,6 @@
           "properties": {
             "id": { "const": "left" },
             "relativeWidth": { "$ref": "#/$defs/relativeWidth" },
-            "relativeMinWidth": { "$ref": "#/$defs/relativeMinWidth" },
             "controls": { "$ref": "#/$defs/controlsArray" }
           }
         },
@@ -52,7 +51,6 @@
           "properties": {
             "id": { "const": "right" },
             "relativeWidth": { "$ref": "#/$defs/relativeWidth" },
-            "relativeMinWidth": { "$ref": "#/$defs/relativeMinWidth" },
             "controls": { "$ref": "#/$defs/controlsArray" }
           }
         }

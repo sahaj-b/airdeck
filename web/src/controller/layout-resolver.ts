@@ -94,22 +94,48 @@ export function allocateSections(
 
   const leftW = document.sections[0].relativeWidth;
   const rightW = document.sections[2].relativeWidth;
+  const leftMin = 0;
+  const rightMin = 0;
   const centerMin = document.sections[1].relativeMinWidth ?? 0;
 
   const idealCenter = available - leftW - rightW;
   if (idealCenter >= centerMin - EPSILON) {
+    // Phase 1: center has room, sides stay at authored
     return { widths: [leftW, idealCenter, rightW] };
   }
 
-  const sideAvailable = Math.max(0, available - centerMin);
-  if (sideAvailable === 0) {
-    return { widths: [0, Math.max(0, available), 0] };
+  // Phase 2: center at min, sides shrink proportionally toward 0
+  const sideAvailable = available - centerMin;
+  const totalSide = leftW + rightW;
+  const totalSideMin = 0;
+
+  if (sideAvailable >= -EPSILON) {
+    if (totalSide <= EPSILON) {
+      return { widths: [0, centerMin, 0] };
+    }
+    const t = sideAvailable / totalSide;
+    const leftScaled = leftW * t;
+    const rightScaled = rightW * t;
+    return { widths: [leftScaled, centerMin, rightScaled] };
   }
 
-  const totalSide = leftW + rightW;
-  const factor = sideAvailable / totalSide;
+  // Phase 3: available < centerMin, center and sides below zero impossible, center shrinks
+  const totalMin = centerMin;
+  if (totalMin <= EPSILON) {
+    if (available <= EPSILON) return { widths: [0, 0, 0] };
+    const totalAuthored = leftW + rightW + Math.max(centerMin, idealCenter);
+    const factor = totalAuthored > 0 ? available / totalAuthored : 0;
+    return {
+      widths: [
+        leftW * factor,
+        Math.max(0, available - leftW * factor - rightW * factor),
+        rightW * factor,
+      ],
+    };
+  }
+  const factor = available / totalMin;
   return {
-    widths: [leftW * factor, centerMin, rightW * factor],
+    widths: [leftMin * factor, centerMin * factor, rightMin * factor],
   };
 }
 

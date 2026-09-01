@@ -16,17 +16,45 @@ describe('responsive layout resolver', () => {
   });
 
   it('scales sides proportionally when center would drop below its minimum', () => {
-    // width 710 height 400 => available 1.775, sides 1.8 overflow, centerMin 0.38
-    // sideAvailable = 1.775 - 0.38 = 1.395, factor =1.395/1.8=0.775
-    const allocation = allocateSections(layout, { width: 710, height: 400 });
+    // xbox-default now has no side mins, center min 0. Use synthetic with center 0.38 to test phase 2.
+    // available 1.775 (710/400), left 0.86 right 0.94 centerMin 0.38, side mins 0
+    // sideAvailable 1.395, totalSide 1.8, t=1.395/1.8=0.775
+    const custom: LayoutDocument = {
+      ...layout,
+      sections: [
+        { ...layout.sections[0], relativeWidth: 0.86 },
+        { ...layout.sections[1], relativeWidth: 0.5, relativeMinWidth: 0.38 },
+        { ...layout.sections[2], relativeWidth: 0.94 },
+      ],
+    };
+    const allocation = allocateSections(custom, { width: 710, height: 400 });
     expect(allocation.widths[1]).toBeCloseTo(0.38, 6);
-    const factor = (710 / 400 - 0.38) / (0.86 + 0.94);
-    expect(allocation.widths[0]).toBeCloseTo(0.86 * factor, 6);
-    expect(allocation.widths[2]).toBeCloseTo(0.94 * factor, 6);
-    // total fits viewport
+    const t = 1.395 / 1.8;
+    expect(allocation.widths[0]).toBeCloseTo(0.86 * t, 6);
+    expect(allocation.widths[2]).toBeCloseTo(0.94 * t, 6);
     expect(
       allocation.widths[0] + allocation.widths[1] + allocation.widths[2],
     ).toBeCloseTo(710 / 400, 6);
+  });
+
+  it('shrinks all sections proportionally when total mins overflow', () => {
+    // With side mins 0, overflow only when available < centerMin. Use center 1.5, available 1.2.
+    const custom: LayoutDocument = {
+      ...layout,
+      sections: [
+        { ...layout.sections[0], relativeWidth: 0.86 },
+        { ...layout.sections[1], relativeWidth: 0.5, relativeMinWidth: 1.5 },
+        { ...layout.sections[2], relativeWidth: 0.94 },
+      ],
+    };
+    const allocation = allocateSections(custom, { width: 480, height: 400 });
+    const factor = 1.2 / 1.5;
+    expect(allocation.widths[0]).toBeCloseTo(0, 6);
+    expect(allocation.widths[1]).toBeCloseTo(1.5 * factor, 6);
+    expect(allocation.widths[2]).toBeCloseTo(0, 6);
+    expect(
+      allocation.widths[0] + allocation.widths[1] + allocation.widths[2],
+    ).toBeCloseTo(1.2, 6);
   });
 
   it('resolves centered positions and reference-dimension sizes', () => {

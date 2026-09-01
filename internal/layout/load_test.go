@@ -9,17 +9,15 @@ import (
 )
 
 func baseDoc() Document {
-	minLeft := 0.65
 	minCenter := 0.38
-	minRight := 0.67
 	return Document{
 		ID: "user-layout", Name: "User Layout", SchemaVersion: 1,
 		Sections: []Section{
-			{ID: "left", RelativeWidth: 0.86, RelativeMinWidth: &minLeft, Controls: []Control{{
+			{ID: "left", RelativeWidth: 0.86, Controls: []Control{{
 				ID: "button", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",
 			}}},
 			{ID: "center", RelativeWidth: 0.5, RelativeMinWidth: &minCenter, Controls: []Control{}},
-			{ID: "right", RelativeWidth: 0.94, RelativeMinWidth: &minRight, Controls: []Control{}},
+			{ID: "right", RelativeWidth: 0.94, Controls: []Control{}},
 		},
 	}
 }

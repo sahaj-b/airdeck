@@ -13,16 +13,17 @@ func baseGeometry() Geometry {
 }
 
 func baseSection(id string, width float64) Section {
-	min := 0.65
 	if id == "center" {
-		min = 0.38
+		m := 0.38
+		return Section{
+			ID: id, RelativeWidth: width, RelativeMinWidth: &m,
+			Controls: []Control{{
+				ID: id + "-btn", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",
+			}},
+		}
 	}
-	if id == "right" {
-		min = 0.67
-	}
-	m := min
 	return Section{
-		ID: id, RelativeWidth: width, RelativeMinWidth: &m,
+		ID: id, RelativeWidth: width,
 		Controls: []Control{{
 			ID: id + "-btn", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",
 		}},

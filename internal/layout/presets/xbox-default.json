@@ -6,7 +6,6 @@
     {
       "id": "left",
       "relativeWidth": 0.86,
-      "relativeMinWidth": 0.65,
       "controls": [
         {
           "id": "lt",
@@ -85,7 +84,6 @@
     {
       "id": "center",
       "relativeWidth": 0.5,
-      "relativeMinWidth": 0.38,
       "controls": [
         {
           "id": "back",
@@ -126,7 +124,6 @@
     {
       "id": "right",
       "relativeWidth": 0.94,
-      "relativeMinWidth": 0.67,
       "controls": [
         {
           "id": "rt",

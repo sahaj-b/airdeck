@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
@@ -14,6 +15,7 @@ import {
   DiscardConfirmDialog,
 } from './dialogs/confirm-dialogs';
 import { ForkDialog } from './dialogs/fork-dialog';
+import { LayoutSwitchConfirmDialog } from './dialogs/layout-switch-dialog';
 import { NewLayoutDialog } from './dialogs/new-layout-dialog';
 import { Inspector } from './inspector';
 import { LayoutCanvas } from './layout-canvas';
@@ -35,6 +37,8 @@ export function EditorShell() {
   const leftCollapsed = useEditorStore((s) => s.leftCollapsed);
   const rightCollapsed = useEditorStore((s) => s.rightCollapsed);
   const error = useEditorStore((s) => s.error);
+  const initError = useEditorStore((s) => s.initError);
+  const isInitializing = useEditorStore((s) => s.isInitializing);
   const dirty = useEditorStore((s) => s.dirty);
   const canUndo = useEditorStore((s) => s.history.index > 0);
   const canRedo = useEditorStore(
@@ -47,6 +51,8 @@ export function EditorShell() {
     currentDefault,
     handleDraftChange,
     handleSelectLayout,
+    confirmLayoutSwitch,
+    cancelLayoutSwitch,
     handleOpenPicked,
     handlePickerCancel,
     handleNewLayout,
@@ -73,9 +79,71 @@ export function EditorShell() {
   } = useEditorActions();
 
   if (!draft) {
+    if (initError) {
+      return (
+        <div className="grid min-h-dvh place-items-center bg-background p-6">
+          <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-foreground">
+              Failed to load layout
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {initError}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  window.location.href = '/dashboard';
+                }}
+              >
+                Go back
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.href = '/editor';
+                }}
+              >
+                Open layout editor
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (isInitializing) {
+      return (
+        <div className="grid min-h-dvh place-items-center bg-background p-6">
+          <div className="text-sm text-muted-foreground">Loading layout…</div>
+        </div>
+      );
+    }
     return (
       <div className="grid min-h-dvh place-items-center bg-background p-6">
-        <div className="text-sm text-muted-foreground">Loading layout…</div>
+        <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-foreground">
+            No layout loaded
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            No layouts available. Create one to get started.
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Button
+              onClick={() => {
+                window.location.href = '/dashboard';
+              }}
+            >
+              Go back
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                window.location.href = '/editor';
+              }}
+            >
+              Open layout editor
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -99,7 +167,7 @@ export function EditorShell() {
     <TooltipProvider delay={0}>
       <div className={shellClass}>
         <div className="col-span-full flex flex-col">
-          <div className="border-b border-border bg-background px-4 py-3 max-lg:col-span-1">
+          <div className="border-b border-border bg-background px-4 pt-3 max-lg:col-span-1">
             <LayoutHeader
               layouts={layouts}
               currentId={draft.id}
@@ -222,7 +290,7 @@ export function EditorShell() {
           )}
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background p-2.5 max-lg:p-2 gap-2">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background px-2.5 pb-2.5 max-lg:px-2 max-lg:pb-2 gap-1.5">
           <LayoutCanvas
             document={draft}
             selectedControlId={selectedControlId}
@@ -318,6 +386,10 @@ export function EditorShell() {
         <NewLayoutDialog onCreate={handleCreateNew} />
         <DiscardConfirmDialog onConfirm={confirmDiscard} />
         <BackConfirmDialog onConfirm={confirmBack} />
+        <LayoutSwitchConfirmDialog
+          onConfirm={() => void confirmLayoutSwitch()}
+          onCancel={cancelLayoutSwitch}
+        />
       </div>
     </TooltipProvider>
   );

@@ -139,6 +139,9 @@ func validateSection(section Section) error {
 	if !finite(section.RelativeWidth) || section.RelativeWidth <= 0 || section.RelativeWidth > 4 {
 		return errors.New("relativeWidth is invalid")
 	}
+	if section.ID != "center" && section.RelativeMinWidth != nil {
+		return errors.New("relativeMinWidth is only allowed on center section")
+	}
 	if section.RelativeMinWidth != nil {
 		if !finite(*section.RelativeMinWidth) || *section.RelativeMinWidth <= 0 || *section.RelativeMinWidth > 4 {
 			return errors.New("relativeMinWidth is invalid")

@@ -288,6 +288,18 @@ function SectionFields({
   fieldErrors: Map<string, string>;
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
 }) {
+  const isCenter = section.id === 'center';
+  const controlMin =
+    section.controls.length === 0
+      ? 0.1
+      : Math.max(
+          0.1,
+          Math.max(
+            ...section.controls.map((c) => Math.abs(c.geometry.position.x)),
+          ) *
+            2 +
+            1e-6,
+        );
   const updateWidth = (val: number) => {
     const next = structuredClone(document);
     const s = next.sections.find((candidate) => candidate.id === section.id);
@@ -304,6 +316,55 @@ function SectionFields({
     onDraftChange(next, true);
   };
 
+  if (isCenter) {
+    const leftW = document.sections[0].relativeWidth;
+    const rightW = document.sections[2].relativeWidth;
+    return (
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold text-foreground">
+          Section · center (auto)
+        </h3>
+        <div className="rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5 space-y-3">
+          <div className="flex items-center justify-between gap-2 rounded bg-muted/50 px-2.5 py-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Width
+            </span>
+            <span className="font-mono text-xs text-foreground">auto</span>
+          </div>
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Fills remaining viewport:{' '}
+            <span className="font-mono">
+              viewportWidth − {leftW.toFixed(2)} − {rightW.toFixed(2)}
+            </span>
+          </p>
+          <NumberField
+            label="Min width"
+            labelWidth="w-20"
+            value={section.relativeMinWidth ?? 0}
+            min={controlMin}
+            max={4}
+            step={0.01}
+            note={`min for controls ${controlMin.toFixed(2)} · 0 = no minimum`}
+            error={fieldErrors.get('relativeMinWidth')}
+            onChange={updateMinWidth}
+          />
+          {section.relativeMinWidth !== undefined &&
+            section.relativeMinWidth < controlMin - 1e-9 && (
+              <p className="text-[11px] leading-tight text-amber-600 dark:text-amber-400">
+                Min {section.relativeMinWidth.toFixed(2)} is below control
+                requirement {controlMin.toFixed(2)} — controls may clip on
+                narrow viewports.
+              </p>
+            )}
+        </div>
+        <p className="text-[11px] leading-[1.4] text-muted-foreground">
+          Center width is derived from the viewport and side widths. Set only
+          its minimum.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-semibold text-foreground">Section</h3>
@@ -312,26 +373,23 @@ function SectionFields({
           label="Width"
           labelWidth="w-20"
           value={section.relativeWidth}
-          min={0.1}
+          min={Number(controlMin.toFixed(2))}
           max={4}
           step={0.01}
           error={fieldErrors.get('relativeWidth')}
           onChange={updateWidth}
         />
-        <NumberField
-          label="Min width"
-          labelWidth="w-20"
-          value={section.relativeMinWidth ?? 0}
-          min={0}
-          max={4}
-          step={0.01}
-          note="0 = no minimum"
-          error={fieldErrors.get('relativeMinWidth')}
-          onChange={updateMinWidth}
-        />
+        {section.relativeWidth < controlMin - 1e-9 && (
+          <p className="text-[11px] leading-tight text-destructive">
+            Width {section.relativeWidth.toFixed(2)} is below control limit{' '}
+            {controlMin.toFixed(2)} — controls would be outside. Move the
+            furthest controls inward to shrink further.
+          </p>
+        )}
       </div>
       <p className="text-[11px] leading-[1.4] text-muted-foreground">
-        Width in viewport-height units. Center fills remaining width.
+        Width in viewport-height units. Divider drag stops at the minimum needed
+        to keep controls inside.
       </p>
     </div>
   );

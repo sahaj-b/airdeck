@@ -236,7 +236,45 @@ export function clampResize(
   return clampGeometry(next, section);
 }
 
-// Clamp proposed side width so center keeps its minimum.
+export function getSectionControlMin(section: Section): number {
+  const BASE_MIN = 0.1;
+  if (section.controls.length === 0) return BASE_MIN;
+  const maxAbsX = Math.max(
+    ...section.controls.map((c) => Math.abs(c.geometry.position.x)),
+  );
+  const controlMin = maxAbsX * 2;
+  const epsilon = 1e-6;
+  return Math.max(BASE_MIN, controlMin + epsilon);
+}
+
+export function getSectionConfiguredMin(section: Section): number {
+  if (section.id !== 'center') return 0;
+  return section.relativeMinWidth ?? 0;
+}
+
+export function getSectionMinWidth(section: Section): number {
+  if (section.id !== 'center') return getSectionControlMin(section);
+  return Math.max(
+    getSectionControlMin(section),
+    getSectionConfiguredMin(section),
+  );
+}
+
+export function getBlockingControls(
+  section: Section,
+  width: number,
+): Control[] {
+  const eps = 1e-9;
+  const half = width / 2;
+  return section.controls.filter(
+    (c) => Math.abs(c.geometry.position.x) > half + eps,
+  );
+}
+
+// Clamp proposed side width so the side stays wide enough for its controls.
+// Hard wall is controlMin, no configured min for sides. Sides shrink
+// indefinitely until controls block or viewport edge is hit. Center min
+// is handled in allocateSections, not here.
 export function clampSectionDivider(
   document: LayoutDocument,
   side: 'left' | 'right',
@@ -245,27 +283,36 @@ export function clampSectionDivider(
 ): number {
   const viewportHeight = Math.max(1, viewport.height);
   const available = viewport.width / viewportHeight;
-  const centerMin = document.sections[1].relativeMinWidth ?? 0;
-  const leftCurrent = document.sections[0].relativeWidth;
-  const rightCurrent = document.sections[2].relativeWidth;
-  const otherWidth = side === 'left' ? rightCurrent : leftCurrent;
+  const sideIndex = side === 'left' ? 0 : 2;
+  const otherIndex = side === 'left' ? 2 : 0;
+  const sideSection = document.sections[sideIndex];
 
-  let clamped = Math.max(0.1, Math.min(proposedWidth, available - 0.1));
+  const controlMin = getSectionControlMin(sideSection);
+  const hardMin = controlMin; // absolute floor + control obstacle; configuredMin is soft
+  const MAX = 4;
 
-  const centerWidth = available - clamped - otherWidth;
-  if (centerWidth < centerMin) {
-    clamped = available - otherWidth - centerMin;
-  }
-  if (clamped < 0.1) clamped = 0.1;
-  if (clamped + otherWidth + centerMin > available) {
-    const sideAvailable = Math.max(0, available - centerMin);
-    const totalSide = clamped + otherWidth;
-    if (totalSide > 0) {
-      const factor = sideAvailable / totalSide;
-      clamped = clamped * factor;
+  let clamped = Math.min(Math.max(proposedWidth, hardMin), MAX);
+
+  // Viewport soft cap: keep a sliver for center/other so preview
+  // divider never vanishes. This is not the section "minimum" —
+  // it's just viewport visibility. It respects the hard control wall.
+  if (Number.isFinite(available) && available > 0) {
+    const minVisible = 0.1;
+    const maxByViewport = available - minVisible;
+    // don't let one side consume the whole viewport
+    if (maxByViewport >= hardMin) {
+      clamped = Math.min(clamped, maxByViewport);
+    }
+    // keep at least 0.1 for the other side + center sliver
+    const otherWidth = document.sections[otherIndex].relativeWidth;
+    const maxByOther = available - otherWidth - minVisible;
+    if (Number.isFinite(maxByOther) && maxByOther >= hardMin) {
+      // only cap if it wouldn't force below the control wall
+      clamped = Math.min(clamped, maxByOther);
     }
   }
-  return Math.max(0, clamped);
+
+  return Math.min(Math.max(clamped, hardMin), MAX);
 }
 
 export function updateSectionWidth(

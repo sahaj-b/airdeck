@@ -8,7 +8,9 @@ import {
   clampSectionDivider,
   findControl,
   getBindingLabel,
+  getBlockingControls,
   getHitzonesOf,
+  getSectionControlMin,
   isDefaultLocked,
   LayoutHistory,
   moveParentWithHitzones,
@@ -163,11 +165,21 @@ describe('layout-editor helpers', () => {
     expect(leftClamped).toBeLessThan(viewport.width / viewport.height);
     const rightClamped = clampSectionDivider(base, 'right', -1, viewport);
     expect(rightClamped).toBeGreaterThan(0);
+    // hard wall is control blocking, not configured minimum — divider may go
+    // below configuredMin (soft), but never below controlMin
+    const leftControlMin = getSectionControlMin(base.sections[0]);
+    const rightControlMin = getSectionControlMin(base.sections[2]);
+    expect(leftClamped).toBeGreaterThanOrEqual(leftControlMin - 0.01);
+    expect(rightClamped).toBeGreaterThanOrEqual(rightControlMin - 0.01);
+    // configuredMin is soft — no hard assertion, but ensure we didn't go below controlMin
+    expect(getBlockingControls(base.sections[0], leftClamped).length).toBe(0);
 
     const narrow = { width: 300, height: 500 };
     const narrowLeft = clampSectionDivider(base, 'left', 1, narrow);
     expect(narrowLeft).toBeGreaterThan(0);
-    expect(narrowLeft).toBeLessThan(narrow.width / narrow.height);
+    // narrow viewport keeps at least controlMin, viewport cap keeps it visible
+    expect(narrowLeft).toBeGreaterThanOrEqual(leftControlMin - 0.01);
+    expect(narrowLeft).toBeLessThan(narrow.width / narrow.height + 0.01);
   });
 
   it('exposes dual Xbox/PlayStation binding labels and pixel conversion', () => {

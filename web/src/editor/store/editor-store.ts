@@ -40,9 +40,13 @@ export interface EditorStoreState {
   newLayoutError: string | null;
   discardOpen: boolean;
   backOpen: boolean;
+  layoutSwitchOpen: boolean;
+  pendingLayoutId: string | null;
   leftCollapsed: boolean;
   rightCollapsed: boolean;
   error: string | null;
+  initError: string | null;
+  isInitializing: boolean;
 
   history: HistoryState;
 
@@ -52,6 +56,8 @@ export interface EditorStoreState {
   setDraft: (doc: LayoutDocument | null) => void;
   setPersisted: (doc: LayoutDocument | null) => void;
   setError: (error: string | null) => void;
+  setInitError: (error: string | null) => void;
+  setIsInitializing: (value: boolean) => void;
 
   // selection
   setSelectedControlId: (id: string | null) => void;
@@ -77,6 +83,8 @@ export interface EditorStoreState {
   setNewLayoutError: (error: string | null) => void;
   setDiscardOpen: (open: boolean) => void;
   setBackOpen: (open: boolean) => void;
+  setLayoutSwitchOpen: (open: boolean) => void;
+  setPendingLayoutId: (id: string | null) => void;
   setLeftCollapsed: (collapsed: boolean) => void;
   setRightCollapsed: (collapsed: boolean) => void;
 
@@ -143,9 +151,13 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   newLayoutError: null,
   discardOpen: false,
   backOpen: false,
+  layoutSwitchOpen: false,
+  pendingLayoutId: null,
   leftCollapsed: readCollapsed('airdeck.editor.leftCollapsed'),
   rightCollapsed: readCollapsed('airdeck.editor.rightCollapsed'),
   error: null,
+  initError: null,
+  isInitializing: true,
   history: { stack: [], index: -1, cap: 50 },
 
   setLayouts: (layouts) => set({ layouts }),
@@ -153,6 +165,8 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   setDraft: (draft) => set({ draft }),
   setPersisted: (persisted) => set({ persisted }),
   setError: (error) => set({ error }),
+  setInitError: (initError) => set({ initError }),
+  setIsInitializing: (isInitializing) => set({ isInitializing }),
 
   setSelectedControlId: (selectedControlId) => set({ selectedControlId }),
   setSelectedSectionId: (selectedSectionId) => set({ selectedSectionId }),
@@ -180,6 +194,8 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   setNewLayoutError: (newLayoutError) => set({ newLayoutError }),
   setDiscardOpen: (discardOpen) => set({ discardOpen }),
   setBackOpen: (backOpen) => set({ backOpen }),
+  setLayoutSwitchOpen: (layoutSwitchOpen) => set({ layoutSwitchOpen }),
+  setPendingLayoutId: (pendingLayoutId) => set({ pendingLayoutId }),
   setLeftCollapsed: (leftCollapsed) => {
     writeCollapsed('airdeck.editor.leftCollapsed', leftCollapsed);
     set({ leftCollapsed });
@@ -302,6 +318,8 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
       selectedSectionId: null,
       locks: {},
       error: null,
+      initError: null,
+      isInitializing: false,
     });
   },
 }));

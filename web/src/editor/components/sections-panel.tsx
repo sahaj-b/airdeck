@@ -11,7 +11,7 @@ import type {
   Control,
   Document as LayoutDocument,
 } from '@/shared/generated/layout';
-import { getHitzonesOf } from '@/shared/layout-editor';
+import { getHitzonesOf, getSectionControlMin } from '@/shared/layout-editor';
 
 export interface SectionsPanelProps {
   document: LayoutDocument;
@@ -265,6 +265,9 @@ const SectionCard = memo(function SectionCard({
   const count = section.controls.length;
   const isSectionSelected =
     selectedSectionId === section.id && !selectedControlId;
+  const controlMin = getSectionControlMin(section);
+  const isBlockedByControls = section.relativeWidth <= controlMin + 0.001;
+  const isCenter = section.id === 'center';
 
   const parentHintMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -319,8 +322,39 @@ const SectionCard = memo(function SectionCard({
         <span className="text-[13px] font-medium capitalize text-foreground">
           {section.id}
         </span>
-        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-          w {section.relativeWidth.toFixed(2)}
+        <span
+          className={cn(
+            'rounded px-1.5 py-0.5 font-mono text-[10px]',
+            isCenter
+              ? 'bg-muted text-muted-foreground'
+              : isBlockedByControls
+                ? 'bg-muted text-muted-foreground border border-border'
+                : 'bg-muted text-muted-foreground',
+          )}
+          title={
+            isCenter
+              ? 'Center fills remaining width (auto)'
+              : isBlockedByControls
+                ? (() => {
+                    const maxAbsX = Math.max(
+                      ...section.controls.map((c) =>
+                        Math.abs(c.geometry.position.x),
+                      ),
+                    );
+                    const limiting = section.controls.filter(
+                      (c) => Math.abs(c.geometry.position.x) >= maxAbsX - 0.005,
+                    );
+                    const names = limiting
+                      .map((c) => c.label || c.id)
+                      .slice(0, 2)
+                      .join(', ');
+                    return `Blocked by ${names}. Move controls inward`;
+                  })()
+                : `Controls need ${controlMin.toFixed(2)}`
+          }
+        >
+          {isCenter ? 'auto' : `w ${section.relativeWidth.toFixed(2)}`}
+          {isBlockedByControls && !isCenter && ' · blocked'}
         </span>
       </button>
 

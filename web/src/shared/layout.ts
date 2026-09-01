@@ -161,7 +161,12 @@ export function getValidationErrors(value: unknown): ValidationError[] {
         path: `/sections/${section.id}/relativeWidth`,
         message: 'relativeWidth is invalid',
       });
-    if (
+    if (section.id !== 'center' && section.relativeMinWidth !== undefined)
+      errors.push({
+        path: `/sections/${section.id}/relativeMinWidth`,
+        message: 'relativeMinWidth is only allowed on center section',
+      });
+    else if (
       section.relativeMinWidth !== undefined &&
       (!finitePositive(section.relativeMinWidth) ||
         section.relativeMinWidth > 4)
@@ -378,6 +383,8 @@ export function parseLayoutDocument(value: unknown): LayoutParseResult {
 
 function validSection(section: Section): boolean {
   if (!finitePositive(section.relativeWidth) || section.relativeWidth > 4)
+    return false;
+  if (section.id !== 'center' && section.relativeMinWidth !== undefined)
     return false;
   if (section.relativeMinWidth !== undefined) {
     if (

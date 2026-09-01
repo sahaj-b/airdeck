@@ -103,7 +103,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
   };
 
   return (
-    <header className="editor-header flex flex-wrap items-center gap-2 border-b border-border pb-3">
+    <header className="editor-header flex flex-wrap items-center gap-2">
       {/* Group 1: Back | Layout Select */}
       <div className="editor-header__group">
         <Tooltip>

@@ -21,6 +21,7 @@ import {
 } from '@/shared/layout-editor';
 import type { AddControlResult } from '../components/add-control-dialog';
 import { useEditorStore } from '../store/editor-store';
+import { suppressNextBeforeUnload } from './use-before-unload';
 
 export function useEditorActions() {
   const draft = useEditorStore((s) => s.draft);
@@ -100,7 +101,7 @@ export function useEditorActions() {
     [applyCommit],
   );
 
-  const handleSelectLayout = useCallback(async (id: string): Promise<void> => {
+  const switchToLayout = useCallback(async (id: string): Promise<void> => {
     try {
       const doc = await getAdminLayout(id);
       const cloned = cloneDocument(doc as LayoutDocument);
@@ -112,6 +113,32 @@ export function useEditorActions() {
     } catch {
       useEditorStore.getState().setError('Failed to load layout.');
     }
+  }, []);
+
+  const handleSelectLayout = useCallback(
+    async (id: string): Promise<void> => {
+      if (id === useEditorStore.getState().draft?.id) return;
+      if (useEditorStore.getState().dirty) {
+        useEditorStore.getState().setPendingLayoutId(id);
+        useEditorStore.getState().setLayoutSwitchOpen(true);
+        return;
+      }
+      await switchToLayout(id);
+    },
+    [switchToLayout],
+  );
+
+  const confirmLayoutSwitch = useCallback(async (): Promise<void> => {
+    const id = useEditorStore.getState().pendingLayoutId;
+    useEditorStore.getState().setLayoutSwitchOpen(false);
+    useEditorStore.getState().setPendingLayoutId(null);
+    if (!id) return;
+    await switchToLayout(id);
+  }, [switchToLayout]);
+
+  const cancelLayoutSwitch = useCallback((): void => {
+    useEditorStore.getState().setLayoutSwitchOpen(false);
+    useEditorStore.getState().setPendingLayoutId(null);
   }, []);
 
   const handleOpenPicked = useCallback(
@@ -224,6 +251,7 @@ export function useEditorActions() {
   }, []);
 
   const confirmBack = useCallback((): void => {
+    suppressNextBeforeUnload();
     window.location.href = '/dashboard';
   }, []);
 
@@ -454,6 +482,8 @@ export function useEditorActions() {
     dirty,
     handleDraftChange,
     handleSelectLayout,
+    confirmLayoutSwitch,
+    cancelLayoutSwitch,
     handleOpenPicked,
     handlePickerCancel,
     handleNewLayout,

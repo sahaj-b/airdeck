@@ -38,14 +38,6 @@
   overflow: visible;
 }
 
-.editor-scaled__clip {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: 10px;
-  pointer-events: none;
-}
-
 .dark .editor-canvas {
   background: var(--background);
   border-color: color-mix(in oklch, var(--border) 80%, transparent);
@@ -286,42 +278,6 @@
   right: -4px;
 }
 
-.editor-link-indicator {
-  position: absolute;
-  top: -30px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  background: var(--popover);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 11px;
-  color: var(--popover-foreground);
-  pointer-events: auto;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
-}
-
-.editor-link-toggle {
-  border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--foreground);
-  cursor: pointer;
-}
-
-.editor-hitonly-badge {
-  position: absolute;
-  bottom: -18px;
-  left: 0;
-  font-size: 10px;
-  color: var(--muted-foreground);
-}
-
 /* Section dividers between the three fixed sections */
 .editor-section-divider {
   position: absolute;
@@ -352,25 +308,6 @@
   border-left-style: dashed;
   background: transparent;
   box-shadow: none;
-}
-
-.editor-section-label {
-  position: absolute;
-  z-index: 1;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  background: color-mix(in oklch, var(--popover) 90%, transparent);
-  backdrop-filter: blur(8px);
-  font-size: 9px;
-  color: var(--muted-foreground);
-  cursor: pointer;
-}
-
-.editor-section-label:hover {
-  color: var(--foreground);
-  border-color: var(--editor-accent);
-  background: var(--popover);
 }
 
 .editor-section-hover {
@@ -417,8 +354,8 @@
 .editor-section-chip--selected {
   background: var(--editor-accent);
   border-color: var(--editor-accent);
-  color: white;
-  opacity: 0.88;
+  color: #0f0f14;
+  opacity: 1;
 }
 
 /* Viewport edge handles to resize the preview viewport */
@@ -450,12 +387,13 @@
 .editor-handle-corner {
   right: -6px;
   bottom: -6px;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   cursor: nwse-resize;
+  z-index: 6;
   background: var(--editor-accent);
   border: none;
-  border-radius: 2px;
+  border-radius: 3px;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
 }
 
@@ -520,4 +458,17 @@
   .editor-header .header-btn-compact {
     padding-inline: 8px;
   }
+}
+
+/* Excalidraw-style Space-to-pan: grab when Space held, grabbing while dragging.
+   Placed last so it overrides the per-control grab/resize cursors. */
+.editor-canvas--space {
+  cursor: grab;
+}
+.editor-canvas--space:active {
+  cursor: grabbing;
+}
+.editor-canvas--panning,
+.editor-canvas--panning * {
+  cursor: grabbing;
 }

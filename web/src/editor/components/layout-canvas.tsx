@@ -1,5 +1,14 @@
 import interact from 'interactjs';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Hand, Mouse } from 'lucide-react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -26,11 +35,11 @@ import {
   clampSectionDivider,
   findControl,
   getHitzonesOf,
+  getSectionControlMin,
   isDefaultLocked,
   moveParentWithHitzones,
   resizeControl,
   updateControlGeometry,
-  updateSectionWidth,
 } from '@/shared/layout-editor';
 import { useInteractGeometry } from '../use-interact-geometry';
 import { ControlOverlay } from './control-overlay';
@@ -58,6 +67,11 @@ const VIEWPORT_MIN_W = 320;
 const VIEWPORT_MAX_W = 1400;
 const VIEWPORT_MIN_H = 320;
 const VIEWPORT_MAX_H = 1400;
+
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 6;
+const ZOOM_STEP = 1.2;
+const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 
 export interface LayoutCanvasProps {
   document: LayoutDocument;
@@ -88,12 +102,31 @@ export function LayoutCanvas({
 }: LayoutCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
+  const scaledRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RenderedLayout | null>(null);
   const selectedRef = useRef<HTMLDivElement>(null);
   const latestRef = useRef<LayoutDocument>(document);
   latestRef.current = document;
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   const [viewport, setViewport] = useState({ width: 844, height: 390 });
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const spaceHeldRef = useRef(spaceHeld);
+  spaceHeldRef.current = spaceHeld;
+  const [panning, setPanning] = useState(false);
+  const panningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, sl: 0, st: 0 });
+  const pendingZoomAnchorRef = useRef<{
+    clientX: number;
+    clientY: number;
+    ax: number;
+    ay: number;
+    k: number;
+    preScrollLeft: number;
+    preScrollTop: number;
+  } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -106,7 +139,7 @@ export function LayoutCanvas({
     return () => observer.disconnect();
   }, []);
 
-  const scale = useMemo(() => {
+  const fitScale = useMemo(() => {
     if (available.width === 0 || available.height === 0) return 1;
     return Math.min(
       available.width / viewport.width,
@@ -114,6 +147,7 @@ export function LayoutCanvas({
     );
   }, [available, viewport]);
 
+  const scale = fitScale * zoom;
   const pixelViewport = useMemo(
     () => ({ width: viewport.width * scale, height: viewport.height * scale }),
     [viewport, scale],
@@ -155,6 +189,167 @@ export function LayoutCanvas({
     },
     [],
   );
+
+  // Zoom to an absolute multiplier, anchored so the content point under
+  // (clientX, clientY) stays fixed. The scroll correction is applied in the
+  // useLayoutEffect below after the re-resolved box has painted.
+  const applyZoom = useCallback(
+    (targetZoom: number, clientX: number, clientY: number): void => {
+      const el = containerRef.current;
+      const scaledEl = scaledRef.current;
+      if (!el || !scaledEl) return;
+      const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, targetZoom));
+      const oldZoom = zoomRef.current;
+      if (Math.abs(nextZoom - oldZoom) < 1e-4) {
+        setZoom(nextZoom);
+        return;
+      }
+      const preRect = scaledEl.getBoundingClientRect();
+      pendingZoomAnchorRef.current = {
+        clientX,
+        clientY,
+        ax: clientX - preRect.left,
+        ay: clientY - preRect.top,
+        k: nextZoom / oldZoom,
+        preScrollLeft: el.scrollLeft,
+        preScrollTop: el.scrollTop,
+      };
+      setZoom(nextZoom);
+    },
+    [],
+  );
+
+  const zoomAtCenter = useCallback(
+    (factor: number): void => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      applyZoom(
+        zoomRef.current * factor,
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+    },
+    [applyZoom],
+  );
+
+  // Wheel = zoom (pointer-anchored); Space+drag = pan (Excalidraw-style).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault();
+      let delta = event.deltaY;
+      if (event.deltaMode === 1) delta *= 16;
+      else if (event.deltaMode === 2) delta *= el.clientHeight;
+      const factor = Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY);
+      applyZoom(zoomRef.current * factor, event.clientX, event.clientY);
+    };
+
+    const onPointerDown = (event: PointerEvent): void => {
+      if (!spaceHeldRef.current) return;
+      panningRef.current = true;
+      setPanning(true);
+      panStartRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        sl: el.scrollLeft,
+        st: el.scrollTop,
+      };
+      event.preventDefault();
+      event.stopPropagation();
+      el.setPointerCapture(event.pointerId);
+    };
+    const onPointerMove = (event: PointerEvent): void => {
+      if (!panningRef.current) return;
+      el.scrollLeft =
+        panStartRef.current.sl - (event.clientX - panStartRef.current.x);
+      el.scrollTop =
+        panStartRef.current.st - (event.clientY - panStartRef.current.y);
+    };
+    const endPan = (event: PointerEvent): void => {
+      if (!panningRef.current) return;
+      panningRef.current = false;
+      setPanning(false);
+      if (el.hasPointerCapture(event.pointerId)) {
+        el.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('pointerdown', onPointerDown, { capture: true });
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', endPan);
+    el.addEventListener('pointercancel', endPan);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', endPan);
+      el.removeEventListener('pointercancel', endPan);
+    };
+  }, [applyZoom]);
+
+  // Hold Space to enter grab mode (ignore while typing in inputs).
+  useEffect(() => {
+    const isEditable = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        Boolean(target.closest('[contenteditable="true"]'))
+      );
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space') return;
+      if (isEditable(event.target)) {
+        setSpaceHeld(false);
+        return;
+      }
+      if (!event.repeat) {
+        setSpaceHeld(true);
+        event.preventDefault();
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space') return;
+      setSpaceHeld(false);
+    };
+    const onBlur = (): void => setSpaceHeld(false);
+    // Capture phase so Space wins even when a selected control button is
+    // focused (its own onKeyDown calls stopPropagation for Space).
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    window.addEventListener('keyup', onKeyUp, { capture: true });
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+      window.removeEventListener('keyup', onKeyUp, { capture: true });
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+
+  // Restore the pointer anchor after a zoom re-renders the scaled box.
+  useLayoutEffect(() => {
+    const pending = pendingZoomAnchorRef.current;
+    if (!pending) return;
+    pendingZoomAnchorRef.current = null;
+    const el = containerRef.current;
+    const scaledEl = scaledRef.current;
+    if (!el || !scaledEl) return;
+    const postRect = scaledEl.getBoundingClientRect();
+    el.scrollLeft =
+      pending.preScrollLeft +
+      (postRect.left + pending.ax * pending.k) -
+      pending.clientX;
+    el.scrollTop =
+      pending.preScrollTop +
+      (postRect.top + pending.ay * pending.k) -
+      pending.clientY;
+  }, [zoom]);
 
   const selectedControl = selectedControlId
     ? findControl(document, selectedControlId)?.control
@@ -264,9 +459,9 @@ export function LayoutCanvas({
   const viewportSizeLabel = `${Math.round(viewport.width)} × ${Math.round(viewport.height)}`;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background gap-2">
-      <div className="flex flex-wrap items-center gap-3 rounded-[10px] border bg-card p-2 px-2.5 min-h-11 max-lg:gap-2 max-lg:p-1.5">
-        <div className="flex flex-1 min-w-[160px] items-center gap-3">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background gap-1.5">
+      <div className="mt-1.5 flex min-h-9 items-stretch overflow-hidden rounded-[10px] border bg-card">
+        <div className="flex min-w-[150px] flex-1 items-center gap-2.5 px-2">
           <ViewportSlider
             label="W"
             value={viewport.width}
@@ -282,53 +477,60 @@ export function LayoutCanvas({
             onChange={(height) => setViewport((v) => ({ ...v, height }))}
           />
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {PRESETS.map((preset) => (
-            <Tooltip key={preset.id}>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant={
-                      viewport.width === preset.width &&
-                      viewport.height === preset.height
-                        ? 'default'
-                        : 'outline'
-                    }
-                    size="sm"
-                    className="h-7 px-2.5 text-xs"
-                    onClick={() =>
-                      setViewport({
-                        width: preset.width,
-                        height: preset.height,
-                      })
-                    }
-                    aria-pressed={
-                      viewport.width === preset.width &&
-                      viewport.height === preset.height
-                    }
-                  >
-                    {preset.label}
-                  </Button>
-                }
-              />
-              <TooltipContent side="top" className="flex items-center gap-1.5">
-                <span className="font-medium">{preset.fullName}</span>
-                <span className="text-muted-foreground">
-                  {preset.width}×{preset.height}
-                </span>
-              </TooltipContent>
-            </Tooltip>
-          ))}
+        <div className="flex shrink-0 items-stretch">
+          {PRESETS.map((preset) => {
+            const isActive =
+              viewport.width === preset.width &&
+              viewport.height === preset.height;
+            return (
+              <Tooltip key={preset.id}>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className={cn(
+                        'grid min-w-[46px] place-items-center border-l border-border/70 px-2.5 text-xs font-medium transition-colors hover:cursor-pointer hover:bg-muted',
+                        isActive
+                          ? 'bg-muted text-foreground'
+                          : 'text-muted-foreground',
+                      )}
+                      onClick={() =>
+                        setViewport({
+                          width: preset.width,
+                          height: preset.height,
+                        })
+                      }
+                      aria-pressed={isActive}
+                    >
+                      {preset.label}
+                    </button>
+                  }
+                />
+                <TooltipContent
+                  side="top"
+                  className="flex items-center gap-1.5"
+                >
+                  <span className="font-medium">{preset.fullName}</span>
+                  <span className="text-muted-foreground">
+                    {preset.width}×{preset.height}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         </div>
-        <span className="ml-auto font-mono text-xs font-medium tracking-wide text-muted-foreground whitespace-nowrap">
+        <span className="flex items-center border-l border-border/70 px-2 font-mono text-xs font-medium tracking-wide text-muted-foreground whitespace-nowrap">
           {viewportSizeLabel}
         </span>
       </div>
 
       <div
         ref={containerRef}
-        className="editor-canvas"
+        className={cn(
+          'editor-canvas',
+          spaceHeld && 'editor-canvas--space',
+          panning && 'editor-canvas--panning',
+        )}
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) {
             onSelectControl(null);
@@ -337,6 +539,7 @@ export function LayoutCanvas({
         }}
       >
         <div
+          ref={scaledRef}
           className="editor-scaled"
           style={{ width: pixelViewport.width, height: pixelViewport.height }}
           onPointerDown={(event) => {
@@ -344,7 +547,6 @@ export function LayoutCanvas({
             if (target.closest('.editor-control-hit')) return;
             if (target.closest('.editor-section-divider')) return;
             if (target.closest('.editor-viewport-handle')) return;
-            if (target.closest('.editor-section-label')) return;
             if (target.closest('.editor-section-chip')) return;
             onSelectControl(null);
             onSelectSection(null);
@@ -385,6 +587,8 @@ export function LayoutCanvas({
                     scale={scale}
                     x={dividerX}
                     onDraftChange={onDraftChange}
+                    onSelectSection={onSelectSection}
+                    onSelectControl={onSelectControl}
                   />
                 )}
               </div>
@@ -462,6 +666,80 @@ export function LayoutCanvas({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5 rounded-[10px] border bg-card px-2 py-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={() => zoomAtCenter(1 / ZOOM_STEP)}
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          −
+        </Button>
+        <div className="w-36 shrink-0">
+          <Slider
+            className="w-full"
+            value={Math.round(zoom * 100)}
+            min={ZOOM_MIN * 100}
+            max={ZOOM_MAX * 100}
+            step={1}
+            onValueChange={(v: number | readonly number[]) => {
+              const next = Array.isArray(v) ? v[0] : v;
+              if (typeof next !== 'number') return;
+              const el = containerRef.current;
+              if (!el) return;
+              const rect = el.getBoundingClientRect();
+              applyZoom(
+                next / 100,
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+              );
+            }}
+          />
+        </div>
+        <span className="w-10 shrink-0 text-right text-[11px] font-medium tabular-nums text-muted-foreground">
+          {Math.round(zoom * 100)}%
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={() => zoomAtCenter(ZOOM_STEP)}
+          aria-label="Zoom in"
+          title="Zoom in"
+        >
+          +
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-[11px]"
+          onClick={() => {
+            const el = containerRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            applyZoom(
+              1,
+              rect.left + rect.width / 2,
+              rect.top + rect.height / 2,
+            );
+          }}
+        >
+          Fit
+        </Button>
+        <div className="ml-auto flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Mouse className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="whitespace-nowrap">Scroll to zoom</span>
+          <span className="opacity-60">·</span>
+          <Hand className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="whitespace-nowrap">Space to pan</span>
         </div>
       </div>
     </section>
@@ -672,6 +950,8 @@ function SectionDivider({
   scale,
   x,
   onDraftChange,
+  onSelectSection,
+  onSelectControl,
 }: {
   side: 'left' | 'right';
   document: LayoutDocument;
@@ -679,6 +959,8 @@ function SectionDivider({
   scale: number;
   x: number;
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
+  onSelectSection: (id: string | null) => void;
+  onSelectControl: (id: string | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const startRef = useRef(0);
@@ -688,11 +970,20 @@ function SectionDivider({
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onDraftChangeRef = useRef(onDraftChange);
+  const onSelectSectionRef = useRef(onSelectSection);
+  const onSelectControlRef = useRef(onSelectControl);
   documentRef.current = document;
   viewportRef.current = viewport;
   scaleRef.current = scale;
   onDraftChangeRef.current = onDraftChange;
+  onSelectSectionRef.current = onSelectSection;
+  onSelectControlRef.current = onSelectControl;
   startScaleRef.current = scale;
+
+  const sideSection = document.sections[side === 'left' ? 0 : 2];
+  const controlMin = getSectionControlMin(sideSection);
+  const currentWidth = sideSection.relativeWidth;
+  const isBlockedByControls = currentWidth <= controlMin + 0.001;
 
   useEffect(() => {
     const el = ref.current;
@@ -709,6 +1000,8 @@ function SectionDivider({
           startRef.current = section?.relativeWidth ?? 0;
           startScaleRef.current = scaleRef.current;
           accRef.current = 0;
+          onSelectSectionRef.current(side);
+          onSelectControlRef.current(null);
         },
         move(event: { dx: number }) {
           accRef.current += event.dx;
@@ -725,7 +1018,20 @@ function SectionDivider({
             proposed,
             vp,
           );
-          const next = updateSectionWidth(documentRef.current, side, clamped);
+          const clampedDelta =
+            side === 'left'
+              ? clamped - startRef.current
+              : startRef.current - clamped;
+          const clampedAcc =
+            clampedDelta * startScaleRef.current * Math.max(1, vp.height);
+          if (Math.abs(clamped - proposed) > 1e-9) {
+            accRef.current = clampedAcc;
+          }
+          const next = structuredClone(
+            documentRef.current,
+          ) as typeof documentRef.current;
+          const sec = next.sections.find((s) => s.id === side);
+          if (sec) sec.relativeWidth = clamped;
           documentRef.current = next;
           onDraftChangeRef.current(next, false);
         },
@@ -736,6 +1042,20 @@ function SectionDivider({
     });
     return () => instance.unset();
   }, [side]);
+
+  let tooltipText: string;
+  if (isBlockedByControls) {
+    const maxAbsX = Math.max(
+      ...sideSection.controls.map((c) => Math.abs(c.geometry.position.x)),
+    );
+    const limiting = sideSection.controls.filter(
+      (c) => Math.abs(c.geometry.position.x) >= maxAbsX - 0.005,
+    );
+    const name = limiting[0]?.label || limiting[0]?.id || 'control';
+    tooltipText = `Can't shrink, ${name} is in the way`;
+  } else {
+    tooltipText = 'Drag to resize';
+  }
 
   return (
     <Tooltip>
@@ -749,7 +1069,7 @@ function SectionDivider({
           />
         }
       />
-      <TooltipContent side="top">Drag to resize {side} section</TooltipContent>
+      <TooltipContent side="top">{tooltipText}</TooltipContent>
     </Tooltip>
   );
 }
