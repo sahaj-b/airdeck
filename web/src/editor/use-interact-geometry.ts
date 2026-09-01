@@ -31,6 +31,7 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
   const viewportHeightRef = useRef(options.viewportHeight);
   const scaleRef = useRef(options.scale);
   const edgesRef = useRef(options.edges);
+  const shiftHeldRef = useRef(false);
   useEffect(() => {
     onDragRef.current = options.onDrag;
   }, [options.onDrag]);
@@ -58,6 +59,23 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
   useEffect(() => {
     edgesRef.current = options.edges;
   }, [options.edges]);
+
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => {
+      shiftHeldRef.current = event.shiftKey;
+    };
+    const clear = () => {
+      shiftHeldRef.current = false;
+    };
+    window.addEventListener('keydown', update);
+    window.addEventListener('keyup', update);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', update);
+      window.removeEventListener('keyup', update);
+      window.removeEventListener('blur', clear);
+    };
+  }, []);
 
   useEffect(() => {
     const element = options.targetRef.current;
@@ -97,7 +115,11 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
             ? getScaleRef.current()
             : scaleRef.current || 1;
           const vh = Math.max(1, viewportHeightRef.current);
-          const locked = lockedRef.current;
+          const baseLocked = lockedRef.current;
+          const shiftLocked = shiftHeldRef.current;
+          const eventShift =
+            (event as unknown as { shiftKey?: boolean }).shiftKey ?? false;
+          const locked = baseLocked || shiftLocked || eventShift;
           const deltaWidth = event.deltaRect.width / scale / vh;
           const deltaHeight = event.deltaRect.height / scale / vh;
           onResizeRef.current(deltaWidth, deltaHeight, locked);

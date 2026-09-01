@@ -1,4 +1,4 @@
-import { Pencil } from 'lucide-react';
+import { Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { buttonVariants } from '../../components/ui/button-variants';
@@ -15,7 +15,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
 import { Switch } from '../../components/ui/switch';
@@ -213,6 +212,9 @@ function LayoutCard({
   onApplyLayoutToAll: (id: string) => void;
   onReloadLayouts: () => void;
 }) {
+  const defaultLabel =
+    layouts.find((layout) => layout.id === defaultLayout)?.name ??
+    defaultLayout;
   return (
     <Card>
       <CardHeader>
@@ -226,7 +228,9 @@ function LayoutCard({
             </Label>
             <Select value={defaultLayout} onValueChange={onLayoutChange}>
               <SelectTrigger id="default-layout" className="ml-auto w-[200px]">
-                <SelectValue placeholder="Select layout" />
+                <span className="flex-1 truncate text-left text-sm">
+                  {defaultLabel || 'Select layout'}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {layouts.map((layout) => (
@@ -268,8 +272,9 @@ function LayoutCard({
             type="button"
             variant="outline"
             onClick={onReloadLayouts}
-            className="flex-1 justify-center"
+            className="flex-1 justify-center gap-1.5"
           >
+            <RefreshCw className="size-3.5" />
             Reload layouts
           </Button>
         </div>

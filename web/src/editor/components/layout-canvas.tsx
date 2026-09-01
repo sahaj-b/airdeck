@@ -340,6 +340,7 @@ export function LayoutCanvas({
             if (target.closest('.editor-section-divider')) return;
             if (target.closest('.editor-viewport-handle')) return;
             if (target.closest('.editor-section-label')) return;
+            if (target.closest('.editor-section-chip')) return;
             onSelectControl(null);
             onSelectSection(null);
           }}

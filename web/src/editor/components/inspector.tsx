@@ -1,11 +1,4 @@
-import {
-  Copy,
-  Lock,
-  PanelRightClose,
-  Plus,
-  Trash2,
-  Unlock,
-} from 'lucide-react';
+import { Copy, Lock, PanelRightClose, Trash2, Unlock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
@@ -18,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
@@ -96,8 +88,8 @@ export function Inspector({
   }, [errors, selectedControl, selectedSectionId]);
 
   return (
-    <section className="flex min-h-0 w-full flex-col gap-4 bg-transparent p-2 overflow-y-auto overscroll-contain">
-      <div className="mb-3 flex items-center gap-2">
+    <section className="flex min-h-0 w-full flex-col gap-3 bg-transparent p-2 overflow-y-auto overscroll-contain">
+      <div className="flex items-center gap-2 pb-1">
         {onCollapse && (
           <Tooltip>
             <TooltipTrigger
@@ -177,7 +169,7 @@ export function Inspector({
       </div>
 
       {relevantErrors.length > 0 && (
-        <div className="mb-3 space-y-1 rounded-md border border-destructive/20 bg-destructive/10 px-2.5 py-2">
+        <div className="space-y-1 rounded-md border border-destructive/20 bg-destructive/10 px-2.5 py-2">
           {relevantErrors.map((error) => (
             <p
               key={error.path + error.message}
@@ -195,7 +187,9 @@ export function Inspector({
       )}
 
       <div className="space-y-5">
-        <DocumentMeta document={document} onDraftChange={onDraftChange} />
+        {!control && !section && (
+          <DocumentMeta document={document} onDraftChange={onDraftChange} />
+        )}
 
         {section && !control && (
           <SectionFields
@@ -209,6 +203,7 @@ export function Inspector({
         {control && section && (
           <ControlFields
             control={control}
+            section={section}
             document={document}
             fieldErrors={fieldErrors}
             locks={locks}
@@ -308,7 +303,7 @@ function SectionFields({
   };
 
   return (
-    <div className="space-y-3 border-t border-border pt-4">
+    <div className="space-y-3">
       <h3 className="text-xs font-semibold text-foreground">Section</h3>
       <div className="rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5 space-y-3">
         <NumberField
@@ -342,6 +337,7 @@ function SectionFields({
 
 function ControlFields({
   control,
+  section,
   document,
   fieldErrors,
   locks,
@@ -350,6 +346,7 @@ function ControlFields({
   onAddHitfill,
 }: {
   control: Control;
+  section: Section;
   document: LayoutDocument;
   fieldErrors: Map<string, string>;
   locks: Record<string, boolean>;
@@ -384,32 +381,72 @@ function ControlFields({
         : '—';
     const isSame =
       binding !== '—' && parent?.id?.toLowerCase() === binding.toLowerCase();
+    const sameSection = document.sections.find(
+      (candidate) => candidate.id === section.id,
+    );
+    const parentCandidates =
+      sameSection?.controls.filter(
+        (candidate) => candidate.type !== 'hitfill',
+      ) ?? [];
     return (
-      <div className="space-y-4 border-t border-border pt-4">
+      <div className="space-y-3">
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-foreground">
             Hitfill → {parentIdCap}
             {binding !== '—' && !isSame ? ` (${bindingCap})` : ''}
           </h3>
           <InfoRow label="Type" value="Hitfill" />
-          <div className="rounded-lg border border-border bg-muted/50 px-3 py-2.5">
-            <p className="text-xs text-foreground">
-              Parent:{' '}
-              <span className="font-mono font-medium">{parentIdCap}</span>{' '}
-              {binding !== '—' && !isSame && (
-                <span className="text-muted-foreground">({bindingCap})</span>
-              )}
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+            <p className="text-[11px] font-medium leading-none tracking-wide text-amber-700 dark:text-amber-300">
+              Invisible hit area — extends parent's touch zone
             </p>
             <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+              No binding or label. Routes touches to parent's binding. Shown as
+              dashed ghost in canvas, invisible on phone.
+            </p>
+          </div>
+          <div className="space-y-2 rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5">
+            <div className="flex items-center gap-3">
+              <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
+                Parent
+              </Label>
+              <Select
+                value={control.parentId ?? ''}
+                onValueChange={(value) => {
+                  if (value) update({ parentId: value } as Partial<Control>);
+                }}
+              >
+                <SelectTrigger className="flex-1 h-8">
+                  <SelectValue placeholder="Select parent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {parentCandidates.map((candidate) => (
+                    <SelectItem key={candidate.id} value={candidate.id}>
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs">
+                          {candidate.id}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {candidate.label ? `${candidate.label}` : ''}
+                          {candidate.label && candidate.binding ? ' · ' : ''}
+                          {candidate.binding ? `${candidate.binding}` : ''}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {fieldErrors.get('parentId') && (
+              <p className="ml-17 text-[11px] text-destructive">
+                {fieldErrors.get('parentId')}
+              </p>
+            )}
+            <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
               Binding is derived from parent. Changing the parent’s binding
               automatically updates this hitfill.
             </p>
           </div>
-          {fieldErrors.get('parentId') && (
-            <p className="text-[11px] text-destructive">
-              {fieldErrors.get('parentId')}
-            </p>
-          )}
         </div>
 
         <div className="space-y-1">
@@ -462,7 +499,7 @@ function ControlFields({
   }
 
   return (
-    <div className="space-y-5 border-t border-border pt-4">
+    <div className="space-y-3">
       <div className="flex items-baseline gap-1 min-w-0">
         <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground truncate">
           {control.label || control.id}
@@ -566,7 +603,7 @@ function ControlFields({
         </div>
       )}
 
-      <div className="space-y-1">
+      <div className="space-y-2">
         <div className="flex items-center gap-3">
           <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
             Shape
@@ -592,77 +629,146 @@ function ControlFields({
             control.type !== 'hitfill' &&
             control.type !== 'label' &&
             control.type !== 'image';
-          if (control.shape === 'round' && canUseHitShape) {
-            const hitRect = control.hitShape === 'rect';
-            return (
-              <>
-                <div className="ml-17 flex items-center gap-2 py-1">
-                  <Switch
-                    id={`hitShape-${control.id}`}
-                    checked={hitRect}
-                    onCheckedChange={(checked) => {
-                      const next = structuredClone(document);
-                      const found = findControl(next, control.id);
-                      if (!found) return;
-                      if (checked) {
-                        (
-                          found.control as unknown as Record<string, unknown>
-                        ).hitShape = 'rect';
-                      } else {
-                        delete (
-                          found.control as unknown as Record<string, unknown>
-                        ).hitShape;
-                      }
-                      onDraftChange(next, true);
-                    }}
-                    size="sm"
+          const canToggleHitShape = canUseHitShape && control.shape === 'round';
+          const canAddHitfill =
+            !!onAddHitfill &&
+            control.type !== 'hitfill' &&
+            control.type !== 'label' &&
+            control.type !== 'image';
+          if (!canUseHitShape && !canAddHitfill) return null;
+          const hitRect =
+            (control as unknown as { hitShape?: string }).hitShape === 'rect';
+          const toggleHitShape = () => {
+            const next = structuredClone(document);
+            const found = findControl(next, control.id);
+            if (!found) return;
+            if (hitRect) {
+              delete (found.control as unknown as Record<string, unknown>)
+                .hitShape;
+            } else {
+              (found.control as unknown as Record<string, unknown>).hitShape =
+                'rect';
+            }
+            onDraftChange(next, true);
+          };
+          return (
+            <div className="space-y-2 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
+                  Touch Area
+                </h4>
+                <span className="text-[10px] font-mono text-muted-foreground/55">
+                  hitShape · hitfill
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {/* Shape Fit toggle — precise vs forgiving */}
+                <Tooltip>
+                  <TooltipTrigger
+                    closeOnClick={false}
+                    render={
+                      <button
+                        type="button"
+                        disabled={!canToggleHitShape}
+                        aria-pressed={hitRect}
+                        aria-label={
+                          hitRect
+                            ? 'Hit area: full square, corners active'
+                            : 'Hit area: ellipse only, corners dead'
+                        }
+                        onClick={toggleHitShape}
+                        className={[
+                          'group relative flex aspect-[1/0.95] flex-col items-center justify-between overflow-hidden rounded-[14px] border p-2.5 text-center transition-all duration-150 ease-out',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                          hitRect
+                            ? 'border-foreground/15 bg-muted shadow-none'
+                            : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-card',
+                          !canToggleHitShape
+                            ? 'opacity-40 cursor-not-allowed hover:bg-card hover:border-border'
+                            : 'cursor-pointer active:scale-[0.98]',
+                        ].join(' ')}
+                      >
+                        <div className="flex flex-1 items-center justify-center py-1">
+                          {hitRect ? <ForgivingHitIcon /> : <PreciseHitIcon />}
+                        </div>
+                        <div className="w-full space-y-0.5">
+                          <p className="text-xs font-semibold leading-none tracking-tight text-foreground">
+                            {hitRect ? 'Forgiving' : 'Precise'}
+                          </p>
+                          <p className="text-[11px] leading-none text-muted-foreground">
+                            {hitRect ? 'Full rectangle' : 'Ellipse only'}
+                          </p>
+                        </div>
+                      </button>
+                    }
                   />
-                  <Label
-                    htmlFor={`hitShape-${control.id}`}
-                    className="text-xs font-normal text-muted-foreground cursor-pointer"
+                  <TooltipContent
+                    side="top"
+                    className="max-w-[220px] text-center leading-snug"
                   >
-                    Full bounding-box hit
-                  </Label>
-                </div>
-                <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
-                  {hitRect
-                    ? 'Touch uses the full rectangle, corners included.'
-                    : 'Touch follows the elliptical shape, corners fall through.'}
+                    {canToggleHitShape
+                      ? hitRect
+                        ? 'Full bounding box rectangle is the touch zone'
+                        : 'Shape is the touch zone, corners are dead zones'
+                      : 'This control is only available for Round shape'}
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Add Hitfill — create invisible extender */}
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        disabled={!canAddHitfill}
+                        onClick={() =>
+                          canAddHitfill && onAddHitfill(control.id)
+                        }
+                        aria-label="Add hitfill — extend touch beyond shape"
+                        className={[
+                          'group relative flex aspect-[1/0.95] flex-col items-center justify-between overflow-hidden rounded-[14px] border-2 p-2.5 text-center transition-all duration-150 ease-out',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                          canAddHitfill
+                            ? 'border-dashed border-[color-mix(in_oklch,var(--muted-foreground)_26%,var(--border))] bg-card hover:border-solid hover:border-[var(--editor-accent)] hover:bg-card cursor-pointer active:scale-[0.98]'
+                            : 'border-dashed border-muted bg-muted/20 opacity-40 cursor-not-allowed',
+                        ].join(' ')}
+                      >
+                        <div className="flex flex-1 items-center justify-center py-1">
+                          <HitfillAddIcon />
+                        </div>
+                        <div className="w-full space-y-0.5">
+                          <p className="flex items-center justify-center gap-1 text-xs font-semibold leading-none tracking-tight text-foreground">
+                            Add Hitfill
+                            <span className="grid size-3 place-items-center rounded-full bg-[var(--editor-accent)] text-[9px] leading-none text-white shadow-sm transition-transform group-hover:scale-110">
+                              +
+                            </span>
+                          </p>
+                          <p className="text-[11px] leading-none text-muted-foreground">
+                            Extend zone
+                          </p>
+                        </div>
+                      </button>
+                    }
+                  />
+                  <TooltipContent
+                    side="top"
+                    className="max-w-[220px] text-center leading-snug"
+                  >
+                    {canAddHitfill
+                      ? 'Create an invisible touch area for this control'
+                      : 'This control cant have hitfills'}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {fieldErrors.get('hitShape') && (
+                <p className="text-[11px] text-destructive">
+                  {fieldErrors.get('hitShape')}
                 </p>
-                {fieldErrors.get('hitShape') && (
-                  <p className="ml-17 text-[11px] text-destructive">
-                    {fieldErrors.get('hitShape')}
-                  </p>
-                )}
-              </>
-            );
-          }
-          if (control.shape === 'round') {
-            return (
-              <p className="ml-17 text-[11px] leading-snug text-muted-foreground">
-                Round visual. Touch follows the ellipse (corners fall through).
-              </p>
-            );
-          }
-          return null;
+              )}
+            </div>
+          );
         })()}
       </div>
-
-      {onAddHitfill &&
-        control.type !== 'hitfill' &&
-        control.type !== 'label' &&
-        control.type !== 'image' && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5"
-            onClick={() => onAddHitfill(control.id)}
-          >
-            <Plus className="size-3.5" />
-            Add Hitfill
-          </Button>
-        )}
 
       {control.type === 'image' && (
         <div className="flex items-center gap-3">
@@ -720,8 +826,22 @@ function GeometrySection({
   onToggleLock: (id: string) => void;
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
 }) {
+  const [shiftHeld, setShiftHeld] = useState(false);
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setShiftHeld(event.shiftKey);
+    const clear = () => setShiftHeld(false);
+    window.addEventListener('keydown', update);
+    window.addEventListener('keyup', update);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', update);
+      window.removeEventListener('keyup', update);
+      window.removeEventListener('blur', clear);
+    };
+  }, []);
+  const displayLocked = locked || shiftHeld;
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center justify-between gap-2">
         <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
           Geometry
@@ -731,15 +851,15 @@ function GeometrySection({
             render={
               <Button
                 type="button"
-                variant={locked ? 'secondary' : 'ghost'}
+                variant={displayLocked ? 'secondary' : 'outline'}
                 size="sm"
-                className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${locked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground'}`}
+                className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${displayLocked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
                 onClick={() => onToggleLock(control.id)}
               >
-                {locked ? (
+                {displayLocked ? (
                   <>
                     <Lock className="size-3" />
-                    Locked
+                    {shiftHeld && !locked ? 'Locked (⇧)' : 'Locked'}
                   </>
                 ) : (
                   <>
@@ -751,7 +871,11 @@ function GeometrySection({
             }
           />
           <TooltipContent side="top">
-            {locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+            {displayLocked
+              ? shiftHeld && !locked
+                ? 'Shift held, temporarily locked'
+                : 'Unlock aspect ratio'
+              : 'Lock aspect ratio (hold Shift)'}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -797,7 +921,7 @@ function GeometrySection({
               const next = structuredClone(document);
               const found = findControl(next, control.id);
               if (found) {
-                if (locked) {
+                if (displayLocked) {
                   const ratio =
                     control.geometry.size.width / control.geometry.size.height;
                   found.control.geometry.size.height = v / ratio;
@@ -818,7 +942,7 @@ function GeometrySection({
               const next = structuredClone(document);
               const found = findControl(next, control.id);
               if (found) {
-                if (locked) {
+                if (displayLocked) {
                   const ratio =
                     control.geometry.size.width / control.geometry.size.height;
                   found.control.geometry.size.width = v * ratio;
@@ -840,6 +964,240 @@ function GeometrySection({
         fractions. W and H are size in the same units.
       </p>
     </div>
+  );
+}
+
+function PreciseHitIcon() {
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      width="58"
+      height="58"
+      className="shrink-0"
+      aria-hidden="true"
+    >
+      <defs>
+        <pattern
+          id="precise-dashHatch"
+          width="8"
+          height="8"
+          patternTransform="rotate(45)"
+          patternUnits="userSpaceOnUse"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="8"
+            stroke="var(--editor-accent)"
+            strokeWidth="3.2"
+            strokeDasharray="3,3"
+            strokeOpacity="1"
+          />
+        </pattern>
+        <clipPath id="precise-circleClip">
+          <circle cx="60" cy="60" r="52" />
+        </clipPath>
+      </defs>
+      {/* hatched circle — only ellipse is active, corners dead */}
+      <g clipPath="url(#precise-circleClip)">
+        <rect
+          x="5"
+          y="5"
+          width="110"
+          height="110"
+          fill="url(#precise-dashHatch)"
+        />
+      </g>
+      <circle
+        cx="60"
+        cy="60"
+        r="52"
+        fill="none"
+        stroke="var(--editor-accent)"
+        strokeWidth="3"
+      />
+      {/* bounding box — faint, dead corners */}
+      <rect
+        x="5"
+        y="5"
+        width="110"
+        height="110"
+        fill="none"
+        stroke="var(--muted-foreground)"
+        strokeOpacity="0.68"
+        strokeWidth="1.7"
+      />
+    </svg>
+  );
+}
+
+function ForgivingHitIcon() {
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      width="58"
+      height="58"
+      className="shrink-0"
+      aria-hidden="true"
+    >
+      <defs>
+        <pattern
+          id="forgiving-dashHatch"
+          width="8"
+          height="8"
+          patternTransform="rotate(45)"
+          patternUnits="userSpaceOnUse"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="8"
+            stroke="var(--editor-accent)"
+            strokeWidth="3.2"
+            strokeDasharray="3,3"
+            strokeOpacity="1"
+          />
+        </pattern>
+      </defs>
+      {/* hatched square — full box active, corners count */}
+      <rect
+        x="5"
+        y="5"
+        width="110"
+        height="110"
+        fill="url(#forgiving-dashHatch)"
+      />
+      <rect
+        x="5"
+        y="5"
+        width="110"
+        height="110"
+        fill="none"
+        stroke="var(--editor-accent)"
+        strokeWidth="2"
+      />
+      <circle
+        cx="60"
+        cy="60"
+        r="52"
+        fill="none"
+        stroke="var(--muted-foreground)"
+        strokeOpacity="0.7"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
+function HitfillAddIcon() {
+  return (
+    <svg
+      viewBox="0 0 136 84"
+      width="68"
+      height="42"
+      className="shrink-0"
+      aria-hidden="true"
+    >
+      <defs>
+        <pattern
+          id="hitfill-parent-hatch"
+          width="8"
+          height="8"
+          patternTransform="rotate(45)"
+          patternUnits="userSpaceOnUse"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="8"
+            stroke="var(--editor-accent)"
+            strokeWidth="3.2"
+            strokeDasharray="3,3"
+            strokeOpacity="1"
+          />
+        </pattern>
+        <pattern
+          id="hitfill-ghost-hatch"
+          width="8"
+          height="8"
+          patternTransform="rotate(45)"
+          patternUnits="userSpaceOnUse"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="8"
+            stroke="var(--muted-foreground)"
+            strokeWidth="3"
+            strokeDasharray="3,3"
+            strokeOpacity="0.9"
+          />
+        </pattern>
+        <clipPath id="hitfill-parent-clip">
+          <circle cx="42" cy="42" r="40" />
+        </clipPath>
+      </defs>
+      {/* parent — hatched circle, accent — ~1.7x larger */}
+      <g clipPath="url(#hitfill-parent-clip)">
+        <rect
+          x="2"
+          y="2"
+          width="80"
+          height="80"
+          fill="url(#hitfill-parent-hatch)"
+        />
+      </g>
+      <circle
+        cx="42"
+        cy="42"
+        r="40"
+        fill="none"
+        stroke="var(--editor-accent)"
+        strokeWidth="2.4"
+      />
+      {/* ghost — hatched square (full), yellow dashed */}
+      <rect
+        x="90"
+        y="20"
+        width="40"
+        height="40"
+        fill="url(#hitfill-parent-hatch)"
+        stroke="rgb(250 204 21)"
+        strokeOpacity="1"
+        strokeWidth="1.2"
+        strokeDasharray="7 3"
+        rx="1"
+      />
+      <circle
+        cx="110"
+        cy="40"
+        r="17.5"
+        fill="none"
+        stroke="var(--muted-foreground)"
+        strokeOpacity="0.18"
+        strokeWidth="1.2"
+        strokeDasharray="3 3"
+      />
+      {/* plus badge */}
+      <g transform="translate(123 57)">
+        <circle
+          r="13"
+          fill="var(--editor-accent)"
+          stroke="var(--card)"
+          strokeWidth="2"
+        />
+        <path
+          d="M -5.2 0 H 5.2 M 0 -5.2 V 5.2"
+          stroke="white"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+      </g>
+    </svg>
   );
 }
 

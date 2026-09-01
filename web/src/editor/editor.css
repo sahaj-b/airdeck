@@ -114,11 +114,18 @@
   opacity: 1;
 }
 
-.editor-control-hit.editor-control-peer {
-  border: 2px dashed rgb(250 204 21 / 0.95);
-  background: rgb(250 204 21 / 0.12);
-  border-radius: 6px;
+.editor-control-hit.editor-hit-only.editor-control-selected,
+.editor-control-hit.editor-hit-only.editor-control-selected:hover {
+  border-style: solid;
+  border-color: var(--editor-accent);
   opacity: 1;
+}
+
+.editor-control-hit.editor-control-peer {
+  border: 2px dashed rgb(250 204 21 / 0.72);
+  background: rgb(250 204 21 / 0.09);
+  border-radius: 6px;
+  opacity: 0.85;
 }
 
 .editor-control-hit.editor-control-peer:hover {
@@ -127,9 +134,10 @@
 }
 
 .editor-control-hit.editor-control-peer.editor-hit-only {
-  border: 2px dashed rgb(250 204 21 / 0.9);
-  background: rgb(250 204 21 / 0.14);
-  opacity: 1;
+  border: 2px dashed rgb(250 204 21 / 0.68);
+  background: rgb(250 204 21 / 0.1);
+  border-radius: 6px;
+  opacity: 0.85;
 }
 
 .editor-control-hit.editor-control-peer.editor-hit-only:hover {
@@ -175,6 +183,11 @@
 .editor-hit-only .editor-selection-frame {
   border-style: dashed;
   opacity: 0.6;
+}
+
+.editor-hit-only.editor-control-selected .editor-selection-frame {
+  border-style: solid;
+  opacity: 1;
 }
 
 .editor-handles {
@@ -269,16 +282,19 @@
 .editor-section-divider::after {
   content: "";
   position: absolute;
-  left: 4px;
+  left: 5px;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: color-mix(in oklch, var(--editor-accent) 38%, transparent);
+  width: 0;
+  border-left: 2px dashed
+    color-mix(in oklch, var(--editor-accent) 38%, transparent);
 }
 
 .editor-section-divider:hover::after {
-  background: var(--editor-accent);
-  box-shadow: 0 0 6px color-mix(in oklch, var(--editor-accent) 50%, transparent);
+  border-left-color: var(--editor-accent);
+  border-left-style: dashed;
+  background: transparent;
+  box-shadow: none;
 }
 
 .editor-section-label {

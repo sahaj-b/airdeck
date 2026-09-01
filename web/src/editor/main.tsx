@@ -38,6 +38,7 @@ import {
   deleteAdminLayout,
   getAdminLayout,
   getAdminState,
+  setAllPlayerLayouts,
   updateAdminLayout,
 } from '@/dashboard/api';
 import type { AdminLayoutSummary } from '@/shared/contracts';
@@ -642,6 +643,16 @@ function EditorApp() {
     [createAndSelectLayout],
   );
 
+  const handleApplyToAll = useCallback(async () => {
+    if (!draft || dirty || errors.length > 0) return;
+    try {
+      await setAllPlayerLayouts(draft.id);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Apply to all failed.');
+    }
+  }, [draft, dirty, errors]);
+
   if (!draft) {
     return (
       <div className="grid min-h-dvh place-items-center bg-background p-6">
@@ -665,7 +676,7 @@ function EditorApp() {
     .join(' ');
 
   return (
-    <TooltipProvider delay={100}>
+    <TooltipProvider delay={0}>
       <div className={shellClass}>
         <div className="col-span-full flex flex-col">
           <div className="border-b border-border bg-background px-4 py-3 max-lg:col-span-1">
@@ -689,6 +700,7 @@ function EditorApp() {
               onSave={handleSave}
               onBack={handleBack}
               onDuplicate={requestFork}
+              onApplyToAll={handleApplyToAll}
             />
           </div>
           {error && (
@@ -732,7 +744,7 @@ function EditorApp() {
           }
         >
           {leftCollapsed ? (
-            <TooltipProvider delay={100}>
+            <TooltipProvider delay={0}>
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -806,7 +818,7 @@ function EditorApp() {
           }
         >
           {rightCollapsed ? (
-            <TooltipProvider delay={100}>
+            <TooltipProvider delay={0}>
               <Tooltip>
                 <TooltipTrigger
                   render={

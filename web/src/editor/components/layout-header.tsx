@@ -8,6 +8,7 @@ import {
   Save,
   Trash2,
   Undo2,
+  Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -32,7 +33,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import {
   Tooltip,
@@ -61,6 +61,7 @@ export interface LayoutHeaderProps {
   onSave: () => Promise<void>;
   onBack: () => void;
   onDuplicate: () => void;
+  onApplyToAll?: () => void;
 }
 
 export function LayoutHeader(props: LayoutHeaderProps) {
@@ -130,7 +131,10 @@ export function LayoutHeader(props: LayoutHeaderProps) {
           }}
         >
           <SelectTrigger className="w-[200px] bg-card">
-            <SelectValue />
+            <span className="flex-1 truncate text-left text-sm">
+              {props.layouts.find((layout) => layout.id === props.currentId)
+                ?.name ?? props.currentId}
+            </span>
           </SelectTrigger>
           <SelectContent>
             {props.layouts.map((layout) => (
@@ -254,6 +258,37 @@ export function LayoutHeader(props: LayoutHeaderProps) {
           <TooltipContent side="bottom">Redo (Ctrl+Shift+Z)</TooltipContent>
         </Tooltip>
       </div>
+
+      {/* Quick apply to all players */}
+      {props.onApplyToAll && (
+        <div className="editor-header__group">
+          <div className="editor-header__divider hidden sm:block" />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="header-btn-compact gap-1.5 bg-card"
+                  disabled={props.dirty || props.hasErrors}
+                  onClick={props.onApplyToAll}
+                >
+                  <Users className="size-3.5" />
+                  <span className="header-btn-text">Apply to all</span>
+                </Button>
+              }
+            />
+            <TooltipContent side="bottom">
+              {props.hasErrors
+                ? 'Fix validation errors before applying'
+                : props.dirty
+                  ? 'Save changes before applying to players'
+                  : 'Push this layout to all connected players'}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
 
       {/* Group 4: Discard Save — primary hierarchy */}
       <div className="ml-auto flex items-center gap-2">
