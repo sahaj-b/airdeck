@@ -204,7 +204,7 @@ export class PointerInput {
       control.binding &&
       this.gyroLocked === control.binding &&
       (control.type === 'joystick' ||
-        (control.type === 'hitfill' &&
+        (control.type === 'hitzone' &&
           (control.binding === 'leftStick' ||
             control.binding === 'rightStick')))
     )
@@ -214,7 +214,7 @@ export class PointerInput {
     if (
       !control.binding &&
       control.type !== 'dpad' &&
-      !(control.type === 'hitfill' && control.bindings)
+      !(control.type === 'hitzone' && control.bindings)
     )
       return;
 
@@ -251,7 +251,7 @@ export class PointerInput {
     ownership: PointerOwnership,
   ): void {
     const { visual, control, source, parentVisual } = ownership;
-    if (control.type === 'hitfill') {
+    if (control.type === 'hitzone') {
       if (control.bindings) {
         const rect = (parentVisual ?? visual).getBoundingClientRect();
         const command = dpadDirection(

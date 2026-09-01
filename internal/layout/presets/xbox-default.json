@@ -2,7 +2,6 @@
   "id": "xbox-default",
   "name": "Xbox default",
   "schemaVersion": 1,
-  "defaultOrientation": "landscape",
   "sections": [
     {
       "id": "left",
@@ -181,8 +180,8 @@
           "binding": "rightStick"
         },
         {
-          "id": "xyab-fill-n",
-          "type": "hitfill",
+          "id": "xyab-hitzone-n",
+          "type": "hitzone",
           "geometry": {
             "position": {
               "x": 0.11499690933137954,
@@ -198,8 +197,8 @@
           "parentId": "north"
         },
         {
-          "id": "xyab-fill-s",
-          "type": "hitfill",
+          "id": "xyab-hitzone-s",
+          "type": "hitzone",
           "geometry": {
             "position": {
               "x": 0.11382557793824537,
@@ -215,8 +214,8 @@
           "parentId": "south"
         },
         {
-          "id": "xyab-fill-w",
-          "type": "hitfill",
+          "id": "xyab-hitzone-w",
+          "type": "hitzone",
           "geometry": {
             "position": {
               "x": 0.03723540573312498,
@@ -232,8 +231,8 @@
           "parentId": "west"
         },
         {
-          "id": "xyab-fill-e",
-          "type": "hitfill",
+          "id": "xyab-hitzone-e",
+          "type": "hitzone",
           "geometry": {
             "position": {
               "x": 0.18783252873772077,
@@ -318,6 +317,5 @@
         }
       ]
     }
-  ],
-  "assets": []
+  ]
 }

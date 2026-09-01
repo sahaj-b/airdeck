@@ -159,10 +159,67 @@
   border-radius: 50%;
 }
 
+.editor-forgiving-hatch,
+.editor-hitzone-hatch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  background-color: var(--editor-accent);
+}
+
+.editor-hitzone-hatch {
+  z-index: 0;
+  opacity: 0.52;
+  -webkit-mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px);
+  mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.editor-forgiving-hatch {
+  z-index: 0;
+  opacity: 0.52;
+  -webkit-mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px),
+    radial-gradient(
+      ellipse closest-side at 50% 50%,
+      transparent 99.5%,
+      black 100%
+    );
+  mask-image:
+    repeating-linear-gradient(135deg, white 0 1.6px, transparent 1.6px 6px),
+    repeating-linear-gradient(45deg, white 0 2.5px, transparent 2.5px 5px),
+    radial-gradient(
+      ellipse closest-side at 50% 50%,
+      transparent 99.5%,
+      black 100%
+    );
+  -webkit-mask-size:
+    auto,
+    auto,
+    100% 100%;
+  mask-size:
+    auto,
+    auto,
+    100% 100%;
+  -webkit-mask-repeat: repeat, repeat, no-repeat;
+  mask-repeat: repeat, repeat, no-repeat;
+  -webkit-mask-composite: source-in, source-in;
+  mask-composite: intersect, intersect;
+}
+
 .editor-interaction-layer {
   position: absolute;
   inset: 0;
   touch-action: none;
+  z-index: 1;
 }
 
 .editor-control-overlay {
@@ -200,7 +257,7 @@
   width: 8px;
   height: 8px;
   background: var(--editor-accent);
-  border: 1px solid white;
+  border: none;
   border-radius: 2px;
   pointer-events: auto;
   box-shadow:
@@ -397,7 +454,7 @@
   height: 12px;
   cursor: nwse-resize;
   background: var(--editor-accent);
-  border: 1px solid white;
+  border: none;
   border-radius: 2px;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
 }

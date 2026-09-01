@@ -78,8 +78,7 @@ export function resolveLayout(
     orientation,
     viewport: safeViewport,
     sections,
-    portraitFallback:
-      orientation === 'portrait' && document.defaultOrientation === 'landscape',
+    portraitFallback: orientation === 'portrait',
   };
 }
 

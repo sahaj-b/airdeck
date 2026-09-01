@@ -31,13 +31,12 @@ func baseSection(id string, width float64) Section {
 
 func baseDocument() Document {
 	return Document{
-		ID: "test", Name: "Test", SchemaVersion: 1, DefaultOrientation: "landscape",
+		ID: "test", Name: "Test", SchemaVersion: 1,
 		Sections: []Section{
 			baseSection("left", 0.86),
 			baseSection("center", 0.5),
 			baseSection("right", 0.94),
 		},
-		Assets: []Asset{{ID: "asset", Path: "asset.png"}},
 	}
 }
 
@@ -53,11 +52,6 @@ func TestBuiltInLayoutsValidate(t *testing.T) {
 
 func TestValidateRejectsUnsafeAndDuplicateDocuments(t *testing.T) {
 	base := baseDocument()
-	base.Assets[0].Path = "../escape.png"
-	if err := ValidateDocument(base); err == nil {
-		t.Fatal("unsafe asset path was accepted")
-	}
-	base.Assets[0].Path = "asset.png"
 	duplicate := baseGeometry()
 	duplicate.Position.X = 0.2
 	// duplicate control id within same doc (left-btn already exists, reuse)
@@ -142,7 +136,7 @@ func TestValidateControlShapesAndUnlockedJoystick(t *testing.T) {
 
 func TestValidateRejectsLegacyFields(t *testing.T) {
 	// JSON with legacy aspectRatio should be rejected by schema
-	raw := `{"id":"test","name":"Test","schemaVersion":1,"defaultOrientation":"landscape","sections":[{"id":"left","aspectRatio":0.86,"minWidth":0.65,"maxWidth":0.86,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"center","aspectRatio":0.5,"minWidth":0.38,"maxWidth":4,"flexGrow":1,"flexShrink":1,"protected":false,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"right","aspectRatio":0.94,"minWidth":0.67,"maxWidth":0.94,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]}],"assets":[]}`
+	raw := `{"id":"test","name":"Test","schemaVersion":1,"sections":[{"id":"left","aspectRatio":0.86,"minWidth":0.65,"maxWidth":0.86,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"center","aspectRatio":0.5,"minWidth":0.38,"maxWidth":4,"flexGrow":1,"flexShrink":1,"protected":false,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]},{"id":"right","aspectRatio":0.94,"minWidth":0.67,"maxWidth":0.94,"flexGrow":0,"flexShrink":1,"protected":true,"padding":{"left":0,"right":0,"top":0,"bottom":0},"controls":[]}]}`
 	if _, err := ValidateJSON([]byte(raw)); err == nil {
 		t.Fatal("legacy fields were accepted by schema")
 	}

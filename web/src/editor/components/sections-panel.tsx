@@ -11,7 +11,7 @@ import type {
   Control,
   Document as LayoutDocument,
 } from '@/shared/generated/layout';
-import { getHitfillsOf } from '@/shared/layout-editor';
+import { getHitzonesOf } from '@/shared/layout-editor';
 
 export interface SectionsPanelProps {
   document: LayoutDocument;
@@ -62,9 +62,9 @@ export function SectionsPanel({
     const found = document.sections
       .flatMap((section) => section.controls)
       .find((control) => control.id === selectedControlId);
-    if (!found || found.type === 'hitfill') return new Set<string>();
-    const hitfills = getHitfillsOf(document, selectedControlId);
-    return new Set<string>(hitfills);
+    if (!found || found.type === 'hitzone') return new Set<string>();
+    const hitzones = getHitzonesOf(document, selectedControlId);
+    return new Set<string>(hitzones);
   }, [document, selectedControlId]);
 
   const hoveredPeerIds = useMemo(() => {
@@ -73,9 +73,9 @@ export function SectionsPanel({
       .flatMap((section) => section.controls)
       .find((control) => control.id === hoveredControlId);
     if (!found) return new Set<string>();
-    if (found.type === 'hitfill') return new Set<string>();
-    const hitfills = getHitfillsOf(document, hoveredControlId);
-    return new Set<string>(hitfills);
+    if (found.type === 'hitzone') return new Set<string>();
+    const hitzones = getHitzonesOf(document, hoveredControlId);
+    return new Set<string>(hitzones);
   }, [document, hoveredControlId]);
 
   return (
@@ -273,7 +273,7 @@ const SectionCard = memo(function SectionCard({
       for (const c of s.controls) byId.set(c.id, c as Control);
     }
     for (const c of section.controls) {
-      if (c.type === 'hitfill' && c.parentId) {
+      if (c.type === 'hitzone' && c.parentId) {
         const parent = byId.get(c.parentId);
         if (!parent) {
           map.set(c.id, c.parentId);
@@ -452,7 +452,7 @@ const ControlRow = memo(function ControlRow({
   onHover?: (id: string | null) => void;
   onDragStart: (e: React.PointerEvent) => void;
 }) {
-  const isHitfill = control.type === 'hitfill';
+  const isHitzone = control.type === 'hitzone';
 
   return (
     <li
@@ -507,10 +507,10 @@ const ControlRow = memo(function ControlRow({
         )}
       >
         <span className="min-w-0 flex-1 flex items-center overflow-hidden text-left">
-          {isHitfill ? (
+          {isHitzone ? (
             <>
               <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                Hitfill
+                Hitzone
               </span>
               {parentHint && (
                 <span className="ml-1 shrink-0 text-[11px] leading-none text-muted-foreground">

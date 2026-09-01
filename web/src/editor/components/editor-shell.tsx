@@ -61,7 +61,7 @@ export function EditorShell() {
     confirmBack,
     handleDuplicateControl,
     handleDeleteControl,
-    handleAddHitfill,
+    handleAddHitzone,
     handleMoveControl,
     handleReorderControl,
     handleAddControl,
@@ -288,7 +288,7 @@ export function EditorShell() {
               }
               onDuplicateControl={handleDuplicateControl}
               onDeleteControl={handleDeleteControl}
-              onAddHitfill={handleAddHitfill}
+              onAddHitzone={handleAddHitzone}
             />
           )}
         </div>

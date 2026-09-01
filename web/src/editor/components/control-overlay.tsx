@@ -2,13 +2,13 @@ import { cn } from '@/lib/utils';
 
 export interface ControlOverlayProps {
   selected: boolean;
-  isHitfill?: boolean;
+  isHitzone?: boolean;
   className?: string;
 }
 
 export function ControlOverlay({
   selected,
-  isHitfill,
+  isHitzone,
   className,
 }: ControlOverlayProps) {
   if (!selected) return null;
@@ -16,7 +16,7 @@ export function ControlOverlay({
     <div
       className={cn(
         'editor-control-overlay',
-        isHitfill && 'editor-hit-only',
+        isHitzone && 'editor-hit-only',
         className,
       )}
     >

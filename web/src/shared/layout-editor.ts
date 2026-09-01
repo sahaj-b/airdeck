@@ -135,8 +135,7 @@ export function getAllowedBindings(type: Control['type']): Command[] {
     case 'dpad':
       return ['dpadUp', 'dpadDown', 'dpadLeft', 'dpadRight'] as Command[];
     case 'label':
-    case 'image':
-    case 'hitfill':
+    case 'hitzone':
       return [];
     default:
       return Object.keys(BINDING_LABELS) as Command[];
@@ -298,14 +297,14 @@ export function updateControlGeometry(
   return next;
 }
 
-export function getHitfillsOf(
+export function getHitzonesOf(
   document: LayoutDocument,
   parentId: string,
 ): string[] {
   const ids: string[] = [];
   for (const section of document.sections) {
     for (const control of section.controls) {
-      if (control.type === 'hitfill' && control.parentId === parentId) {
+      if (control.type === 'hitzone' && control.parentId === parentId) {
         ids.push(control.id);
       }
     }
@@ -313,14 +312,14 @@ export function getHitfillsOf(
   return ids;
 }
 
-export function moveParentWithHitfills(
+export function moveParentWithHitzones(
   document: LayoutDocument,
   parentId: string,
   deltaX: number,
   deltaY: number,
 ): LayoutDocument {
-  const hitfillIds = getHitfillsOf(document, parentId);
-  const ids = [parentId, ...hitfillIds];
+  const hitzoneIds = getHitzonesOf(document, parentId);
+  const ids = [parentId, ...hitzoneIds];
   const next = cloneDocument(document);
   for (const id of ids) {
     for (const section of next.sections) {
@@ -497,12 +496,12 @@ export function deleteControl(
     );
     if (index >= 0) {
       const removed = section.controls[index];
-      deletedIsParent = removed.type !== 'hitfill';
+      deletedIsParent = removed.type !== 'hitzone';
       section.controls.splice(index, 1);
       break;
     }
   }
-  // cascade: if the deleted control was a parent, remove its hitfills
+  // cascade: if the deleted control was a parent, remove its hitzones
   if (deletedIsParent) {
     for (const section of next.sections) {
       section.controls = section.controls.filter(
@@ -520,20 +519,20 @@ export function slugifyId(name: string): string {
     .replace(/[^a-z0-9-]/g, '-');
 }
 
-export function addHitfill(
+export function addHitzone(
   document: LayoutDocument,
   parentId: string,
 ): LayoutDocument | null {
   const found = findControl(document, parentId);
-  if (!found || found.control.type === 'hitfill') return null;
+  if (!found || found.control.type === 'hitzone') return null;
   const next = cloneDocument(document);
   const targetSection = next.sections.find((s) => s.id === found.section.id);
   const parent = targetSection?.controls.find((c) => c.id === parentId);
   if (!targetSection || !parent) return null;
   const newId = nextControlId(next);
-  const hitfill: Control = {
+  const hitzone: Control = {
     id: newId,
-    type: 'hitfill',
+    type: 'hitzone',
     geometry: clampGeometry(
       {
         position: {
@@ -554,7 +553,7 @@ export function addHitfill(
   targetSection.controls.splice(
     parentIndex + 1,
     0,
-    hitfill as unknown as (typeof targetSection.controls)[number],
+    hitzone as unknown as (typeof targetSection.controls)[number],
   );
   return next;
 }

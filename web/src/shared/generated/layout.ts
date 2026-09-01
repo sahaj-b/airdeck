@@ -24,14 +24,13 @@ export interface DPadBindings {
 }
 export interface Control {
   id: string;
-  type: 'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image' | 'hitfill';
+  type: 'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'hitzone';
   geometry: Geometry;
   label: string;
   shape?: 'round' | 'rect';
   hitShape?: 'rect';
   binding?: Command;
   bindings?: DPadBindings;
-  asset?: string;
   parentId?: string;
 }
 export interface Section {
@@ -40,17 +39,11 @@ export interface Section {
   relativeMinWidth?: number /* float64 */;
   controls: Control[];
 }
-export interface Asset {
-  id: string;
-  path: string;
-}
 export interface Document {
   id: string;
   name: string;
   schemaVersion: 1;
-  defaultOrientation: 'landscape' | 'portrait';
   sections: Section[];
-  assets: Asset[];
 }
 export interface Summary {
   id: string;

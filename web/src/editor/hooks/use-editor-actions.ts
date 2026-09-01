@@ -10,7 +10,7 @@ import {
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import { validateLayoutDetailed } from '@/shared/layout';
 import {
-  addHitfill,
+  addHitzone,
   cloneDocument,
   deleteControl,
   duplicateControl,
@@ -258,9 +258,9 @@ export function useEditorActions() {
     [mutate],
   );
 
-  const handleAddHitfill = useCallback(
+  const handleAddHitzone = useCallback(
     (parentId: string): void => {
-      const next = mutate((doc) => addHitfill(doc, parentId) ?? doc);
+      const next = mutate((doc) => addHitzone(doc, parentId) ?? doc);
       if (!next) return;
       const found = findControl(next, parentId);
       const section = found?.section;
@@ -336,13 +336,11 @@ export function useEditorActions() {
           id,
           name: name.trim(),
           schemaVersion: 1,
-          defaultOrientation: 'landscape',
           sections: [
             { id: 'left', relativeWidth: 0.86, controls: [] },
             { id: 'center', relativeWidth: 0.5, controls: [] },
             { id: 'right', relativeWidth: 0.94, controls: [] },
           ],
-          assets: [],
         };
       }
       await createAdminLayout(doc);
@@ -430,7 +428,7 @@ export function useEditorActions() {
     confirmBack,
     handleDuplicateControl,
     handleDeleteControl,
-    handleAddHitfill,
+    handleAddHitzone,
     handleMoveControl,
     handleReorderControl,
     handleAddControl,

@@ -42,7 +42,6 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 		mux.HandleFunc("/ws", s.options.Transport.ServeHTTP)
 		mux.HandleFunc("/api/layouts/publish", s.handlePublishCreate)
 		mux.HandleFunc("/api/layouts/publish/", s.handlePublishCancel)
-		mux.HandleFunc("/assets/user/", s.userAssetHandler)
 	}
 	mux.HandleFunc("/api/admin/", func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackRequest(r) {
@@ -66,7 +65,7 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 		s.staticHandler(w, r)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if adminOnly && !strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/dashboard" && r.URL.Path != "/editor" && !strings.HasPrefix(r.URL.Path, "/assets/") {
+		if adminOnly && !strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/dashboard" && r.URL.Path != "/editor" {
 			http.NotFound(w, r)
 			return
 		}

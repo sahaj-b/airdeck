@@ -38,14 +38,17 @@ interface AddControlDialogProps {
   onAdd: (result: AddControlResult) => void;
 }
 
-const DEFAULT_SIZE: Record<ControlType, { width: number; height: number }> = {
+type AddableControlType = Exclude<ControlType, 'hitzone'>;
+
+const DEFAULT_SIZE: Record<
+  AddableControlType,
+  { width: number; height: number }
+> = {
   button: { width: 0.28, height: 0.28 },
   dpad: { width: 0.5, height: 0.5 },
   joystick: { width: 0.44, height: 0.44 },
   trigger: { width: 0.3, height: 0.18 },
   label: { width: 0.34, height: 0.1 },
-  image: { width: 0.34, height: 0.34 },
-  hitfill: { width: 0.08, height: 0.08 },
 };
 
 export function AddControlDialog({
@@ -56,44 +59,15 @@ export function AddControlDialog({
   onAdd,
 }: AddControlDialogProps) {
   const section = document.sections.find((s) => s.id === sectionId);
-  const [type, setType] = useState<ControlType>('button');
+  const [type, setType] = useState<AddableControlType>('button');
   const [binding, setBinding] = useState<string>('south');
   const [label, setLabel] = useState('Button');
   const [shape, setShape] = useState<'round' | 'rect'>('round');
-  const [parentId, setParentId] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
 
   const allowed = useMemo(() => getAllowedBindings(type), [type]);
-  const eligibleParents = useMemo(() => {
-    if (!section) return [];
-    return section.controls.filter((c) => c.type !== 'hitfill');
-  }, [section]);
 
   const createControl = (): Control | null => {
     if (!section) return null;
-    if (type === 'hitfill') {
-      if (!parentId) {
-        setError('Parent is required for hitfill.');
-        return null;
-      }
-      const size = DEFAULT_SIZE.hitfill;
-      const parent = section.controls.find((c) => c.id === parentId);
-      const pos = parent
-        ? {
-            x: parent.geometry.position.x + 0.04,
-            y: parent.geometry.position.y + 0.04,
-          }
-        : { x: 0, y: 0 };
-      const control: Control = {
-        id: nextControlId(document),
-        type: 'hitfill',
-        geometry: { position: pos, size },
-        label: '',
-        parentId,
-        shape,
-      };
-      return control;
-    }
     const size = DEFAULT_SIZE[type] ?? { width: 0.28, height: 0.28 };
     const control: Control = {
       id: nextControlId(document),
@@ -122,17 +96,9 @@ export function AddControlDialog({
 
   const handleSubmit = (): void => {
     if (!section) return;
-    setError(null);
-    if (type === 'hitfill' && !parentId) {
-      setError('Select a parent control for the hitfill.');
-      return;
-    }
     const control = createControl();
     if (!control) return;
     onAdd({ sectionId, control });
-    // reset hitfill parent selection for next open
-    setParentId('');
-    setError(null);
   };
 
   return (
@@ -148,18 +114,12 @@ export function AddControlDialog({
             <Select
               value={type}
               onValueChange={(value) => {
-                const next = value as ControlType;
+                const next = value as AddableControlType;
                 setType(next);
                 setLabel(defaultLabel(next));
                 const first = getAllowedBindings(next)[0];
                 if (first) setBinding(first);
                 if (next === 'label') setShape('rect');
-                if (next === 'hitfill') {
-                  setParentId(eligibleParents[0]?.id ?? '');
-                  setError(null);
-                } else {
-                  setError(null);
-                }
               }}
             >
               <SelectTrigger id="add-type" className="capitalize">
@@ -167,15 +127,7 @@ export function AddControlDialog({
               </SelectTrigger>
               <SelectContent>
                 {(
-                  [
-                    'button',
-                    'dpad',
-                    'joystick',
-                    'trigger',
-                    'label',
-                    'image',
-                    'hitfill',
-                  ] as const
+                  ['button', 'dpad', 'joystick', 'trigger', 'label'] as const
                 ).map((option) => (
                   <SelectItem key={option} value={option}>
                     {option.charAt(0).toUpperCase() + option.slice(1)}
@@ -185,124 +137,67 @@ export function AddControlDialog({
             </Select>
           </div>
 
-          {type === 'hitfill' ? (
-            <>
-              <div className="grid gap-1.5">
-                <Label htmlFor="add-hitfill-shape">Shape</Label>
-                <Select
-                  value={shape}
-                  onValueChange={(value) => {
-                    if (value) setShape(value as 'round' | 'rect');
-                  }}
-                >
-                  <SelectTrigger id="add-hitfill-shape" className="capitalize">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="round">Round</SelectItem>
-                    <SelectItem value="rect">Rect</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] leading-tight text-muted-foreground">
-                  Round gives an elliptical hit area, rect is the full box.
-                </p>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="add-parent">Parent (required)</Label>
-                <Select
-                  value={parentId}
-                  onValueChange={(value) => {
-                    if (value) {
-                      setParentId(value);
-                      setError(null);
-                    }
-                  }}
-                >
-                  <SelectTrigger id="add-parent">
-                    <SelectValue placeholder="Select parent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eligibleParents.length === 0 && (
-                      <SelectItem value="__none" disabled>
-                        No eligible parents in this section
-                      </SelectItem>
-                    )}
-                    {eligibleParents.map((parent) => (
-                      <SelectItem key={parent.id} value={parent.id}>
-                        {parent.id}{' '}
-                        {parent.binding
-                          ? `(${parent.binding})`
-                          : `(${parent.type})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] leading-tight text-muted-foreground">
-                  Hitfill is not shown during play. It extends the hit area of
-                  its parent. Binding is derived automatically.
-                </p>
-              </div>
-              {error && <p className="text-xs text-destructive">{error}</p>}
-            </>
-          ) : (
-            <>
-              <div className="grid gap-1.5">
-                <Label htmlFor="add-label">Label</Label>
-                <Input
-                  id="add-label"
-                  value={label}
-                  onChange={(event) => setLabel(event.target.value)}
-                />
-              </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="add-label">Label</Label>
+            <Input
+              id="add-label"
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+            />
+          </div>
 
-              {type === 'button' ||
-              type === 'joystick' ||
-              type === 'trigger' ? (
-                <div className="grid gap-1.5">
-                  <Label htmlFor="add-binding">Binding</Label>
-                  <Select
-                    value={binding}
-                    onValueChange={(value) => {
-                      if (value) setBinding(value);
-                    }}
-                  >
-                    <SelectTrigger id="add-binding" className="capitalize">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="min-w-[240px]">
-                      {allowed.map((command) => (
-                        <SelectItem key={command} value={command}>
-                          <BindingLabel command={command} />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : type === 'dpad' ? (
-                <p className="text-xs text-muted-foreground">
-                  A D-pad always maps to the four fixed directions.
-                </p>
-              ) : null}
+          {type === 'button' || type === 'joystick' || type === 'trigger' ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="add-binding">Binding</Label>
+              <Select
+                value={binding}
+                onValueChange={(value) => {
+                  if (value) setBinding(value);
+                }}
+              >
+                <SelectTrigger id="add-binding" className="capitalize">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="min-w-[240px]">
+                  {allowed.map((command) => (
+                    <SelectItem key={command} value={command}>
+                      <BindingLabel command={command} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : type === 'dpad' ? (
+            <p className="text-xs text-muted-foreground">
+              A D-pad always maps to the four fixed directions.
+            </p>
+          ) : null}
 
-              <div className="grid gap-1.5">
-                <Label htmlFor="add-shape">Shape</Label>
-                <Select
-                  value={shape}
-                  onValueChange={(value) => {
-                    if (value) setShape(value as 'round' | 'rect');
-                  }}
-                >
-                  <SelectTrigger id="add-shape" className="capitalize">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="round">Round</SelectItem>
-                    <SelectItem value="rect">Rect</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
+          <div className="grid gap-1.5">
+            <Label htmlFor="add-shape">Shape</Label>
+            <Select
+              value={shape}
+              onValueChange={(value) => {
+                if (value) setShape(value as 'round' | 'rect');
+              }}
+            >
+              <SelectTrigger id="add-shape">
+                <SelectValue>
+                  {(value: string | null) =>
+                    value === 'round'
+                      ? 'Round / Ellipse'
+                      : value === 'rect'
+                        ? 'Rectangle'
+                        : ''
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="round">Round / Ellipse</SelectItem>
+                <SelectItem value="rect">Rectangle</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="flex justify-end gap-2">
           <DialogClose
@@ -312,11 +207,7 @@ export function AddControlDialog({
               </Button>
             }
           />
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={type === 'hitfill' && !parentId}
-          >
+          <Button type="button" onClick={handleSubmit}>
             Add control
           </Button>
         </div>
@@ -325,7 +216,7 @@ export function AddControlDialog({
   );
 }
 
-function defaultLabel(type: ControlType): string {
+function defaultLabel(type: AddableControlType): string {
   switch (type) {
     case 'dpad':
       return 'D-pad';
@@ -335,10 +226,6 @@ function defaultLabel(type: ControlType): string {
       return 'Trigger';
     case 'label':
       return 'Label';
-    case 'image':
-      return 'Image';
-    case 'hitfill':
-      return '';
     default:
       return 'Button';
   }

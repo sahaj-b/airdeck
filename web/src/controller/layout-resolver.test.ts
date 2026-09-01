@@ -34,7 +34,6 @@ describe('responsive layout resolver', () => {
       id: 'simple',
       name: 'Simple',
       schemaVersion: 1,
-      defaultOrientation: 'landscape',
       sections: [
         {
           id: 'left',
@@ -56,7 +55,6 @@ describe('responsive layout resolver', () => {
         { id: 'center', relativeWidth: 0.5, controls: [] },
         { id: 'right', relativeWidth: 1, controls: [] },
       ],
-      assets: [],
     };
     // viewport width = left + center + right = 2.5 * height, so center fills exactly 0.5
     const resolved = resolveLayout(simple, { width: 1250, height: 500 });
@@ -73,12 +71,11 @@ describe('responsive layout resolver', () => {
     });
   });
 
-  it('keeps hit bounds equal to visual bounds (WYSIWYG, use hitfill to expand)', () => {
+  it('keeps hit bounds equal to visual bounds (WYSIWYG, use hitzone to expand)', () => {
     const simple: LayoutDocument = {
       id: 'touch',
       name: 'Touch',
       schemaVersion: 1,
-      defaultOrientation: 'landscape',
       sections: [
         {
           id: 'left',
@@ -97,7 +94,6 @@ describe('responsive layout resolver', () => {
         { id: 'center', relativeWidth: 0.5, controls: [] },
         { id: 'right', relativeWidth: 1, controls: [] },
       ],
-      assets: [],
     };
     // need viewport at least 2.5*100=250 to fit sides+center
     const controls = resolveLayout(simple, { width: 300, height: 100 })

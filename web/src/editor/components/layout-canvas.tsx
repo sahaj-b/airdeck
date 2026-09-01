@@ -25,9 +25,9 @@ import {
   clampDrag,
   clampSectionDivider,
   findControl,
-  getHitfillsOf,
+  getHitzonesOf,
   isDefaultLocked,
-  moveParentWithHitfills,
+  moveParentWithHitzones,
   resizeControl,
   updateControlGeometry,
   updateSectionWidth,
@@ -163,23 +163,23 @@ export function LayoutCanvas({
   const selectedPeerIds = useMemo(() => {
     if (!selectedControlId) return new Set<string>();
     const found = findControl(document, selectedControlId);
-    if (!found || found.control.type === 'hitfill') return new Set<string>();
-    const hitfills = getHitfillsOf(document, selectedControlId);
-    return new Set<string>(hitfills);
+    if (!found || found.control.type === 'hitzone') return new Set<string>();
+    const hitzones = getHitzonesOf(document, selectedControlId);
+    return new Set<string>(hitzones);
   }, [document, selectedControlId]);
 
   const hoveredPeerIds = useMemo(() => {
     if (!hoveredControlId) return new Set<string>();
     const found = findControl(document, hoveredControlId);
-    if (!found || found.control.type === 'hitfill') return new Set<string>();
-    return new Set<string>(getHitfillsOf(document, hoveredControlId));
+    if (!found || found.control.type === 'hitzone') return new Set<string>();
+    return new Set<string>(getHitzonesOf(document, hoveredControlId));
   }, [document, hoveredControlId]);
 
   const locked = selectedControl
     ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
     : true;
-  const isParentWithHitfills = selectedControl
-    ? getHitfillsOf(document, selectedControl.id).length > 0
+  const isParentWithHitzones = selectedControl
+    ? getHitzonesOf(document, selectedControl.id).length > 0
     : false;
 
   const { resolvedRect } = useMemo(() => {
@@ -220,8 +220,8 @@ export function LayoutCanvas({
     onDrag: (deltaX, deltaY) => {
       if (!selectedControlId) return;
       let next: LayoutDocument;
-      if (isParentWithHitfills) {
-        next = moveParentWithHitfills(
+      if (isParentWithHitzones) {
+        next = moveParentWithHitzones(
           document,
           selectedControlId,
           deltaX,
@@ -397,10 +397,10 @@ export function LayoutCanvas({
               const rect = rc.visual;
               const isSelected = rc.control.id === selectedControlId;
               const isParent =
-                getHitfillsOf(document, rc.control.id).length > 0;
+                getHitzonesOf(document, rc.control.id).length > 0;
+              const isSelectedPeer = selectedPeerIds.has(rc.control.id);
               const isPeer =
-                selectedPeerIds.has(rc.control.id) ||
-                hoveredPeerIds.has(rc.control.id);
+                isSelectedPeer || hoveredPeerIds.has(rc.control.id);
               const isHovered = hoveredControlId === rc.control.id;
               return (
                 <ControlHit
@@ -410,6 +410,7 @@ export function LayoutCanvas({
                   isSelected={isSelected}
                   isParent={isParent}
                   isPeer={isPeer}
+                  isSelectedPeer={isSelectedPeer}
                   isHovered={isHovered}
                   viewportHeight={viewport.height}
                   scale={scale}
@@ -469,9 +470,9 @@ export function LayoutCanvas({
 
 function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
   if (control.type === 'dpad') return 'rect';
-  if (control.type === 'hitfill')
+  if (control.type === 'hitzone')
     return control.shape === 'round' ? 'ellipse' : 'rect';
-  if (control.type === 'label' || control.type === 'image') return 'rect';
+  if (control.type === 'label') return 'rect';
   if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
     return 'rect';
   if (control.shape === 'round') return 'ellipse';
@@ -484,6 +485,7 @@ const ControlHit = memo(function ControlHit({
   isSelected,
   isParent,
   isPeer,
+  isSelectedPeer,
   isHovered,
   viewportHeight,
   scale,
@@ -498,6 +500,7 @@ const ControlHit = memo(function ControlHit({
   isSelected: boolean;
   isParent: boolean;
   isPeer: boolean;
+  isSelectedPeer: boolean;
   isHovered: boolean;
   viewportHeight: number;
   scale: number;
@@ -516,7 +519,7 @@ const ControlHit = memo(function ControlHit({
   const isParentRef = useRef(isParent);
   const onSelectSectionRef = useRef(onSelectSection);
   const startWasSelectedRef = useRef(false);
-  const isHitfill = control.type === 'hitfill';
+  const isHitzone = control.type === 'hitzone';
   const hitShape = effectiveHitShape(control);
 
   // direct sync without effects - cheaper than 7 useEffects
@@ -547,11 +550,11 @@ const ControlHit = memo(function ControlHit({
           const deltaX = event.dx / s / vh;
           const deltaY = event.dy / s / vh;
           const latest = latestRef.current;
-          const isParentWithHitfills =
-            isParentRef.current && control.type !== 'hitfill';
+          const isParentWithHitzones =
+            isParentRef.current && control.type !== 'hitzone';
           let next: LayoutDocument;
-          if (isParentWithHitfills) {
-            next = moveParentWithHitfills(latest, control.id, deltaX, deltaY);
+          if (isParentWithHitzones) {
+            next = moveParentWithHitzones(latest, control.id, deltaX, deltaY);
           } else {
             const found = findControl(latest, control.id);
             if (!found) return;
@@ -573,13 +576,22 @@ const ControlHit = memo(function ControlHit({
     return () => instance.unset();
   }, [control.id, control.type, latestRef]);
 
+  const isForgiving =
+    isSelected &&
+    hitShape === 'rect' &&
+    control.shape === 'round' &&
+    !isHitzone &&
+    control.type !== 'label' &&
+    control.type !== 'dpad';
+  const showHitzoneHatch = isHitzone && (isSelectedPeer || isSelected);
+
   return (
     <button
       type="button"
       ref={hitRef}
       className={cn(
         'editor-control-hit',
-        isHitfill && 'editor-hit-only',
+        isHitzone && 'editor-hit-only',
         isSelected && 'editor-control-selected',
         isPeer && !isSelected && 'editor-control-peer',
         isHovered && !isSelected && !isPeer && 'editor-control-hovered',
@@ -605,9 +617,15 @@ const ControlHit = memo(function ControlHit({
         }
       }}
     >
+      {isForgiving && (
+        <div className="editor-forgiving-hatch" aria-hidden="true" />
+      )}
+      {showHitzoneHatch && (
+        <div className="editor-hitzone-hatch" aria-hidden="true" />
+      )}
       {isSelected && (
         <div ref={selectedRef} className="editor-interaction-layer">
-          <ControlOverlay selected isHitfill={isHitfill} />
+          <ControlOverlay selected isHitzone={isHitzone} />
         </div>
       )}
     </button>
@@ -883,7 +901,7 @@ function structureSignature(document: LayoutDocument): string {
   for (const section of document.sections) {
     sig += `${section.id}|`;
     for (const c of section.controls) {
-      sig += `${c.id},${c.type},${c.parentId ?? ''},${c.shape ?? ''},${c.asset ?? ''},${c.binding ?? ''},${c.label};`;
+      sig += `${c.id},${c.type},${c.parentId ?? ''},${c.shape ?? ''},${c.binding ?? ''},${c.label};`;
     }
     sig += '||';
   }

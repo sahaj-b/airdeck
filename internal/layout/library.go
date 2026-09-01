@@ -32,14 +32,13 @@ type DPadBindings struct {
 
 type Control struct {
 	ID       string           `json:"id"`
-	Type     string           `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'image' | 'hitfill'"`
+	Type     string           `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'hitzone'"`
 	Geometry Geometry         `json:"geometry"`
 	Label    string           `json:"label"`
 	Shape    string           `json:"shape,omitempty" tstype:"'round' | 'rect'"`
 	HitShape string           `json:"hitShape,omitempty" tstype:"'rect'"`
 	Binding  protocol.Command `json:"binding,omitempty"`
 	Bindings *DPadBindings    `json:"bindings,omitempty"`
-	Asset    string           `json:"asset,omitempty"`
 	ParentID string           `json:"parentId,omitempty"`
 }
 
@@ -50,18 +49,11 @@ type Section struct {
 	Controls         []Control `json:"controls"`
 }
 
-type Asset struct {
-	ID   string `json:"id"`
-	Path string `json:"path"`
-}
-
 type Document struct {
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	SchemaVersion      int       `json:"schemaVersion" tstype:"1"`
-	DefaultOrientation string    `json:"defaultOrientation" tstype:"'landscape' | 'portrait'"`
-	Sections           []Section `json:"sections"`
-	Assets             []Asset   `json:"assets"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	SchemaVersion int       `json:"schemaVersion" tstype:"1"`
+	Sections      []Section `json:"sections"`
 }
 
 type Summary struct {

@@ -4,14 +4,7 @@
   "title": "Airdeck LayoutDocument",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "id",
-    "name",
-    "schemaVersion",
-    "defaultOrientation",
-    "sections",
-    "assets"
-  ],
+  "required": ["id", "name", "schemaVersion", "sections"],
   "properties": {
     "id": {
       "type": "string",
@@ -24,9 +17,6 @@
     },
     "schemaVersion": {
       "const": 1
-    },
-    "defaultOrientation": {
-      "enum": ["landscape", "portrait"]
     },
     "sections": {
       "type": "array",
@@ -68,13 +58,6 @@
         }
       ],
       "items": false
-    },
-    "assets": {
-      "type": "array",
-      "maxItems": 64,
-      "items": {
-        "$ref": "#/$defs/asset"
-      }
     }
   },
   "$defs": {
@@ -156,7 +139,7 @@
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
         },
         "type": {
-          "enum": ["button", "dpad", "joystick", "trigger", "label", "image", "hitfill"]
+          "enum": ["button", "dpad", "joystick", "trigger", "label", "hitzone"]
         },
         "geometry": { "$ref": "#/$defs/geometry" },
         "shape": {
@@ -174,7 +157,7 @@
         "parentId": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
-          "description": "Required for hitfill, must reference a non-hitfill control in the same section."
+          "description": "Required for hitzone, must reference a non-hitzone control in the same section."
         },
         "binding": { "$ref": "#/$defs/binding" },
         "bindings": {
@@ -187,30 +170,25 @@
             "left": { "const": "dpadLeft" },
             "right": { "const": "dpadRight" }
           }
-        },
-        "asset": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$"
         }
       },
       "allOf": [
         {
-          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "if": { "properties": { "type": { "const": "hitzone" } } },
           "then": { "required": ["parentId"] },
           "else": { "not": { "required": ["parentId"] } }
         },
         {
-          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "if": { "properties": { "type": { "const": "hitzone" } } },
           "then": {
             "properties": {
               "binding": false,
-              "bindings": false,
-              "asset": false
+              "bindings": false
             }
           }
         },
         {
-          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "if": { "properties": { "type": { "const": "hitzone" } } },
           "then": {
             "properties": {
               "shape": { "enum": ["round", "rect"] }
@@ -218,7 +196,7 @@
           }
         },
         {
-          "if": { "properties": { "type": { "const": "hitfill" } } },
+          "if": { "properties": { "type": { "const": "hitzone" } } },
           "then": {
             "properties": {
               "hitShape": false
@@ -243,21 +221,6 @@
       "type": "array",
       "maxItems": 128,
       "items": { "$ref": "#/$defs/control" }
-    },
-    "asset": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "path"],
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
-        },
-        "path": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$"
-        }
-      }
     }
   }
 }

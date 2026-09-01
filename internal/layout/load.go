@@ -82,19 +82,6 @@ func loadUserFile(dir string, entry os.DirEntry) (Document, error) {
 	if err != nil {
 		return Document{}, err
 	}
-	for _, asset := range doc.Assets {
-		assetPath, err := assetWithin(dir, asset.Path)
-		if err != nil {
-			return Document{}, fmt.Errorf("asset %q: %w", asset.Path, err)
-		}
-		assetInfo, err := os.Lstat(assetPath)
-		if err != nil {
-			return Document{}, fmt.Errorf("asset %q: %w", asset.Path, err)
-		}
-		if assetInfo.Mode()&os.ModeSymlink != 0 || assetInfo.Size() > maxPresetBytes {
-			return Document{}, fmt.Errorf("asset %q is unsafe or too large", asset.Path)
-		}
-	}
 	return doc, nil
 }
 

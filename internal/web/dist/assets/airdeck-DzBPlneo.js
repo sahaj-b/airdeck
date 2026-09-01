@@ -167,7 +167,7 @@ html[data-skin="airdeck"] .orientation-message {
   color: var(--card-foreground);
 }
 
-/* Hitfill extends its parent touch area — it must never paint. The skin’s
+/* Hitzone extends its parent touch area — it must never paint. The skin’s
    .controller-control rules (background/border/shadow) must not apply to it,
    so hide it outright. Pointer hits stay on the parent hit target. */
 html[data-skin="airdeck"] .controller-control.hit-only {

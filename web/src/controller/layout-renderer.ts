@@ -20,7 +20,6 @@ export interface LayoutRendererOptions {
   state: InputStateStore;
   feedback?: PointerFeedback;
   orientation?: Orientation;
-  assetBasePath?: string;
   chrome?: HTMLElement;
   interactive?: boolean;
 }
@@ -90,7 +89,6 @@ export function renderLayout(
   }
 
   const renderedSections: RenderedSection[] = [];
-  const assetBasePath = options.assetBasePath ?? '/assets';
   for (const section of layout.sections) {
     const sectionElement = ownerDocument.createElement('section');
     sectionElement.className = 'controller-section';
@@ -101,12 +99,7 @@ export function renderLayout(
       controls: [],
     };
     for (const control of section.controls) {
-      const rendered = renderControl(
-        ownerDocument,
-        control,
-        layout,
-        assetBasePath,
-      );
+      const rendered = renderControl(ownerDocument, control, layout);
       if (!rendered) continue;
       renderedSection.controls.push(rendered);
       if (rendered.target) sectionElement.append(rendered.target);
@@ -120,14 +113,14 @@ export function renderLayout(
     const visualById = new Map<string, HTMLElement>();
     for (const section of renderedSections) {
       for (const rc of section.controls) {
-        if (rc.control.type !== 'hitfill')
+        if (rc.control.type !== 'hitzone')
           visualById.set(rc.control.id, rc.visual);
       }
     }
     for (const section of renderedSections) {
       for (const rc of section.controls) {
         if (!rc.target) continue;
-        if (rc.control.type === 'hitfill') {
+        if (rc.control.type === 'hitzone') {
           const parent = layout.sections
             .flatMap((s) => s.controls)
             .find((c) => c.id === rc.control.parentId);
@@ -323,14 +316,14 @@ export function renderLayout(
 
 function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
   if (control.type === 'dpad') return 'rect';
-  if (control.type === 'hitfill') {
-    // Hitfills can be round per operator request; otherwise rect.
-    // hitShape is forbidden on hitfill, but handle defensively.
+  if (control.type === 'hitzone') {
+    // Hitzones can be round per operator request; otherwise rect.
+    // hitShape is forbidden on hitzone, but handle defensively.
     if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
       return 'rect';
     return control.shape === 'round' ? 'ellipse' : 'rect';
   }
-  if (control.type === 'label' || control.type === 'image') return 'rect';
+  if (control.type === 'label') return 'rect';
   if (control.hitShape === 'rect') return 'rect';
   if (control.shape === 'round') return 'ellipse';
   return 'rect';
@@ -340,7 +333,6 @@ function renderControl(
   document: Document,
   control: Control,
   layout: LayoutDocument,
-  assetBasePath: string,
 ): RenderedControl | undefined {
   if (control.type === 'label') {
     const label = document.createElement('span');
@@ -350,21 +342,7 @@ function renderControl(
     return { control, visual: label };
   }
 
-  if (control.type === 'image') {
-    const image = document.createElement('img');
-    image.className = 'controller-image';
-    image.dataset.controlId = control.id;
-    image.alt = control.label;
-    image.draggable = false;
-    image.addEventListener('dragstart', (event) => event.preventDefault());
-    const asset = layout.assets.find(
-      (candidate) => candidate.id === control.asset,
-    );
-    if (asset) image.src = assetURL(assetBasePath, asset.path);
-    return { control, visual: image };
-  }
-
-  if (control.type === 'hitfill') {
+  if (control.type === 'hitzone') {
     const parent = layout.sections
       .flatMap((section) => section.controls)
       .find((candidate) => candidate.id === control.parentId);
@@ -481,10 +459,9 @@ function applyResolvedGeometry(
 function applyDynamicSizing(rendered: RenderedControl, rect: PixelRect): void {
   const { control, visual } = rendered;
   if (
-    control.type === 'hitfill' ||
+    control.type === 'hitzone' ||
     control.type === 'joystick' ||
-    control.type === 'dpad' ||
-    control.type === 'image'
+    control.type === 'dpad'
   )
     return;
   const min = Math.min(rect.width, rect.height);
@@ -513,14 +490,6 @@ function setPixelRect(element: HTMLElement, rect: PixelRect): void {
   element.style.top = `${rect.top}px`;
   element.style.width = `${rect.width}px`;
   element.style.height = `${rect.height}px`;
-}
-
-function assetURL(basePath: string, path: string): string {
-  const encodedPath = path
-    .split('/')
-    .map((part) => encodeURIComponent(part))
-    .join('/');
-  return `${basePath.replace(/\/$/, '')}/${encodedPath}`;
 }
 
 function readViewport(

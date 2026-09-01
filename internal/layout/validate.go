@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -62,9 +61,6 @@ func ValidateDocument(document Document) error {
 	if document.ID == "" || document.Name == "" {
 		return errors.New("layout id and name are required")
 	}
-	if document.DefaultOrientation != "landscape" && document.DefaultOrientation != "portrait" {
-		return fmt.Errorf("unsupported default orientation %q", document.DefaultOrientation)
-	}
 	if len(document.Sections) != 3 {
 		return errors.New("layout must contain exactly 3 sections")
 	}
@@ -73,9 +69,6 @@ func ValidateDocument(document Document) error {
 		if section.ID != expectedIDs[i] {
 			return fmt.Errorf("section %d id must be %q, got %q", i, expectedIDs[i], section.ID)
 		}
-	}
-	if len(document.Assets) > 64 {
-		return errors.New("layout cannot contain more than 64 assets")
 	}
 
 	ids := make(map[string]string)
@@ -92,19 +85,6 @@ func ValidateDocument(document Document) error {
 	if err := checkID(document.ID, "document"); err != nil {
 		return err
 	}
-	assetIDs := make(map[string]struct{}, len(document.Assets))
-	for _, asset := range document.Assets {
-		if err := checkID(asset.ID, "asset"); err != nil {
-			return err
-		}
-		if _, ok := assetIDs[asset.ID]; ok {
-			return fmt.Errorf("duplicate asset id %q", asset.ID)
-		}
-		assetIDs[asset.ID] = struct{}{}
-		if err := validateAssetPath(asset.Path); err != nil {
-			return fmt.Errorf("asset %q: %w", asset.ID, err)
-		}
-	}
 	for _, section := range document.Sections {
 		if err := checkID(section.ID, "section"); err != nil {
 			return err
@@ -119,12 +99,12 @@ func ValidateDocument(document Document) error {
 			if err := checkID(control.ID, "control"); err != nil {
 				return err
 			}
-			if err := validateControl(control, section, assetIDs); err != nil {
+			if err := validateControl(control, section); err != nil {
 				return fmt.Errorf("control %q: %w", control.ID, err)
 			}
 		}
 	}
-	// Second pass: hitfill parent relation validation (requires full id map)
+	// Second pass: hitzone parent relation validation (requires full id map)
 	controlByID := make(map[string]Control)
 	sectionByControlID := make(map[string]string)
 	for _, section := range document.Sections {
@@ -135,7 +115,7 @@ func ValidateDocument(document Document) error {
 	}
 	for _, section := range document.Sections {
 		for _, control := range section.Controls {
-			if control.Type == "hitfill" {
+			if control.Type == "hitzone" {
 				if control.ParentID == control.ID {
 					return fmt.Errorf("control %q: parentId must not be self", control.ID)
 				}
@@ -146,8 +126,8 @@ func ValidateDocument(document Document) error {
 				if sectionByControlID[control.ParentID] != section.ID {
 					return fmt.Errorf("control %q: parentId %q must be in same section", control.ID, control.ParentID)
 				}
-				if parent.Type == "hitfill" {
-					return fmt.Errorf("control %q: parentId %q must not reference another hitfill", control.ID, control.ParentID)
+				if parent.Type == "hitzone" {
+					return fmt.Errorf("control %q: parentId %q must not reference another hitzone", control.ID, control.ParentID)
 				}
 			}
 		}
@@ -167,14 +147,14 @@ func validateSection(section Section) error {
 	return nil
 }
 
-func validateControl(control Control, section Section, assetIDs map[string]struct{}) error {
+func validateControl(control Control, section Section) error {
 	switch control.Type {
-	case "button", "dpad", "joystick", "trigger", "label", "image", "hitfill":
+	case "button", "dpad", "joystick", "trigger", "label", "hitzone":
 	default:
 		return fmt.Errorf("unsupported control type %q", control.Type)
 	}
-	isHitfill := control.Type == "hitfill"
-	if isHitfill {
+	isHitzone := control.Type == "hitzone"
+	if isHitzone {
 		switch control.Shape {
 		case "", "round", "rect":
 		default:
@@ -183,22 +163,19 @@ func validateControl(control Control, section Section, assetIDs map[string]struc
 		switch control.HitShape {
 		case "":
 		default:
-			return errors.New("hitfill must not have hitShape")
+			return errors.New("hitzone must not have hitShape")
 		}
 		if control.ParentID == "" {
-			return errors.New("hitfill requires parentId")
+			return errors.New("hitzone requires parentId")
 		}
 		if !parentIDPattern.MatchString(control.ParentID) {
 			return fmt.Errorf("invalid parentId %q", control.ParentID)
 		}
 		if control.Binding != "" {
-			return errors.New("hitfill must not have a binding")
+			return errors.New("hitzone must not have a binding")
 		}
 		if control.Bindings != nil {
-			return errors.New("hitfill must not have bindings")
-		}
-		if control.Asset != "" {
-			return errors.New("hitfill must not have an asset")
+			return errors.New("hitzone must not have bindings")
 		}
 	} else {
 		switch control.Shape {
@@ -212,19 +189,11 @@ func validateControl(control Control, section Section, assetIDs map[string]struc
 			return fmt.Errorf("unsupported hitShape %q", control.HitShape)
 		}
 		if control.ParentID != "" {
-			return errors.New("only hitfill controls may have parentId")
+			return errors.New("only hitzone controls may have parentId")
 		}
 	}
 	if err := validateGeometry(control.Geometry, section, "geometry"); err != nil {
 		return err
-	}
-	if control.Type == "image" {
-		if control.Asset == "" {
-			return errors.New("image control requires an asset")
-		}
-		if _, ok := assetIDs[control.Asset]; !ok {
-			return fmt.Errorf("asset %q is not declared", control.Asset)
-		}
 	}
 	if control.Type == "label" && control.Binding != "" {
 		return errors.New("label controls cannot bind input")
@@ -284,22 +253,3 @@ func validateGeometry(geometry Geometry, section Section, name string) error {
 }
 
 func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
-
-func validateAssetPath(path string) error {
-	if path == "" || filepath.IsAbs(path) || filepath.Clean(path) != path || strings.HasPrefix(path, "../") || path == ".." || strings.Contains(path, `\`) {
-		return errors.New("unsafe asset path")
-	}
-	return nil
-}
-
-func assetWithin(root, path string) (string, error) {
-	if err := validateAssetPath(path); err != nil {
-		return "", err
-	}
-	candidate := filepath.Join(root, filepath.FromSlash(path))
-	rel, err := filepath.Rel(root, candidate)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", errors.New("asset escapes preset directory")
-	}
-	return candidate, nil
-}

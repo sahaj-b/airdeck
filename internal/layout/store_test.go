@@ -16,7 +16,6 @@ func TestLibraryCreateDeleteAndReload(t *testing.T) {
 	doc := baseDoc()
 	doc.ID = "my-edit"
 	doc.Name = "My edit"
-	doc.Assets = []Asset{}
 	if err := lib.Create(doc); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -69,7 +68,6 @@ func TestLibraryBuiltinProtection(t *testing.T) {
 	dup := baseDoc()
 	dup.ID = "xbox-default"
 	dup.Name = "Duplicate"
-	dup.Assets = []Asset{}
 	if err := lib.Create(dup); !errors.Is(err, ErrBuiltinProtected) {
 		t.Fatalf("create duplicate builtin err = %v, want builtin protected", err)
 	}
@@ -84,7 +82,6 @@ func TestLibraryDeleteDefaultProtected(t *testing.T) {
 	doc := baseDoc()
 	doc.ID = "custom"
 	doc.Name = "Custom"
-	doc.Assets = []Asset{}
 	if err := lib.Create(doc); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +116,6 @@ func TestLibraryReloadRetainsOldOnFailure(t *testing.T) {
 	doc := baseDoc()
 	doc.ID = "good"
 	doc.Name = "Good"
-	doc.Assets = []Asset{}
 	if err := lib.Create(doc); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +124,6 @@ func TestLibraryReloadRetainsOldOnFailure(t *testing.T) {
 	dupDoc := baseDoc()
 	dupDoc.ID = "xbox-default"
 	dupDoc.Name = "Dup"
-	dupDoc.Assets = []Asset{}
 	data, _ := marshalDoc(dupDoc)
 	if err := os.WriteFile(filepath.Join(dir, "xbox-default.json"), data, 0o600); err != nil {
 		t.Fatal(err)
@@ -154,7 +149,6 @@ func TestLibraryCreateConflict(t *testing.T) {
 	doc := baseDoc()
 	doc.ID = "conflict"
 	doc.Name = "Conflict"
-	doc.Assets = []Asset{}
 	if err := lib.Create(doc); err != nil {
 		t.Fatal(err)
 	}
@@ -165,5 +159,5 @@ func TestLibraryCreateConflict(t *testing.T) {
 
 func marshalDoc(doc Document) ([]byte, error) {
 	// helper to marshal without validation
-	return []byte(`{"id":"` + doc.ID + `","name":"` + doc.Name + `","schemaVersion":1,"defaultOrientation":"landscape","sections":[{"id":"left","relativeWidth":0.86,"controls":[]},{"id":"center","relativeWidth":0.5,"controls":[]},{"id":"right","relativeWidth":0.94,"controls":[]}],"assets":[]}`), nil
+	return []byte(`{"id":"` + doc.ID + `","name":"` + doc.Name + `","schemaVersion":1,"sections":[{"id":"left","relativeWidth":0.86,"controls":[]},{"id":"center","relativeWidth":0.5,"controls":[]},{"id":"right","relativeWidth":0.94,"controls":[]}]}`), nil
 }

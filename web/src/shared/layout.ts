@@ -23,7 +23,6 @@ import schema from './layout.schema.json';
 
 // Re-export generated types as SSOT. Go is canonical.
 export type {
-  Asset as LayoutAsset,
   Control,
   Document as LayoutDocument,
   DPadBindings,
@@ -43,7 +42,7 @@ import type {
 
 export type ControlType = Control['type'];
 export type ControlShape = NonNullable<Control['shape']>;
-export type Orientation = LayoutDocument['defaultOrientation'];
+export type Orientation = 'landscape' | 'portrait';
 
 export const LAYOUT_SECTION_IDS = ['left', 'center', 'right'] as const;
 export type LayoutSectionId = (typeof LAYOUT_SECTION_IDS)[number];
@@ -63,7 +62,6 @@ const validateSchema: ValidateFunction = new Ajv2020({
   strict: false,
 }).compile(schema);
 
-const safeAsset = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/;
 const parentIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export const DEFAULT_LAYOUT: LayoutDocument = defaultLayout as LayoutDocument;
@@ -88,25 +86,13 @@ export function validateLayout(value: unknown): value is LayoutDocument {
     return true;
   };
   if (!add(document.id)) return false;
-  const assetIds = new Set<string>();
-  for (const asset of document.assets) {
-    if (
-      !add(asset.id) ||
-      assetIds.has(asset.id) ||
-      !safeAsset.test(asset.path) ||
-      asset.path.includes('..')
-    )
-      return false;
-    assetIds.add(asset.id);
-  }
   for (const section of document.sections) {
     if (!add(section.id) || !validSection(section)) return false;
     for (const control of section.controls) {
-      if (!add(control.id) || !validControl(control, section, assetIds))
-        return false;
+      if (!add(control.id) || !validControl(control, section)) return false;
     }
   }
-  // hitfill parent relation second pass
+  // hitzone parent relation second pass
   const controlById = new Map<string, Control>();
   const sectionByControlId = new Map<string, string>();
   for (const section of document.sections) {
@@ -117,12 +103,12 @@ export function validateLayout(value: unknown): value is LayoutDocument {
   }
   for (const section of document.sections) {
     for (const control of section.controls) {
-      if (control.type === 'hitfill') {
+      if (control.type === 'hitzone') {
         if (!control.parentId) return false;
         if (control.parentId === control.id) return false;
         const parent = controlById.get(control.parentId);
         if (!parent) return false;
-        if (parent.type === 'hitfill') return false;
+        if (parent.type === 'hitzone') return false;
         if (sectionByControlId.get(control.parentId) !== section.id)
           return false;
       }
@@ -168,14 +154,6 @@ export function getValidationErrors(value: unknown): ValidationError[] {
     else seen.set(id, kind);
   };
   checkId(document.id, 'document', '/id');
-  for (const asset of document.assets ?? []) {
-    checkId(asset.id, 'asset', `/assets/${asset.id}`);
-    if (!safeAsset.test(asset.path) || asset.path.includes('..'))
-      errors.push({
-        path: `/assets/${asset.id}/path`,
-        message: 'unsafe asset path',
-      });
-  }
   for (const section of document.sections ?? []) {
     checkId(section.id, 'section', `/sections/${section.id}`);
     if (!finitePositive(section.relativeWidth) || section.relativeWidth > 4)
@@ -206,7 +184,7 @@ export function getValidationErrors(value: unknown): ValidationError[] {
         });
     }
   }
-  // second pass for hitfill parent relation
+  // second pass for hitzone parent relation
   if (document.sections) {
     const controlById = new Map<string, Control>();
     const sectionByControlId = new Map<string, string>();
@@ -218,12 +196,12 @@ export function getValidationErrors(value: unknown): ValidationError[] {
     }
     for (const section of document.sections) {
       for (const control of section.controls ?? []) {
-        if (control.type === 'hitfill') {
+        if (control.type === 'hitzone') {
           const parentId = control.parentId;
           if (!parentId) {
             errors.push({
               path: `/sections/${section.id}/controls/${control.id}/parentId`,
-              message: 'hitfill requires parentId',
+              message: 'hitzone requires parentId',
             });
             continue;
           }
@@ -242,10 +220,10 @@ export function getValidationErrors(value: unknown): ValidationError[] {
             });
             continue;
           }
-          if (parent.type === 'hitfill') {
+          if (parent.type === 'hitzone') {
             errors.push({
               path: `/sections/${section.id}/controls/${control.id}/parentId`,
-              message: 'parentId must not reference another hitfill',
+              message: 'parentId must not reference another hitzone',
             });
           }
           if (sectionByControlId.get(parentId) !== section.id) {
@@ -276,10 +254,10 @@ export function getControlErrors(
       path: 'geometry',
       message: 'geometry center is outside section bounds or has invalid size',
     });
-  const isHitfill = control.type === 'hitfill';
-  if (isHitfill) {
+  const isHitzone = control.type === 'hitzone';
+  if (isHitzone) {
     if (!control.parentId) {
-      errors.push({ path: 'parentId', message: 'hitfill requires parentId' });
+      errors.push({ path: 'parentId', message: 'hitzone requires parentId' });
     } else if (!parentIdPattern.test(control.parentId)) {
       errors.push({
         path: 'parentId',
@@ -299,29 +277,26 @@ export function getControlErrors(
     if ((control as Control & { hitShape?: string }).hitShape) {
       errors.push({
         path: 'hitShape',
-        message: 'hitfill must not have hitShape',
+        message: 'hitzone must not have hitShape',
       });
     }
     if (control.binding) {
       errors.push({
         path: 'binding',
-        message: 'hitfill must not have a binding',
+        message: 'hitzone must not have a binding',
       });
     }
     if (control.bindings) {
       errors.push({
         path: 'bindings',
-        message: 'hitfill must not have bindings',
+        message: 'hitzone must not have bindings',
       });
-    }
-    if (control.asset) {
-      errors.push({ path: 'asset', message: 'hitfill must not have an asset' });
     }
   } else {
     if (control.parentId) {
       errors.push({
         path: 'parentId',
-        message: 'only hitfill controls may have parentId',
+        message: 'only hitzone controls may have parentId',
       });
     }
     if (control.shape && control.shape !== 'round' && control.shape !== 'rect')
@@ -336,8 +311,6 @@ export function getControlErrors(
         message: `unsupported hitShape ${hitShape}`,
       });
   }
-  if (control.type === 'image' && !control.asset)
-    errors.push({ path: 'asset', message: 'image control requires an asset' });
   if (control.type === 'label' && control.binding)
     errors.push({
       path: 'binding',
@@ -349,13 +322,12 @@ export function getControlErrors(
       message: `unknown command ${control.binding}`,
     });
   if (
-    control.type !== 'hitfill' &&
+    control.type !== 'hitzone' &&
     control.type !== 'button' &&
     control.type !== 'dpad' &&
     control.type !== 'joystick' &&
     control.type !== 'trigger' &&
-    control.type !== 'label' &&
-    control.type !== 'image'
+    control.type !== 'label'
   ) {
     errors.push({
       path: 'type',
@@ -417,17 +389,8 @@ function validSection(section: Section): boolean {
   return true;
 }
 
-function validControl(
-  control: Control,
-  section: Section,
-  assetIds: Set<string>,
-): boolean {
+function validControl(control: Control, section: Section): boolean {
   if (getControlErrors(control, section).length > 0) return false;
-  if (
-    control.type === 'image' &&
-    (!control.asset || !assetIds.has(control.asset))
-  )
-    return false;
   return true;
 }
 

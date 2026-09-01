@@ -8,10 +8,10 @@ import {
   clampSectionDivider,
   findControl,
   getBindingLabel,
-  getHitfillsOf,
+  getHitzonesOf,
   isDefaultLocked,
   LayoutHistory,
-  moveParentWithHitfills,
+  moveParentWithHitzones,
   pixelsToHeightUnits,
   updateControlGeometry,
 } from './layout-editor';
@@ -19,20 +19,20 @@ import {
 const base = xboxDefault as unknown as LayoutDocument;
 
 describe('layout-editor helpers', () => {
-  it('groups hitfill with its parent as one history entry and moves both', () => {
+  it('groups hitzone with its parent as one history entry and moves both', () => {
     const history = new LayoutHistory(50);
     history.reset(base);
-    const hitfills = getHitfillsOf(base, 'south');
-    expect(hitfills).toContain('xyab-fill-s');
-    expect(hitfills.length).toBe(1);
+    const hitzones = getHitzonesOf(base, 'south');
+    expect(hitzones).toContain('xyab-hitzone-s');
+    expect(hitzones.length).toBe(1);
 
     const southBefore = base.sections[2].controls.find((c) => c.id === 'south');
     if (!southBefore) throw new Error('south missing');
     const fillerBefore = base.sections[2].controls.find(
-      (c) => c.id === 'xyab-fill-s',
+      (c) => c.id === 'xyab-hitzone-s',
     );
     if (!fillerBefore) throw new Error('filler missing');
-    const moved = moveParentWithHitfills(base, 'south', 0.02, 0.02);
+    const moved = moveParentWithHitzones(base, 'south', 0.02, 0.02);
     history.push(moved);
     expect(history.size).toBe(2);
     expect(history.canUndo).toBe(true);
@@ -40,7 +40,7 @@ describe('layout-editor helpers', () => {
     const southAfter = moved.sections[2].controls.find((c) => c.id === 'south');
     if (!southAfter) throw new Error('south missing');
     const fillerAfter = moved.sections[2].controls.find(
-      (c) => c.id === 'xyab-fill-s',
+      (c) => c.id === 'xyab-hitzone-s',
     );
     if (!fillerAfter) throw new Error('filler missing');
     expect(southAfter.geometry.position.x).not.toBe(
@@ -64,23 +64,23 @@ describe('layout-editor helpers', () => {
     ).toBe(southAfter.geometry.position.x);
   });
 
-  it('dragging hitfill moves only itself, not parent', () => {
-    const hitfillId = 'xyab-fill-s';
-    const foundHitfill = findControl(base, hitfillId);
-    if (!foundHitfill) throw new Error('hitfill missing');
-    const movedHitfill = updateControlGeometry(
+  it('dragging hitzone moves only itself, not parent', () => {
+    const hitzoneId = 'xyab-hitzone-s';
+    const foundHitzone = findControl(base, hitzoneId);
+    if (!foundHitzone) throw new Error('hitzone missing');
+    const movedHitzone = updateControlGeometry(
       base,
-      hitfillId,
+      hitzoneId,
       clampDrag(
-        foundHitfill.control.geometry,
+        foundHitzone.control.geometry,
         0.03,
         0.03,
-        foundHitfill.section,
+        foundHitzone.section,
       ),
     );
     const southBefore = base.sections[2].controls.find((c) => c.id === 'south');
     if (!southBefore) throw new Error('south missing');
-    const southAfter = movedHitfill.sections[2].controls.find(
+    const southAfter = movedHitzone.sections[2].controls.find(
       (c) => c.id === 'south',
     );
     if (!southAfter) throw new Error('south missing');
@@ -92,11 +92,11 @@ describe('layout-editor helpers', () => {
     );
   });
 
-  it('caps history at 50 entries and treats parent+hitfills move as one', () => {
+  it('caps history at 50 entries and treats parent+hitzones move as one', () => {
     const history = new LayoutHistory(5);
     history.reset(base);
     for (let index = 0; index < 10; index += 1) {
-      const next = moveParentWithHitfills(
+      const next = moveParentWithHitzones(
         history.current() as LayoutDocument,
         'south',
         0.01,

@@ -153,7 +153,7 @@ html[data-skin="neumorph-light"] .orientation-message {
   color: var(--text);
 }
 
-/* Hitfill extends its parent touch area — it must never paint. The skin’s
+/* Hitzone extends its parent touch area — it must never paint. The skin’s
    .controller-control rules (background/border/shadow) must not apply to it,
    so hide it outright. Pointer hits stay on the parent hit target. */
 html[data-skin="neumorph-light"] .controller-control.hit-only {

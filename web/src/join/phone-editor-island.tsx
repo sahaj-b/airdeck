@@ -12,10 +12,10 @@ import {
   clampDrag,
   cloneDocument,
   findControl,
-  getHitfillsOf,
+  getHitzonesOf,
   isDefaultLocked,
   LayoutHistory,
-  moveParentWithHitfills,
+  moveParentWithHitzones,
   resizeControl,
   updateControlGeometry,
 } from '../shared/layout-editor';
@@ -29,9 +29,9 @@ const ONBOARDING_KEY = 'airdeck.phoneEditorOnboarded';
 
 function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
   if (control.type === 'dpad') return 'rect';
-  if (control.type === 'hitfill')
+  if (control.type === 'hitzone')
     return control.shape === 'round' ? 'ellipse' : 'rect';
-  if (control.type === 'label' || control.type === 'image') return 'rect';
+  if (control.type === 'label') return 'rect';
   if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
     return 'rect';
   if (control.shape === 'round') return 'ellipse';
@@ -229,12 +229,12 @@ function PhoneEditorIsland({
   const selectedPeerIds = useMemo(() => {
     if (!selectedId) return new Set<string>();
     const found = findControl(draft, selectedId);
-    if (!found || found.control.type === 'hitfill') return new Set<string>();
-    return new Set<string>(getHitfillsOf(draft, selectedId));
+    if (!found || found.control.type === 'hitzone') return new Set<string>();
+    return new Set<string>(getHitzonesOf(draft, selectedId));
   }, [draft, selectedId]);
 
-  const isParentWithHitfills = selectedControl
-    ? getHitfillsOf(draft, selectedControl.id).length > 0
+  const isParentWithHitzones = selectedControl
+    ? getHitzonesOf(draft, selectedControl.id).length > 0
     : false;
 
   const locked = selectedControl
@@ -255,8 +255,8 @@ function PhoneEditorIsland({
     (deltaX: number, deltaY: number) => {
       if (!selectedId) return;
       let next: LayoutDocument;
-      if (isParentWithHitfills) {
-        next = moveParentWithHitfills(
+      if (isParentWithHitzones) {
+        next = moveParentWithHitzones(
           draftRef.current,
           selectedId,
           deltaX,
@@ -274,7 +274,7 @@ function PhoneEditorIsland({
       draftRef.current = next;
       setDraft(next);
     },
-    [selectedId, isParentWithHitfills],
+    [selectedId, isParentWithHitzones],
   );
 
   const handleResize = useCallback(
@@ -391,7 +391,7 @@ function PhoneEditorIsland({
     setShowOnboarding(false);
   };
 
-  const isSelectedHitfill = selectedControl?.type === 'hitfill';
+  const isSelectedHitzone = selectedControl?.type === 'hitzone';
 
   return (
     <div
@@ -490,7 +490,7 @@ function PhoneEditorIsland({
         {resolved.sections.flatMap((section) =>
           section.controls.map((rc) => {
             const isSelected = rc.control.id === selectedId;
-            const isHitfill = rc.control.type === 'hitfill';
+            const isHitzone = rc.control.type === 'hitzone';
             const isPeer = selectedPeerIds.has(rc.control.id);
             const hitShape = effectiveHitShape(rc.control as Control);
             return (
@@ -502,14 +502,14 @@ function PhoneEditorIsland({
                   'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
                   (isSelected
                     ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] '
-                    : isHitfill
+                    : isHitzone
                       ? 'border-dashed border-white/35 bg-white/[0.06] opacity-35 '
                       : 'border-transparent ') +
                   (isPeer && !isSelected
                     ? '!border-dashed !border-[rgb(250_204_21/0.95)] !bg-[rgb(250_204_21/0.12)] ' +
-                      (isHitfill ? '!bg-[rgb(250_204_21/0.14)] ' : '')
+                      (isHitzone ? '!bg-[rgb(250_204_21/0.14)] ' : '')
                     : '') +
-                  (isSelected && isHitfill ? '!opacity-60 ' : '')
+                  (isSelected && isHitzone ? '!opacity-60 ' : '')
                 }
                 style={{
                   left: rc.visual.left,
@@ -531,10 +531,10 @@ function PhoneEditorIsland({
                     className="absolute inset-0 pointer-events-auto touch-none"
                     data-phone-handles
                   >
-                    <span className="phone-editor-handle tl absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none top-[-4px] left-[-4px]" />
-                    <span className="phone-editor-handle tr absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none top-[-4px] right-[-4px]" />
-                    <span className="phone-editor-handle bl absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none bottom-[-4px] left-[-4px]" />
-                    <span className="phone-editor-handle br absolute size-2 bg-[#7c86ff] border border-white rounded-[1px] pointer-events-auto touch-none bottom-[-4px] right-[-4px]" />
+                    <span className="phone-editor-handle tl absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none top-[-4px] left-[-4px]" />
+                    <span className="phone-editor-handle tr absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none top-[-4px] right-[-4px]" />
+                    <span className="phone-editor-handle bl absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none bottom-[-4px] left-[-4px]" />
+                    <span className="phone-editor-handle br absolute size-2 bg-[#7c86ff] rounded-[1px] pointer-events-auto touch-none bottom-[-4px] right-[-4px]" />
                     <div className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md text-[11px] text-white whitespace-nowrap pointer-events-auto">
                       <button
                         type="button"
@@ -556,8 +556,8 @@ function PhoneEditorIsland({
                       >
                         {locked ? '🔒' : '🔓'}
                       </button>
-                      {isSelectedHitfill && (
-                        <span title="hitfill">◈ hitfill</span>
+                      {isSelectedHitzone && (
+                        <span title="hitzone">◈ hitzone</span>
                       )}
                     </div>
                   </div>
