@@ -391,11 +391,51 @@ export function useEditorActions() {
   );
 
   const handleApplyToAll = useCallback(async (): Promise<void> => {
-    const cur = useEditorStore.getState().draft;
-    const stDirty = useEditorStore.getState().dirty;
-    if (!cur || stDirty) return;
-    const liveErrors = cur ? validateLayoutDetailed(cur).errors : [];
-    if (liveErrors.length > 0) return;
+    const st = useEditorStore.getState();
+    const cur = st.draft;
+    if (!cur) return;
+    const liveErrors = validateLayoutDetailed(cur).errors;
+    if (liveErrors.length > 0) {
+      useEditorStore
+        .getState()
+        .setError('Fix validation errors before applying.');
+      return;
+    }
+    const builtin = st.layouts.find((l) => l.id === cur.id)?.builtin;
+    if (builtin) {
+      try {
+        await setAllPlayerLayouts(cur.id);
+        useEditorStore.getState().setError(null);
+      } catch (err) {
+        useEditorStore
+          .getState()
+          .setError(
+            err instanceof Error ? err.message : 'Apply to all failed.',
+          );
+      }
+      return;
+    }
+    const isNew = !st.layouts.some((l) => l.id === cur.id);
+    const needsSave = st.dirty || isNew;
+    if (needsSave) {
+      try {
+        if (isNew) {
+          await createAdminLayout(cur);
+        } else {
+          await updateAdminLayout(cur.id, cur);
+        }
+        useEditorStore.getState().setPersisted(cloneDocument(cur));
+        useEditorStore.getState().historyPush(cur);
+        useEditorStore.getState().setDirty(false);
+        const state = await getAdminState();
+        useEditorStore.getState().setLayouts(state.layouts);
+        useEditorStore.getState().setError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Save failed.';
+        useEditorStore.getState().setError(message);
+        return;
+      }
+    }
     try {
       await setAllPlayerLayouts(cur.id);
       useEditorStore.getState().setError(null);

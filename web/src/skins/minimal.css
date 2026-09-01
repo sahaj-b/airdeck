@@ -51,6 +51,14 @@ html[data-skin="minimal"] .control-joystick {
     background-color 90ms ease;
 }
 
+html[data-skin="minimal"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="minimal"] .control-joystick[data-shape="rect"] {
+  border-radius: 0;
+}
+
 html[data-skin="minimal"] .control-joystick.is-active {
   border-color: var(--ink);
   background: transparent;

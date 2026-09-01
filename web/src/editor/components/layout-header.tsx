@@ -271,7 +271,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
                   variant="outline"
                   size="sm"
                   className="header-btn-compact gap-1.5 bg-card"
-                  disabled={props.dirty || props.hasErrors}
+                  disabled={props.hasErrors}
                   onClick={props.onApplyToAll}
                 >
                   <Users className="size-3.5" />
@@ -283,7 +283,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
               {props.hasErrors
                 ? 'Fix validation errors before applying'
                 : props.dirty
-                  ? 'Save changes before applying to players'
+                  ? 'Save and push to all connected players'
                   : 'Push this layout to all connected players'}
             </TooltipContent>
           </Tooltip>

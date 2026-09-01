@@ -29,7 +29,7 @@ html[data-skin="airdeck"] .controller-frame {
 }
 
 html[data-skin="airdeck"] .controller-control {
-  border: 1px solid color-mix(in oklch, var(--border) 45%, var(--ring) 55%);
+  border: 1px solid color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
   border-radius: 0.55rem;
   padding: 0.3rem;
   background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
@@ -41,7 +41,7 @@ html[data-skin="airdeck"] .controller-control {
 
 html[data-skin="airdeck"] .controller-control:hover,
 html[data-skin="airdeck"] .dpad-direction:hover {
-  border-color: color-mix(in oklch, var(--border) 55%, var(--foreground) 45%);
+  border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
 }
 
 html[data-skin="airdeck"] .controller-control.is-pressed {
@@ -59,8 +59,7 @@ html[data-skin="airdeck"]
 }
 
 html[data-skin="airdeck"] .control-joystick {
-  border: 1px solid color-mix(in oklch, var(--border) 45%, var(--ring) 55%);
-  border-radius: 50%;
+  border: 1px solid color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
   background: radial-gradient(
     circle at 42% 34%,
     color-mix(
@@ -73,13 +72,21 @@ html[data-skin="airdeck"] .control-joystick {
   box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 32%);
 }
 
+html[data-skin="airdeck"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="airdeck"] .control-joystick[data-shape="rect"] {
+  border-radius: 0.55rem;
+}
+
 html[data-skin="airdeck"] .control-joystick::after {
   border: 2px solid var(--slot-accent);
   background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
 }
 
 html[data-skin="airdeck"] .dpad-direction {
-  border: 1px solid color-mix(in oklch, var(--border) 45%, var(--ring) 55%);
+  border: 1px solid color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
   border-radius: 12%;
   padding: 0;
   background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
@@ -101,7 +108,13 @@ html[data-skin="airdeck"] .controller-dpad[data-direction="left"] .dpad-left {
 
 html[data-skin="airdeck"] .controller-label {
   color: var(--muted-foreground);
-  font-size: clamp(0.55rem, calc(var(--control-min, 32px) * 0.32), 0.95rem);
+  --_label-len: var(--label-len, 1);
+  --_fit-h: calc(var(--control-min, 32px) * 0.32);
+  --_fit-w: calc(
+    (var(--control-w, 32px) - 8px) /
+    (max(1, var(--_label-len)) * 0.6)
+  );
+  font-size: clamp(0.55rem, min(var(--_fit-w), var(--_fit-h)), 0.95rem);
 }
 
 html[data-skin="airdeck"] .controller-slot {
@@ -113,19 +126,19 @@ html[data-skin="airdeck"] .controller-name {
 }
 
 html[data-skin="airdeck"] .controller-status {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
   background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
   color: var(--card-foreground);
 }
 
 html[data-skin="airdeck"] .icon-button {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
   background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
   color: var(--card-foreground);
 }
 
 html[data-skin="airdeck"] .icon-button:hover {
-  border-color: color-mix(in oklch, var(--border) 55%, var(--foreground) 45%);
+  border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
   background: color-mix(in oklch, var(--card) 76%, var(--muted) 24%);
   color: var(--foreground);
 }
@@ -135,7 +148,7 @@ html[data-skin="airdeck"] .settings-backdrop {
 }
 
 html[data-skin="airdeck"] .settings-sheet {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
   background: var(--popover);
 }
 
@@ -148,7 +161,7 @@ html[data-skin="airdeck"] .settings-row input[type="checkbox"] {
 }
 
 html[data-skin="airdeck"] .controller-layout-picker {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
   background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
   color: var(--foreground);
 }
@@ -162,7 +175,7 @@ html[data-skin="airdeck"] .settings-capabilities {
 }
 
 html[data-skin="airdeck"] .orientation-message {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
   background: var(--card);
   color: var(--card-foreground);
 }

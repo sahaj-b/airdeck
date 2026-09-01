@@ -135,6 +135,14 @@ html[data-skin="console"] .control-joystick {
     0 1px 1px rgb(255 255 255 / 0.12);
 }
 
+html[data-skin="console"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="console"] .control-joystick[data-shape="rect"] {
+  border-radius: 0.7rem;
+}
+
 html[data-skin="console"] .control-joystick.is-active {
   box-shadow:
     inset 0 6px 12px rgb(0 0 0 / 0.75),

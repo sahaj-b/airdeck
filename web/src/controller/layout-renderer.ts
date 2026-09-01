@@ -470,6 +470,8 @@ function applyDynamicSizing(rendered: RenderedControl, rect: PixelRect): void {
   visual.style.setProperty('--control-h', `${rect.height}px`);
   visual.style.setProperty('--control-min', `${min}px`);
   visual.style.setProperty('--control-max', `${max}px`);
+  const len = control.label ? [...control.label].length : 1;
+  visual.style.setProperty('--label-len', String(Math.max(1, len)));
 }
 
 function setLocalRect(

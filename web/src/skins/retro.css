@@ -86,6 +86,14 @@ html[data-skin="retro"] .control-joystick {
   box-shadow: inset 3px 3px 0 rgb(13 14 23 / 0.6);
 }
 
+html[data-skin="retro"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="retro"] .control-joystick[data-shape="rect"] {
+  border-radius: 6px;
+}
+
 html[data-skin="retro"] .control-joystick::after {
   width: 48%;
   height: 48%;

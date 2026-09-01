@@ -1,4 +1,11 @@
-import { Copy, Lock, PanelRightClose, Trash2, Unlock } from 'lucide-react';
+import {
+  Copy,
+  Lock,
+  PanelRightClose,
+  Square,
+  Trash2,
+  Unlock,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
@@ -564,192 +571,174 @@ function ControlFields({
         </div>
       )}
 
-      {isDpad && (
+      {!isDpad && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            D-pad has four fixed directions.
-          </p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {(['up', 'down', 'left', 'right'] as const).map((dir) => (
-              <div
-                key={dir}
-                className="rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground"
-              >
-                {dir}: {control.bindings?.[dir] ?? '-'}
-              </div>
-            ))}
+          <div className="flex items-center gap-3">
+            <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
+              Shape
+            </Label>
+            <Select
+              value={control.shape ?? 'round'}
+              onValueChange={(value) => {
+                if (value) update({ shape: value as 'round' | 'rect' });
+              }}
+            >
+              <SelectTrigger className="flex-1 h-8">
+                <SelectValue>
+                  {(value: string | null) =>
+                    value === 'round'
+                      ? 'Round / Ellipse'
+                      : value === 'rect'
+                        ? 'Rectangle'
+                        : ''
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="round">Round / Ellipse</SelectItem>
+                <SelectItem value="rect">Rectangle</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       )}
-
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">
-            Shape
-          </Label>
-          <Select
-            value={control.shape ?? 'round'}
-            onValueChange={(value) => {
-              if (value) update({ shape: value as 'round' | 'rect' });
-            }}
-          >
-            <SelectTrigger className="flex-1 h-8">
-              <SelectValue>
-                {(value: string | null) =>
-                  value === 'round'
-                    ? 'Round / Ellipse'
-                    : value === 'rect'
-                      ? 'Rectangle'
-                      : ''
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="round">Round / Ellipse</SelectItem>
-              <SelectItem value="rect">Rectangle</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {(() => {
-          const canUseHitShape =
-            control.type !== 'dpad' &&
-            control.type !== 'hitzone' &&
-            control.type !== 'label';
-          const canToggleHitShape = canUseHitShape && control.shape === 'round';
-          const canAddHitzone =
-            !!onAddHitzone &&
-            control.type !== 'hitzone' &&
-            control.type !== 'label';
-          if (!canUseHitShape && !canAddHitzone) return null;
-          const hitRect =
-            (control as unknown as { hitShape?: string }).hitShape === 'rect';
-          const toggleHitShape = () => {
-            const next = structuredClone(document);
-            const found = findControl(next, control.id);
-            if (!found) return;
-            if (hitRect) {
-              delete (found.control as unknown as Record<string, unknown>)
-                .hitShape;
-            } else {
-              (found.control as unknown as Record<string, unknown>).hitShape =
-                'rect';
-            }
-            onDraftChange(next, true);
-          };
-          return (
-            <div className="space-y-2 pt-3">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
-                  Touch Area
-                </h4>
-                <span className="text-[10px] font-mono text-muted-foreground/55">
-                  hitShape · hitzone
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {/* Shape Fit toggle — precise vs forgiving */}
-                <Tooltip>
-                  <TooltipTrigger
-                    closeOnClick={false}
-                    render={
-                      <button
-                        type="button"
-                        disabled={!canToggleHitShape}
-                        aria-pressed={hitRect}
-                        aria-label={
-                          hitRect
-                            ? 'Hit area: rectangle, corners active'
-                            : 'Hit area: ellipse only, corners dead'
-                        }
-                        onClick={toggleHitShape}
-                        className={[
-                          'group relative flex aspect-[1/0.95] flex-col items-center justify-between overflow-hidden rounded-[14px] border p-2.5 text-center transition-all duration-150 ease-out',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                          hitRect
-                            ? 'border-foreground/15 bg-muted shadow-none'
-                            : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-card',
-                          !canToggleHitShape
-                            ? 'opacity-40 cursor-not-allowed hover:bg-card hover:border-border'
-                            : 'cursor-pointer active:scale-[0.98]',
-                        ].join(' ')}
-                      >
-                        <div className="flex flex-1 items-center justify-center py-1">
-                          {hitRect ? <ForgivingHitIcon /> : <PreciseHitIcon />}
-                        </div>
-                        <div className="w-full">
-                          <p className="text-xs font-semibold leading-none tracking-tight text-foreground">
-                            {hitRect
-                              ? 'Touch on Rectangle'
-                              : 'Touch on Ellipse'}
-                          </p>
-                        </div>
-                      </button>
-                    }
-                  />
-                  <TooltipContent
-                    side="top"
-                    className="max-w-[220px] text-center leading-snug"
-                  >
-                    {canToggleHitShape
-                      ? hitRect
-                        ? 'Full bounding box rectangle is the touch zone'
-                        : 'Shape is the touch zone, corners are dead zones'
-                      : 'This control is only available for Round shape'}
-                  </TooltipContent>
-                </Tooltip>
-
-                {/* Add Hitzone — create invisible extender */}
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        disabled={!canAddHitzone}
-                        onClick={() =>
-                          canAddHitzone && onAddHitzone(control.id)
-                        }
-                        aria-label="Add hitzone — extend touch beyond shape"
-                        className={[
-                          'group relative flex aspect-[1/0.95] flex-col items-center justify-between overflow-hidden rounded-[14px] border-2 p-2.5 text-center transition-all duration-150 ease-out',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                          canAddHitzone
-                            ? 'border-dashed border-[color-mix(in_oklch,var(--muted-foreground)_26%,var(--border))] bg-card hover:border-solid hover:border-[var(--editor-accent)] hover:bg-card cursor-pointer active:scale-[0.98]'
-                            : 'border-dashed border-muted bg-muted/20 opacity-40 cursor-not-allowed',
-                        ].join(' ')}
-                      >
-                        <div className="flex flex-1 items-center justify-center py-1">
-                          <HitzoneAddIcon />
-                        </div>
-                        <div className="w-full">
-                          <p className="flex items-center justify-center gap-1 text-xs font-semibold leading-none tracking-tight text-foreground">
-                            Add Hitzone
-                            <span className="grid size-3 place-items-center rounded-full bg-[var(--editor-accent)] text-[9px] leading-none text-white shadow-sm transition-transform group-hover:scale-110">
-                              +
-                            </span>
-                          </p>
-                        </div>
-                      </button>
-                    }
-                  />
-                  <TooltipContent
-                    side="top"
-                    className="max-w-[220px] text-center leading-snug"
-                  >
-                    {canAddHitzone
-                      ? 'Create an invisible touch area for this control'
-                      : 'This control cant have hitzones'}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              {fieldErrors.get('hitShape') && (
-                <p className="text-[11px] text-destructive">
-                  {fieldErrors.get('hitShape')}
-                </p>
-              )}
+      {(() => {
+        const canUseHitShape =
+          control.type !== 'dpad' &&
+          control.type !== 'hitzone' &&
+          control.type !== 'label';
+        const canToggleHitShape = canUseHitShape && control.shape === 'round';
+        const canAddHitzone =
+          !!onAddHitzone &&
+          control.type !== 'hitzone' &&
+          control.type !== 'label';
+        if (!canUseHitShape && !canAddHitzone) return null;
+        const hitRect =
+          (control as unknown as { hitShape?: string }).hitShape === 'rect';
+        const toggleHitShape = () => {
+          const next = structuredClone(document);
+          const found = findControl(next, control.id);
+          if (!found) return;
+          if (hitRect) {
+            delete (found.control as unknown as Record<string, unknown>)
+              .hitShape;
+          } else {
+            (found.control as unknown as Record<string, unknown>).hitShape =
+              'rect';
+          }
+          onDraftChange(next, true);
+        };
+        return (
+          <div className="space-y-2 pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
+                Touch Area
+              </h4>
+              <span className="text-[10px] font-mono text-muted-foreground/55">
+                hitShape · hitzone
+              </span>
             </div>
-          );
-        })()}
-      </div>
+            <div className="grid grid-cols-2 gap-2">
+              {/* Shape Fit toggle — precise vs forgiving */}
+              <Tooltip>
+                <TooltipTrigger
+                  closeOnClick={false}
+                  render={
+                    <button
+                      type="button"
+                      disabled={!canToggleHitShape}
+                      aria-pressed={hitRect}
+                      aria-label={
+                        hitRect
+                          ? 'Hit area: rectangle, corners active'
+                          : 'Hit area: ellipse only, corners dead'
+                      }
+                      onClick={toggleHitShape}
+                      className={[
+                        'group relative flex aspect-[1/0.95] flex-col items-center justify-between overflow-hidden rounded-[14px] border p-2.5 text-center transition-all duration-150 ease-out',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                        hitRect
+                          ? 'border-foreground/15 bg-muted shadow-none'
+                          : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-card',
+                        !canToggleHitShape
+                          ? 'opacity-40 cursor-not-allowed hover:bg-card hover:border-border'
+                          : 'cursor-pointer active:scale-[0.98]',
+                      ].join(' ')}
+                    >
+                      <div className="flex flex-1 items-center justify-center py-1">
+                        {hitRect ? <ForgivingHitIcon /> : <PreciseHitIcon />}
+                      </div>
+                      <div className="w-full">
+                        <p className="text-xs font-semibold leading-none tracking-tight text-foreground">
+                          {hitRect ? 'Touch on Rectangle' : 'Touch on Ellipse'}
+                        </p>
+                      </div>
+                    </button>
+                  }
+                />
+                <TooltipContent
+                  side="top"
+                  className="max-w-[220px] text-center leading-snug"
+                >
+                  {canToggleHitShape
+                    ? hitRect
+                      ? 'Full bounding box rectangle is the touch zone'
+                      : 'Shape is the touch zone, corners are dead zones'
+                    : !canUseHitShape
+                      ? 'This control doesnt support this toggle'
+                      : 'This control is only available for Round shape'}
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Add Hitzone — create invisible extender */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      disabled={!canAddHitzone}
+                      onClick={() => canAddHitzone && onAddHitzone(control.id)}
+                      aria-label="Add hitzone — extend touch beyond shape"
+                      className={[
+                        'group relative flex aspect-[1/0.95] flex-col items-center justify-between overflow-hidden rounded-[14px] border-2 p-2.5 text-center transition-all duration-150 ease-out',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                        canAddHitzone
+                          ? 'border-dashed border-[color-mix(in_oklch,var(--muted-foreground)_26%,var(--border))] bg-card hover:border-solid hover:border-[var(--editor-accent)] hover:bg-card cursor-pointer active:scale-[0.98]'
+                          : 'border-dashed border-muted bg-muted/20 opacity-40 cursor-not-allowed',
+                      ].join(' ')}
+                    >
+                      <div className="flex flex-1 items-center justify-center py-1">
+                        <HitzoneAddIcon />
+                      </div>
+                      <div className="w-full">
+                        <p className="flex items-center justify-center gap-1 text-xs font-semibold leading-none tracking-tight text-foreground">
+                          Add Hitzone
+                          <span className="grid size-3 place-items-center rounded-full bg-[var(--editor-accent)] text-[9px] leading-none text-white shadow-sm transition-transform group-hover:scale-110">
+                            +
+                          </span>
+                        </p>
+                      </div>
+                    </button>
+                  }
+                />
+                <TooltipContent
+                  side="top"
+                  className="max-w-[220px] text-center leading-snug"
+                >
+                  {canAddHitzone
+                    ? 'Create an invisible touch area for this control'
+                    : 'This control cant have hitzones'}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            {fieldErrors.get('hitShape') && (
+              <p className="text-[11px] text-destructive">
+                {fieldErrors.get('hitShape')}
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       <GeometrySection
         control={control}
@@ -780,44 +769,74 @@ function GeometrySection({
 }) {
   const shiftHeld = useIsShiftHeld();
   const displayLocked = locked || shiftHeld;
+  const handleResetToSquare = () => {
+    const next = structuredClone(document);
+    const found = findControl(next, control.id);
+    if (!found) return;
+    const { size } = found.control.geometry;
+    const avg = (size.width + size.height) / 2;
+    const clamped = Math.min(Math.max(avg, 0.01), 2);
+    found.control.geometry.size.width = clamped;
+    found.control.geometry.size.height = clamped;
+    onDraftChange(next, true);
+  };
   return (
     <div className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center justify-between gap-2">
         <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
           Geometry
         </h4>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant={displayLocked ? 'secondary' : 'outline'}
-                size="sm"
-                className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${displayLocked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
-                onClick={() => onToggleLock(control.id)}
-              >
-                {displayLocked ? (
-                  <>
-                    <Lock className="size-3" />
-                    {shiftHeld && !locked ? 'Locked (⇧)' : 'Locked'}
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="size-3" />
-                    Free
-                  </>
-                )}
-              </Button>
-            }
-          />
-          <TooltipContent side="top">
-            {displayLocked
-              ? shiftHeld && !locked
-                ? 'Shift held, temporarily locked'
-                : 'Unlock aspect ratio'
-              : 'Lock aspect ratio (hold Shift)'}
-          </TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant={displayLocked ? 'secondary' : 'outline'}
+                  size="sm"
+                  className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${displayLocked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+                  onClick={() => onToggleLock(control.id)}
+                >
+                  {displayLocked ? (
+                    <>
+                      <Lock className="size-3" />
+                      {shiftHeld && !locked ? 'Locked (⇧)' : 'Locked'}
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="size-3" />
+                      Free
+                    </>
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent side="top">
+              {displayLocked
+                ? shiftHeld && !locked
+                  ? 'Shift held, temporarily locked'
+                  : 'Unlock aspect ratio'
+                : 'Lock aspect ratio (hold Shift)'}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={handleResetToSquare}
+                  aria-label="Reset to Square"
+                >
+                  <Square className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent side="top">Reset to Square</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5">

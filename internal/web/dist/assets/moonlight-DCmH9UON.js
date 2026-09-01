@@ -97,6 +97,14 @@ html[data-skin="moonlight"] .control-joystick {
     border-color 120ms ease;
 }
 
+html[data-skin="moonlight"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="moonlight"] .control-joystick[data-shape="rect"] {
+  border-radius: 0.85rem;
+}
+
 html[data-skin="moonlight"] .control-joystick.is-active {
   border-color: rgba(123, 164, 214, 0.35);
   box-shadow:

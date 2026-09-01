@@ -60,6 +60,14 @@ html[data-skin="neumorph-light"] .control-joystick {
   transition: box-shadow 120ms ease;
 }
 
+html[data-skin="neumorph-light"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="neumorph-light"] .control-joystick[data-shape="rect"] {
+  border-radius: 1rem;
+}
+
 html[data-skin="neumorph-light"] .control-joystick.is-active {
   box-shadow:
     inset 5px 5px 10px var(--shade),

@@ -21,6 +21,21 @@ export interface InteractGeometryOptions {
   };
 }
 
+function isEditableTarget(target: EventTarget | Element | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.closest('[contenteditable="true"]')) return true;
+  return false;
+}
+
+function shouldIgnoreShift(eventTarget: EventTarget | null): boolean {
+  return (
+    isEditableTarget(eventTarget) || isEditableTarget(document.activeElement)
+  );
+}
+
 export function useInteractGeometry(options: InteractGeometryOptions): void {
   const onDragRef = useRef(options.onDrag);
   const onResizeRef = useRef(options.onResize);
@@ -46,18 +61,28 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
 
   useEffect(() => {
     const update = (event: KeyboardEvent): void => {
+      if (shouldIgnoreShift(event.target)) {
+        shiftHeldRef.current = false;
+        return;
+      }
       shiftHeldRef.current = event.shiftKey;
     };
     const clear = (): void => {
       shiftHeldRef.current = false;
     };
+    const handleFocusIn = (): void => {
+      if (isEditableTarget(document.activeElement))
+        shiftHeldRef.current = false;
+    };
     window.addEventListener('keydown', update);
     window.addEventListener('keyup', update);
     window.addEventListener('blur', clear);
+    window.addEventListener('focusin', handleFocusIn);
     return () => {
       window.removeEventListener('keydown', update);
       window.removeEventListener('keyup', update);
       window.removeEventListener('blur', clear);
+      window.removeEventListener('focusin', handleFocusIn);
     };
   }, []);
 
@@ -100,9 +125,11 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
             : scaleRef.current || 1;
           const vh = Math.max(1, viewportHeightRef.current);
           const baseLocked = lockedRef.current;
-          const shiftLocked = shiftHeldRef.current;
-          const eventShift =
-            (event as unknown as { shiftKey?: boolean }).shiftKey ?? false;
+          const ignoreShift = shouldIgnoreShift(null);
+          const shiftLocked = ignoreShift ? false : shiftHeldRef.current;
+          const eventShift = ignoreShift
+            ? false
+            : ((event as unknown as { shiftKey?: boolean }).shiftKey ?? false);
           const locked = baseLocked || shiftLocked || eventShift;
           const deltaWidth = event.deltaRect.width / scale / vh;
           const deltaHeight = event.deltaRect.height / scale / vh;

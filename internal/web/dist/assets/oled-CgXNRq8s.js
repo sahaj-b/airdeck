@@ -63,6 +63,14 @@ html[data-skin="oled"] .control-joystick {
   transition: border-color 120ms ease;
 }
 
+html[data-skin="oled"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="oled"] .control-joystick[data-shape="rect"] {
+  border-radius: 0.5rem;
+}
+
 html[data-skin="oled"] .control-joystick.is-active {
   border-color: var(--skin-accent);
 }

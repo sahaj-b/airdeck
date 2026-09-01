@@ -157,13 +157,24 @@ select {
   padding: 1px 2px;
   box-sizing: border-box;
   min-width: 0;
-  /* JS pumps --control-min from the resolved pixel rect; fallback 44px covers first paint */
-  font-size: clamp(0.55rem, calc(var(--control-min, 44px) * 0.28), 0.95rem);
+  /* JS pumps --control-* and --label-len from the resolved rect; browser does all scaling via clamp+min(), no JS measure loop */
+  --_label-len: var(--label-len, 1);
+  --_fit-h: calc(var(--control-min, 44px) * 0.28);
+  --_fit-w: calc(
+    (var(--control-w, 44px) - 10px) /
+    (max(1, var(--_label-len)) * 0.6)
+  );
+  font-size: clamp(0.55rem, min(var(--_fit-w), var(--_fit-h)), 0.95rem);
 }
 
 .controller-control[data-command="leftShoulder"],
 .controller-control[data-command="rightShoulder"] {
-  font-size: clamp(0.68rem, calc(var(--control-min, 36px) * 0.38), 1.18rem);
+  --_fit-h: calc(var(--control-min, 36px) * 0.38);
+  --_fit-w: calc(
+    (var(--control-w, 36px) - 8px) /
+    (max(1, var(--_label-len, 1)) * 0.58)
+  );
+  font-size: clamp(0.68rem, min(var(--_fit-w), var(--_fit-h)), 1.18rem);
 }
 
 .controller-control.control-trigger,
@@ -171,7 +182,12 @@ select {
 .controller-control[data-command="south"],
 .controller-control[data-command="east"],
 .controller-control[data-command="west"] {
-  font-size: clamp(0.72rem, calc(var(--control-min, 48px) * 0.38), 1.42rem);
+  --_fit-h: calc(var(--control-min, 48px) * 0.38);
+  --_fit-w: calc(
+    (var(--control-w, 48px) - 10px) /
+    (max(1, var(--_label-len, 1)) * 0.55)
+  );
+  font-size: clamp(0.72rem, min(var(--_fit-w), var(--_fit-h)), 1.42rem);
 }
 
 .controller-control:focus-visible {
@@ -192,10 +208,25 @@ html[data-skin] .controller-hit-target[data-hit-shape="ellipse"] {
 
 .control-joystick {
   display: block;
-  border-radius: 50%;
+  overflow: visible;
   color: transparent;
   background: radial-gradient(circle at 42% 34%, #2b394d, #121a25 72%);
   box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 45%);
+}
+
+/* Thumb overflows the base at the rim like a physical stick — beat
+   skin's html[data-skin] .controller-control overflow:hidden. */
+html[data-skin] .controller-control.control-joystick {
+  overflow: visible;
+}
+
+/* Joystick respects shape: round stays circular, rect follows skin's rectangle radius */
+.control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+.control-joystick[data-shape="rect"] {
+  border-radius: 0.55rem;
 }
 
 .control-joystick::after {
@@ -352,10 +383,18 @@ html[data-skin] .dpad-direction.dpad-right {
   position: absolute;
   display: grid;
   place-items: center;
-  font-size: clamp(0.55rem, calc(var(--control-min, 32px) * 0.32), 0.95rem);
+  --_label-len: var(--label-len, 1);
+  --_fit-h: calc(var(--control-min, 32px) * 0.32);
+  --_fit-w: calc(
+    (var(--control-w, 32px) - 8px) /
+    (max(1, var(--_label-len)) * 0.6)
+  );
+  font-size: clamp(0.55rem, min(var(--_fit-w), var(--_fit-h)), 0.95rem);
   line-height: 1.1;
   text-align: center;
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .controller-runtime-chrome {

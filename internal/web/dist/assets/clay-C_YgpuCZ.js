@@ -110,6 +110,14 @@ html[data-skin="clay"] .control-joystick {
     0 10px 22px rgb(0 0 0 / 0.45);
 }
 
+html[data-skin="clay"] .control-joystick[data-shape="round"] {
+  border-radius: 50%;
+}
+
+html[data-skin="clay"] .control-joystick[data-shape="rect"] {
+  border-radius: 1.2rem;
+}
+
 html[data-skin="clay"] .control-joystick.is-active {
   box-shadow:
     inset 0 -8px 14px rgb(255 255 255 / 0.07),

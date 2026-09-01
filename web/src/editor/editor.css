@@ -503,6 +503,7 @@
   font-size: 12px;
   font-weight: 500;
   color: rgb(245 158 11);
+  transform: translateY(-2.5px);
 }
 .editor-header__unsaved-dot {
   width: 7px;
