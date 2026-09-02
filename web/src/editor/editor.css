@@ -81,6 +81,13 @@
 
 .editor-control-hit:active {
   cursor: grabbing;
+  border-color: color-mix(in oklch, var(--editor-accent) 32%, transparent);
+  background: color-mix(in oklch, var(--editor-accent) 7%, transparent);
+}
+
+.editor-control-hit:active.editor-control-selected,
+.editor-control-hit:active.editor-control-peer {
+  border-color: var(--editor-accent);
 }
 
 .editor-control-selected {
