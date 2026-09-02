@@ -473,6 +473,27 @@ html[data-skin] .dpad-direction.dpad-right {
   height: 1.15rem;
 }
 
+.icon-button.is-loading {
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.icon-button .spinner-arc {
+  animation: airdeck-spin 0.7s linear infinite;
+}
+
+@keyframes airdeck-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-button .spinner-arc {
+    animation: none;
+  }
+}
+
 .fullscreen-button {
   position: absolute;
   bottom: 1.35rem;

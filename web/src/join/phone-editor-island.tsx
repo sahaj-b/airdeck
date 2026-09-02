@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import type { FrameSender } from '../controller/frame-sender';
 import type { RenderedLayout } from '../controller/layout-renderer';
@@ -1433,16 +1434,18 @@ export function mountPhoneEditor(
     options.onCancel();
   };
 
-  root.render(
-    <PhoneEditorIsland
-      initialDoc={options.document}
-      sender={options.sender}
-      state={options.state}
-      renderer={options.renderer}
-      hostLayoutIds={options.hostLayoutIds}
-      onSave={handleSave}
-      onCancel={handleCancel}
-    />,
+  flushSync(() =>
+    root.render(
+      <PhoneEditorIsland
+        initialDoc={options.document}
+        sender={options.sender}
+        state={options.state}
+        renderer={options.renderer}
+        hostLayoutIds={options.hostLayoutIds}
+        onSave={handleSave}
+        onCancel={handleCancel}
+      />,
+    ),
   );
 
   return {

@@ -23,6 +23,7 @@ import {
   GEAR_ICON,
   PILL_LABELS,
   shortStatus,
+  SPINNER_ICON,
   WAKE_LOCK_KEY,
 } from './constants';
 import {
@@ -461,6 +462,17 @@ function showController(options: {
   let island: import('./settings-island').SettingsIsland | undefined;
   let islandLoading = false;
   let phoneEditorActive = false;
+
+  function setGearLoading(loading: boolean): void {
+    islandLoading = loading;
+    gearButton.classList.toggle('is-loading', loading);
+    gearButton.setAttribute('aria-busy', String(loading));
+    gearButton.setAttribute(
+      'aria-label',
+      loading ? 'Loading settings' : 'Controller settings',
+    );
+    gearButton.innerHTML = loading ? SPINNER_ICON : GEAR_ICON;
+  }
   let publishState: { id: string; name: string; remaining: number } | null =
     null;
   let publishTimer: number | undefined;
@@ -732,7 +744,7 @@ function showController(options: {
         return;
       }
     }
-    islandLoading = true;
+    setGearLoading(true);
     gearButton.setAttribute('aria-expanded', 'true');
     try {
       const { mountSettingsIsland } = await import('./settings-island');
@@ -761,17 +773,17 @@ function showController(options: {
           // focus back to gear for a11y, but only if still in DOM
           if (document.contains(gearButton)) gearButton.focus();
           island = undefined;
-          islandLoading = false;
+          setGearLoading(false);
         },
       });
     } catch (err) {
       console.error('Failed to load settings island', err);
       gearButton.setAttribute('aria-expanded', 'false');
-      islandLoading = false;
+      setGearLoading(false);
     } finally {
       // on success, keep loading false (onClose will also clear). Don't
       // overwrite the true->false from onClose double clear.
-      if (island) islandLoading = false;
+      if (island) setGearLoading(false);
     }
   };
 

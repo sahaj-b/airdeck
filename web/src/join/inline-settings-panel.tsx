@@ -303,7 +303,7 @@ export function InlineSettingsPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-auto min-h-7 w-full whitespace-normal border-white/10 bg-black/20 py-1.5 text-xs leading-tight backdrop-blur-sm hover:bg-black/30 hover:border-white/15 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-800"
+                className="h-auto min-h-7 w-full whitespace-normal bg-black/20 py-1.5 text-xs leading-tight backdrop-blur-sm hover:bg-black/30 dark:bg-zinc-900 dark:border-white/15"
                 onClick={() => opts.onEditPersonal?.('__new_from_current')}
               >
                 <Pencil className="size-3.5 shrink-0" />
@@ -312,7 +312,7 @@ export function InlineSettingsPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-auto min-h-7 w-full whitespace-normal border-white/10 bg-black/20 py-1.5 text-xs leading-tight backdrop-blur-sm hover:bg-black/30 hover:border-white/15 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-800"
+                className="h-auto min-h-7 w-full whitespace-normal border-white/30 bg-black/20 py-1.5 text-xs leading-tight backdrop-blur-sm hover:bg-black/30 dark:bg-zinc-900 dark:border-white/15"
                 onClick={onOpenManage}
               >
                 <Layers className="size-3.5 shrink-0" />

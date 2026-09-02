@@ -1,3 +1,4 @@
+import { flushSync } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
@@ -169,7 +170,7 @@ export function mountSettingsIsland(
     );
   }
 
-  render();
+  flushSync(() => render());
 
   return {
     root,
