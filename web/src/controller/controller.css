@@ -118,6 +118,11 @@ select {
   -webkit-user-drag: none;
   cursor: pointer;
   pointer-events: auto;
+  z-index: 2;
+}
+
+.controller-label {
+  z-index: 2;
 }
 
 .hit-only {
@@ -400,11 +405,12 @@ html[data-skin] .dpad-direction.dpad-right {
 
 .controller-runtime-chrome {
   position: absolute;
-  z-index: 5;
   inset: 0;
   pointer-events: none;
+  /* no z-index — children layer individually so controls can sit between chrome bg and gear */
 }
 
+/* Chrome layers: bg (identity/status/fullscreen) at 1, controls at 2, gear at 3 */
 .controller-identity {
   position: absolute;
   top: 0.6rem;
@@ -416,6 +422,7 @@ html[data-skin] .dpad-direction.dpad-right {
   max-width: min(90%, 22rem);
   line-height: 1.1;
   transform: translateX(-50%);
+  z-index: 1;
 }
 
 .controller-slot {
@@ -448,6 +455,8 @@ html[data-skin] .dpad-direction.dpad-right {
 }
 
 .controller-status {
+  position: relative;
+  z-index: 1;
   max-width: min(28vw, calc(100% - 2.7rem));
   overflow: hidden;
   margin: 0;
@@ -467,6 +476,12 @@ html[data-skin] .dpad-direction.dpad-right {
   padding: 0;
   cursor: pointer;
   pointer-events: auto;
+}
+
+/* gear above controls, everything else below */
+.controller-center .icon-button {
+  position: relative;
+  z-index: 3;
 }
 
 .icon-button svg {
@@ -500,6 +515,7 @@ html[data-skin] .dpad-direction.dpad-right {
   bottom: 1.35rem;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 1;
 }
 
 .settings-backdrop {

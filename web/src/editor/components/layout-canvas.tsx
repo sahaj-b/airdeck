@@ -63,6 +63,11 @@ const PRESETS = [
   },
 ] as const;
 
+const GHOST_GEAR_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>';
+const GHOST_EXPAND_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+
 const VIEWPORT_MIN_W = 320;
 const VIEWPORT_MAX_W = 1400;
 const VIEWPORT_MIN_H = 320;
@@ -105,6 +110,7 @@ export function LayoutCanvas({
   const scaledRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RenderedLayout | null>(null);
   const selectedRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLElement | null>(null);
   const latestRef = useRef<LayoutDocument>(document);
   latestRef.current = document;
   const onDraftChangeRef = useRef(onDraftChange);
@@ -207,10 +213,45 @@ export function LayoutCanvas({
   );
 
   const mountedStructureRef = useRef<string | null>(null);
+  const ensureGhostChrome = useCallback(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    const center = mount.querySelector(
+      '[data-section-id="center"]',
+    ) as HTMLElement | null;
+    if (!center) return;
+    if (!ghostRef.current) {
+      const doc = mount.ownerDocument;
+      const ghost = doc.createElement('div');
+      ghost.className = 'controller-runtime-chrome editor-ghost-chrome';
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.setAttribute('data-ghost-chrome', 'true');
+      const identity = doc.createElement('div');
+      identity.className = 'controller-identity';
+      identity.innerHTML =
+        '<span class="controller-slot">Player 1</span><span class="controller-name">Name</span>';
+      const centerWrap = doc.createElement('div');
+      centerWrap.className = 'controller-center';
+      centerWrap.innerHTML = `<p class="controller-status">Ready</p><button class="icon-button" tabindex="-1" aria-hidden="true">${GHOST_GEAR_ICON}</button>`;
+      const fsBtn = doc.createElement('button');
+      fsBtn.className = 'icon-button fullscreen-button';
+      fsBtn.setAttribute('tabindex', '-1');
+      fsBtn.setAttribute('aria-hidden', 'true');
+      fsBtn.innerHTML = GHOST_EXPAND_ICON;
+      ghost.append(identity, centerWrap, fsBtn);
+      ghostRef.current = ghost;
+    }
+    if (ghostRef.current.parentElement !== center) {
+      center.append(ghostRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     const key = structureSignature(document);
     if (key !== mountedStructureRef.current) {
       rendererRef.current?.destroy();
+      ghostRef.current?.remove();
+      ghostRef.current = null;
       const el = mountRef.current;
       if (el) {
         rendererRef.current = renderLayout(el, document, {
@@ -223,10 +264,13 @@ export function LayoutCanvas({
     }
     rendererRef.current?.update(document, pixelViewport);
     rendererRef.current?.setOrientation('landscape', pixelViewport);
-  }, [document, pixelViewport]);
+    ensureGhostChrome();
+  }, [document, pixelViewport, ensureGhostChrome]);
 
   useEffect(
     () => () => {
+      ghostRef.current?.remove();
+      ghostRef.current = null;
       rendererRef.current?.destroy();
       rendererRef.current = null;
     },

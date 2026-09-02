@@ -189,8 +189,8 @@ export function useEditorActions() {
       state.layouts.find((l) => l.id === cfg.defaultLayout)
         ? cfg.defaultLayout
         : state.layouts[0]?.id;
-    if (fallbackId) await handleSelectLayout(fallbackId);
-  }, [handleSelectLayout]);
+    if (fallbackId) await switchToLayout(fallbackId);
+  }, [switchToLayout]);
 
   const handleSave = useCallback(async (): Promise<void> => {
     const st = useEditorStore.getState();
