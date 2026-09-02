@@ -106,26 +106,42 @@ export function GyroSheet({
         <h3 className="text-sm font-semibold">Gyroscope</h3>
       </div>
 
-      {secureHint && <p className="text-xs text-amber-400">Gyro needs HTTPS</p>}
+      {secureHint && (
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs font-medium text-amber-300">
+          Gyro needs HTTPS — tilt controls require a secure connection
+        </p>
+      )}
       {permissionDenied && (
-        <p className="text-xs text-destructive">
+        <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-xs font-medium text-destructive">
           Permission denied, enable in Settings &gt; Safari &gt; Motion &amp;
           Orientation Access
         </p>
       )}
       {unsupported && (
-        <p className="text-xs text-muted-foreground">
+        <p className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-xs font-medium text-muted-foreground">
           Gyroscope not supported on this device, using touch only.
         </p>
       )}
       {landscapeHint && (
-        <p className="text-xs text-amber-400">
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs font-medium text-amber-300">
           Rotate to landscape, portrait forces neutral
         </p>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <Label htmlFor="gyro-enabled">Enable gyro</Label>
+      <div
+        className={`flex items-center justify-between gap-3 rounded-xl border p-3 shadow-sm transition-colors ${gyroEnabled ? 'border-primary/20 bg-primary/10' : 'border-white/25 bg-card hover:border-white/40'}`}
+      >
+        <div className="flex flex-col gap-0.5">
+          <Label
+            htmlFor="gyro-enabled"
+            className="text-sm font-semibold leading-none"
+          >
+            Enable gyro
+          </Label>
+          <span className="text-[11px] leading-none text-muted-foreground">
+            Tilt to steer or aim
+          </span>
+        </div>
         <Switch
           id="gyro-enabled"
           checked={gyroEnabled}
@@ -134,8 +150,8 @@ export function GyroSheet({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Target stick</Label>
+      <div className="flex items-center justify-between gap-3">
+        <Label className="shrink-0 text-sm font-medium">Target stick</Label>
         <Select
           value={gyroTarget}
           disabled={disabled}
@@ -143,7 +159,7 @@ export function GyroSheet({
             v && setGyroTarget(v as 'leftStick' | 'rightStick')
           }
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="h-8 w-[calc(50%-4px)] shrink-0 gap-1.5 border-white/20 bg-white/[0.08] dark:bg-white/[0.08] pl-2.5 pr-2 backdrop-blur-sm shadow-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -153,14 +169,14 @@ export function GyroSheet({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label>Mode</Label>
+      <div className="flex items-center justify-between gap-3">
+        <Label className="shrink-0 text-sm font-medium">Mode</Label>
         <Select
           value={gyroMode}
           disabled={disabled}
           onValueChange={(v) => v && setGyroMode(v as 'steer' | 'aim')}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="h-8 w-[calc(50%-4px)] shrink-0 gap-1.5 border-white/20 bg-white/[0.08] dark:bg-white/[0.08] pl-2.5 pr-2 backdrop-blur-sm shadow-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -1,5 +1,6 @@
 import interact from 'interactjs';
 import {
+  ArrowLeft,
   Circle,
   Copy,
   Lock,
@@ -900,11 +901,11 @@ function PhoneEditorIsland({
       >
         <button
           type="button"
-          className="grid place-items-center size-7 shrink-0 border-0 bg-transparent text-white text-base cursor-pointer hover:bg-white/10 rounded"
+          className="grid place-items-center size-7 shrink-0 rounded border border-white/20 bg-white text-black cursor-pointer hover:bg-white/90"
           aria-label="Cancel"
           onClick={handleBack}
         >
-          ←
+          <ArrowLeft size={14} strokeWidth={2.5} />
         </button>
         <input
           type="text"
@@ -913,7 +914,7 @@ function PhoneEditorIsland({
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          className={`flex-1 min-w-0 bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
+          className={`w-[132px] max-w-[32vw] shrink-0 truncate bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
           value={name}
           onChange={(e) => {
             setName(e.target.value);
@@ -927,117 +928,123 @@ function PhoneEditorIsland({
           }}
           placeholder="Layout name"
         />
-        <button
-          type="button"
-          className="grid place-items-center size-6 shrink-0 rounded bg-red-500/90 hover:bg-red-500 border border-white/15 text-white cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Delete control"
-          title="Delete control"
-          disabled={!selectedId}
-          onClick={handleDelete}
-        >
-          <Trash2 size={12} />
-        </button>
-        <button
-          type="button"
-          className={`grid place-items-center size-6 shrink-0 rounded border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ml-1.5 ${selectedId && locked ? 'bg-white text-black border-white hover:bg-white/90' : 'bg-white/10 text-white border-white/15 hover:bg-white/20'}`}
-          aria-label={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-          title={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-          disabled={!selectedId}
-          onClick={() => {
-            if (!selectedId) return;
-            const found = findControl(draftRef.current, selectedId);
-            if (!found) return;
-            setLocks((prev) => {
-              const cur =
-                prev[selectedId] ?? isDefaultLocked(found.control as never);
-              return { ...prev, [selectedId]: !cur };
-            });
-          }}
-        >
-          {locked ? <Lock size={12} /> : <LockOpen size={12} />}
-        </button>
-        <button
-          type="button"
-          className="grid place-items-center size-6 shrink-0 rounded border bg-white/10 text-white border-white/15 hover:bg-white/20 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Duplicate control"
-          title="Duplicate control"
-          disabled={!selectedId}
-          onClick={handleDuplicate}
-        >
-          <Copy size={12} />
-        </button>
-        <button
-          type="button"
-          className="grid place-items-center size-6 shrink-0 rounded border bg-white/10 text-white border-white/15 hover:bg-white/20 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Add hitzone"
-          title="Add hitzone"
-          disabled={!selectedControl || selectedControl.type === 'hitzone'}
-          onClick={handleAddHitzone}
-        >
-          <span className="relative flex items-center justify-center size-[14px] rounded-[3px] border border-dashed border-yellow-400 bg-violet-500/10 overflow-hidden">
-            <span
-              className="absolute inset-0 opacity-30"
-              style={{
-                backgroundImage:
-                  'repeating-linear-gradient(135deg, rgb(139 92 246 / 0.5) 0 1px, transparent 1px 7px), repeating-linear-gradient(45deg, rgb(139 92 246 / 0.5) 0 1px, transparent 1px 7px)',
-              }}
-            />
-            <Plus size={8} className="relative text-white" strokeWidth={2.5} />
-          </span>
-        </button>
-        <button
-          type="button"
-          className={`grid place-items-center size-6 shrink-0 rounded border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${selectedControl && (selectedControl.type === 'dpad' || selectedControl.type === 'label') ? 'bg-white/10 text-white/40 border-white/10' : selectedControl && selectedControl.shape === 'round' ? 'bg-white text-black border-white hover:bg-white/90' : 'bg-white/10 text-white border-white/15 hover:bg-white/20'}`}
-          aria-label="Toggle shape"
-          title={
-            selectedControl?.shape === 'round'
-              ? 'Shape: round → rect'
-              : 'Shape: rect → round'
-          }
-          disabled={
-            !selectedControl ||
-            selectedControl.type === 'dpad' ||
-            selectedControl.type === 'label'
-          }
-          onClick={handleToggleShape}
-        >
-          {selectedControl?.shape === 'round' ? (
-            <Circle size={12} />
-          ) : (
-            <Square size={12} />
-          )}
-        </button>
-        <button
-          type="button"
-          className="grid size-6 shrink-0 place-items-center rounded border border-white/20 bg-transparent text-white cursor-pointer disabled:opacity-40"
-          aria-label="Undo"
-          onClick={handleUndo}
-          disabled={!historyRef.current.canUndo}
-          style={{ opacity: historyRef.current.canUndo ? 1 : 0.4 }}
-        >
-          <Undo2 size={12} strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          className="grid size-6 shrink-0 place-items-center rounded border border-white/20 bg-transparent text-white cursor-pointer disabled:opacity-40"
-          aria-label="Redo"
-          onClick={handleRedo}
-          disabled={!historyRef.current.canRedo}
-          style={{ opacity: historyRef.current.canRedo ? 1 : 0.4 }}
-        >
-          <Redo2 size={12} strokeWidth={2} />
-        </button>
-        <div
-          className="w-px h-4 bg-white/15 shrink-0 mx-1"
-          aria-hidden="true"
-        />
-        <button
-          type="button"
-          className="h-[22px] w-[50px] shrink-0 rounded-md border border-white/20 bg-white text-black text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90 mr-1.5"
-          onClick={handleSave}
-        >
-          {loadPersonalLayouts()[originalIdRef.current] ? 'Save' : 'Create'}
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            className="grid place-items-center size-6 shrink-0 rounded bg-red-500/90 hover:bg-red-500 border border-white/15 text-white cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Delete control"
+            title="Delete control"
+            disabled={!selectedId}
+            onClick={handleDelete}
+          >
+            <Trash2 size={12} />
+          </button>
+          <button
+            type="button"
+            className={`grid place-items-center size-6 shrink-0 rounded border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${selectedId && locked ? 'bg-white text-black border-white hover:bg-white/90' : 'bg-white/10 text-white border-white/15 hover:bg-white/20'}`}
+            aria-label={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+            title={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+            disabled={!selectedId}
+            onClick={() => {
+              if (!selectedId) return;
+              const found = findControl(draftRef.current, selectedId);
+              if (!found) return;
+              setLocks((prev) => {
+                const cur =
+                  prev[selectedId] ?? isDefaultLocked(found.control as never);
+                return { ...prev, [selectedId]: !cur };
+              });
+            }}
+          >
+            {locked ? <Lock size={12} /> : <LockOpen size={12} />}
+          </button>
+          <button
+            type="button"
+            className="grid place-items-center size-6 shrink-0 rounded border bg-white/10 text-white border-white/15 hover:bg-white/20 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Duplicate control"
+            title="Duplicate control"
+            disabled={!selectedId}
+            onClick={handleDuplicate}
+          >
+            <Copy size={12} />
+          </button>
+          <button
+            type="button"
+            className="grid place-items-center size-6 shrink-0 rounded border bg-white/10 text-white border-white/15 hover:bg-white/20 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Add hitzone"
+            title="Add hitzone"
+            disabled={!selectedControl || selectedControl.type === 'hitzone'}
+            onClick={handleAddHitzone}
+          >
+            <span className="relative flex items-center justify-center size-[14px] rounded-[3px] border border-dashed border-yellow-400 bg-violet-500/10 overflow-hidden">
+              <span
+                className="absolute inset-0 opacity-30"
+                style={{
+                  backgroundImage:
+                    'repeating-linear-gradient(135deg, rgb(139 92 246 / 0.5) 0 1px, transparent 1px 7px), repeating-linear-gradient(45deg, rgb(139 92 246 / 0.5) 0 1px, transparent 1px 7px)',
+                }}
+              />
+              <Plus
+                size={8}
+                className="relative text-white"
+                strokeWidth={2.5}
+              />
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`grid place-items-center size-6 shrink-0 rounded border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${selectedControl && (selectedControl.type === 'dpad' || selectedControl.type === 'label') ? 'bg-white/10 text-white/40 border-white/10' : selectedControl && selectedControl.shape === 'round' ? 'bg-white text-black border-white hover:bg-white/90' : 'bg-white/10 text-white border-white/15 hover:bg-white/20'}`}
+            aria-label="Toggle shape"
+            title={
+              selectedControl?.shape === 'round'
+                ? 'Shape: round → rect'
+                : 'Shape: rect → round'
+            }
+            disabled={
+              !selectedControl ||
+              selectedControl.type === 'dpad' ||
+              selectedControl.type === 'label'
+            }
+            onClick={handleToggleShape}
+          >
+            {selectedControl?.shape === 'round' ? (
+              <Circle size={12} />
+            ) : (
+              <Square size={12} />
+            )}
+          </button>
+          <button
+            type="button"
+            className="grid size-6 shrink-0 place-items-center rounded border border-white/20 bg-transparent text-white cursor-pointer disabled:opacity-40"
+            aria-label="Undo"
+            onClick={handleUndo}
+            disabled={!historyRef.current.canUndo}
+            style={{ opacity: historyRef.current.canUndo ? 1 : 0.4 }}
+          >
+            <Undo2 size={12} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            className="grid size-6 shrink-0 place-items-center rounded border border-white/20 bg-transparent text-white cursor-pointer disabled:opacity-40"
+            aria-label="Redo"
+            onClick={handleRedo}
+            disabled={!historyRef.current.canRedo}
+            style={{ opacity: historyRef.current.canRedo ? 1 : 0.4 }}
+          >
+            <Redo2 size={12} strokeWidth={2} />
+          </button>
+          <div
+            className="w-px h-4 bg-white/15 shrink-0 mx-1"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            className="h-[22px] px-1 shrink-0 rounded-md border border-white/20 bg-white text-black text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90 mr-1.5"
+            onClick={handleSave}
+          >
+            {loadPersonalLayouts()[originalIdRef.current] ? 'Save' : 'Create'}
+          </button>
+        </div>
       </div>
       {nameError && (
         <div

@@ -869,16 +869,6 @@ function showController(options: {
         });
     },
     onLayout: (layout, diagnostic) => {
-      // if current selection is personal, don't overwrite it with host layout pushes (only when host changes default or reassigned)
-      // However if host sends layout that matches current host selection, we should render it.
-      // For simplicity, if current is personal, ignore host layout messages unless diagnostic indicates reassignment? spec says layout update does not push new layout to currently playing phones, while deleting selected layout sends default. So host layout push is only for active host selection changes, but personal should remain.
-      if (isPersonalLayout(currentLayoutId)) {
-        // Only update if host explicitly moved player to a different host layout via dashboard roster assign
-        // That would come as welcome.selectedLayout change? For now ignore pure host layout pushes when personal is active
-        // but keep availableLayouts updated via welcome. Diagnostic path handled.
-        updateStatus(diagnostic ?? 'Controller ready.');
-        return;
-      }
       activeRenderer?.destroy();
       activeRenderer = renderLayout(host, layout, {
         state,
