@@ -116,9 +116,18 @@ export function usePhoneViewport(renderer?: RenderedLayout) {
     computeOrigin();
     window.addEventListener('resize', computeOrigin);
     window.addEventListener('orientationchange', computeOrigin);
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(computeOrigin)
+        : null;
+    const hostEl = document.querySelector('.controller-host');
+    if (hostEl && ro) ro.observe(hostEl);
+    const compEl = renderer?.root?.querySelector('.controller-composition');
+    if (compEl && ro) ro.observe(compEl as Element);
     return () => {
       window.removeEventListener('resize', computeOrigin);
       window.removeEventListener('orientationchange', computeOrigin);
+      ro?.disconnect();
     };
   }, [renderer, viewport]);
 

@@ -6,7 +6,7 @@ import {
   type LayoutDocument,
   validateLayout,
 } from '../shared/layout';
-import { buildFullscreenButton } from './fullscreen-button';
+import { bindTap } from './tap';
 import {
   type PixelRect,
   type ResolvedControl,
@@ -111,9 +111,48 @@ export function renderLayout(
   orientationText.textContent = 'Rotate your phone to landscape to use.';
   orientationMessage.append(rotateIcon, orientationText);
   root.append(orientationMessage);
-  const fallbackFullscreen = interactive ? buildFullscreenButton() : null;
-  if (interactive && fallbackFullscreen) {
-    orientationMessage.append(fallbackFullscreen.button);
+  let fallbackActionCleanup: (() => void) | null = null;
+  if (interactive) {
+    const docEl = ownerDocument.documentElement;
+    const viewScreen = (ownerDocument.defaultView?.screen ??
+      (typeof screen !== 'undefined' ? screen : undefined)) as
+      | (Screen & { orientation?: { lock?: (o: string) => Promise<void> } })
+      | undefined;
+    const canFullscreen = typeof docEl.requestFullscreen === 'function';
+    const canLock = typeof viewScreen?.orientation?.lock === 'function';
+    if (canFullscreen || canLock) {
+      const action = ownerDocument.createElement('button');
+      action.type = 'button';
+      action.className = 'orientation-action';
+      action.textContent = 'Enter fullscreen & rotate';
+      action.setAttribute('aria-label', 'Enter fullscreen and lock landscape');
+      const enterImmersive = async (): Promise<void> => {
+        if (canFullscreen && !ownerDocument.fullscreenElement) {
+          try {
+            await docEl.requestFullscreen({
+              navigationUI: 'hide',
+            } as FullscreenOptions);
+          } catch {
+            try {
+              await docEl.requestFullscreen();
+            } catch {}
+          }
+        }
+        if (canLock) {
+          try {
+            await viewScreen?.orientation?.lock?.('landscape');
+          } catch {}
+        }
+        try {
+          const nav = ownerDocument.defaultView?.navigator as unknown as
+            | { wakeLock?: { request: (t: string) => Promise<unknown> } }
+            | undefined;
+          await nav?.wakeLock?.request?.('screen');
+        } catch {}
+      };
+      fallbackActionCleanup = bindTap(action, () => void enterImmersive());
+      orientationMessage.append(action);
+    }
   }
 
   const renderedSections: RenderedSection[] = [];
@@ -285,6 +324,12 @@ export function renderLayout(
     applyOrientation(readOrientation(view, composition));
   view?.addEventListener('resize', onViewportChange);
   view?.addEventListener('orientationchange', onViewportChange);
+  const viewportObserver =
+    typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(onViewportChange)
+      : null;
+  viewportObserver?.observe(composition);
+  viewportObserver?.observe(container);
 
   const setGyroLocked = (target: 'leftStick' | 'rightStick' | null): void => {
     pointerInput?.setGyroLocked(target);
@@ -323,9 +368,10 @@ export function renderLayout(
     cancelPointers: () => pointerInput?.clear(),
     destroy: () => {
       pointerInput?.destroy();
-      fallbackFullscreen?.cleanup();
+      fallbackActionCleanup?.();
       view?.removeEventListener('resize', onViewportChange);
       view?.removeEventListener('orientationchange', onViewportChange);
+      viewportObserver?.disconnect();
       for (const cleanup of cleanups) cleanup();
       root.remove();
     },

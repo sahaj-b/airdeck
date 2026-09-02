@@ -91,8 +91,6 @@ function PhoneEditorIsland({
     activePointers: activePointersRef,
   };
 
-  const initialViewportRef = useRef(viewport);
-
   usePhoneGestures(
     overlayRef,
     gestureRefs,
@@ -112,19 +110,11 @@ function PhoneEditorIsland({
     if (wasRunning) sender.stop();
     renderer?.cancelPointers();
     state.reset();
-    initialViewportRef.current = viewport;
     return () => {
       if (wasRunning) sender.start();
       try {
-        renderer?.update(initialDoc, {
-          width: initialViewportRef.current.width,
-          height: initialViewportRef.current.height,
-        });
-      } catch {
-        try {
-          renderer?.update(initialDoc);
-        } catch {}
-      }
+        renderer?.update(initialDoc);
+      } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDoc]);
@@ -132,15 +122,8 @@ function PhoneEditorIsland({
   useEffect(() => {
     if (!draft || !renderer) return;
     try {
-      renderer.update(draft, {
-        width: viewport.width,
-        height: viewport.height,
-      });
-    } catch {
-      try {
-        renderer.update(draft);
-      } catch {}
-    }
+      renderer.update(draft);
+    } catch {}
   }, [draft, viewport, renderer]);
 
   const resolved = useMemo(() => {
@@ -371,15 +354,8 @@ function PhoneEditorIsland({
   const handleBack = () => {
     state.reset();
     try {
-      renderer?.update(initialDoc, {
-        width: viewport.width,
-        height: viewport.height,
-      });
-    } catch {
-      try {
-        renderer?.update(initialDoc);
-      } catch {}
-    }
+      renderer?.update(initialDoc);
+    } catch {}
     onCancel();
   };
 
