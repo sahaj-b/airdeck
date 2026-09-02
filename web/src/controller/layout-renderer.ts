@@ -1,3 +1,4 @@
+import { effectiveHitShape } from '@/shared/layout-editor';
 import type { Orientation } from '../shared/contracts';
 import {
   type Control,
@@ -441,21 +442,6 @@ export function renderLayout(
       );
     },
   };
-}
-
-function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
-  if (control.type === 'dpad') return 'rect';
-  if (control.type === 'hitzone') {
-    // Hitzones can be round per operator request; otherwise rect.
-    // hitShape is forbidden on hitzone, but handle defensively.
-    if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
-      return 'rect';
-    return control.shape === 'round' ? 'ellipse' : 'rect';
-  }
-  if (control.type === 'label') return 'rect';
-  if (control.hitShape === 'rect') return 'rect';
-  if (control.shape === 'round') return 'ellipse';
-  return 'rect';
 }
 
 function renderControl(

@@ -22,8 +22,8 @@ import {
   DISPLAY_NAME_KEY,
   GEAR_ICON,
   PILL_LABELS,
-  shortStatus,
   SPINNER_ICON,
+  shortStatus,
   WAKE_LOCK_KEY,
 } from './constants';
 import {
@@ -577,7 +577,9 @@ function showController(options: {
     }
     phoneEditorActive = true;
     try {
-      const { mountPhoneEditor } = await import('./phone-editor-island');
+      const { mountPhoneEditor } = await import(
+        './phone-editor/phone-editor-island'
+      );
       // Ensure sender exists
       const sender = activeSender;
       if (!sender || !activeRenderer) {

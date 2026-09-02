@@ -33,6 +33,7 @@ import type {
 import {
   clampDrag,
   clampSectionDivider,
+  effectiveHitShape,
   findControl,
   getHitzonesOf,
   getSectionControlMin,
@@ -744,17 +745,6 @@ export function LayoutCanvas({
       </div>
     </section>
   );
-}
-
-function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
-  if (control.type === 'dpad') return 'rect';
-  if (control.type === 'hitzone')
-    return control.shape === 'round' ? 'ellipse' : 'rect';
-  if (control.type === 'label') return 'rect';
-  if ((control as unknown as { hitShape?: string }).hitShape === 'rect')
-    return 'rect';
-  if (control.shape === 'round') return 'ellipse';
-  return 'rect';
 }
 
 const ControlHit = memo(function ControlHit({

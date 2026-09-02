@@ -1,5 +1,5 @@
-import { flushSync } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import type { FeedbackController } from '@/controller/feedback';
