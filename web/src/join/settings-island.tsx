@@ -5,6 +5,7 @@ import type { FeedbackController } from '@/controller/feedback';
 import type { GyroController, GyroStatus } from '@/controller/gyro/controller';
 import { GyroSheet } from './gyro-sheet';
 import { InlineSettingsPanel } from './inline-settings-panel';
+import { ManageLayoutsSheet } from './manage-layouts-sheet';
 import type { settingsStore } from './settings-store';
 
 type Store = typeof settingsStore;
@@ -50,7 +51,7 @@ function IslandRoot({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
-  const [view, setView] = useState<'main' | 'gyro'>('main');
+  const [view, setView] = useState<'main' | 'gyro' | 'manage'>('main');
   const gyroStatus = opts.gyroStatus ?? 'idle';
   const liveX = opts.gyroLiveX ?? 0;
   const liveY = opts.gyroLiveY ?? 0;
@@ -80,10 +81,11 @@ function IslandRoot({
             <InlineSettingsPanel
               opts={opts}
               onOpenGyro={() => setView('gyro')}
+              onOpenManage={() => setView('manage')}
               onClose={() => onOpenChange(false)}
             />
           </div>
-        ) : (
+        ) : view === 'gyro' ? (
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 space-y-5 min-w-0"
@@ -96,6 +98,13 @@ function IslandRoot({
               liveY={liveY}
               onBack={() => setView('main')}
             />
+          </div>
+        ) : (
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 min-w-0"
+          >
+            <ManageLayoutsSheet opts={opts} onBack={() => setView('main')} />
           </div>
         )}
       </DrawerContent>

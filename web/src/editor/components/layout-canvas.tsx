@@ -874,7 +874,11 @@ const ControlHit = memo(function ControlHit({
         isHitzone && 'editor-hit-only',
         !isDpad && isSelected && 'editor-control-selected',
         !isDpad && isPeer && !isSelected && 'editor-control-peer',
-        !isDpad && isHovered && !isSelected && !isPeer && 'editor-control-hovered',
+        !isDpad &&
+          isHovered &&
+          !isSelected &&
+          !isPeer &&
+          'editor-control-hovered',
       )}
       style={{
         left: rect.left,

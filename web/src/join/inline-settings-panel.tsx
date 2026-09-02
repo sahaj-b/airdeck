@@ -1,7 +1,7 @@
+import { Layers, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -10,7 +10,6 @@ import {
   SelectItem,
   SelectLabel,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
@@ -26,10 +25,12 @@ function formatVibration(ms: number): string {
 export function InlineSettingsPanel({
   opts,
   onOpenGyro,
+  onOpenManage,
   onClose,
 }: {
   opts: MountOptions;
   onOpenGyro: () => void;
+  onOpenManage: () => void;
   onClose: () => void;
 }) {
   const store = opts.store;
@@ -51,8 +52,6 @@ export function InlineSettingsPanel({
   const gyroTarget = useStore(store, (s) => s.gyroTarget);
   const gyroMode = useStore(store, (s) => s.gyroMode);
   const [skin, setSkinLocal] = useState(() => getSkin());
-  const [renameId, setRenameId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => {
     const unsub = store.subscribe((state) => {
@@ -73,6 +72,11 @@ export function InlineSettingsPanel({
   const hapticsAvailable = feedback.hapticsAvailable;
   const personalLayouts = opts.personalLayouts ?? [];
   const hostLayouts = opts.layouts;
+  const selectedLayoutName =
+    [...personalLayouts, ...hostLayouts].find(
+      (l) => l.id === opts.selectedLayout,
+    )?.name ?? opts.selectedLayout;
+  const selectedSkinName = SKINS.find((s) => s.id === skin)?.name ?? skin;
 
   return (
     <div className="space-y-5 min-w-0 max-w-full overflow-x-hidden">
@@ -86,17 +90,11 @@ export function InlineSettingsPanel({
           onValueChange={(v) => v && opts.onSelectLayout(v)}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select layout" />
+            <span className="flex-1 truncate text-left text-sm">
+              {selectedLayoutName || 'Select layout'}
+            </span>
           </SelectTrigger>
           <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Host layouts</SelectLabel>
-              {hostLayouts.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
             {personalLayouts.length > 0 && (
               <SelectGroup>
                 <SelectLabel>My edits</SelectLabel>
@@ -107,107 +105,36 @@ export function InlineSettingsPanel({
                 ))}
               </SelectGroup>
             )}
+            <SelectGroup>
+              <SelectLabel>Host layouts</SelectLabel>
+              {hostLayouts.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
-        {personalLayouts.length > 0 && (
-          <div className="space-y-1.5 pt-1">
-            {personalLayouts.map((pl) => (
-              <div
-                key={pl.id}
-                className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1.5"
-              >
-                <span className="flex-1 truncate text-xs">{pl.name}</span>
-                {renameId === pl.id ? (
-                  <div className="flex items-center gap-1">
-                    <Input
-                      className="h-6 w-24 text-xs"
-                      autoFocus
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          opts.onRenamePersonal?.(pl.id, renameValue);
-                          setRenameId(null);
-                        }
-                        if (e.key === 'Escape') setRenameId(null);
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => {
-                        opts.onRenamePersonal?.(pl.id, renameValue);
-                        setRenameId(null);
-                      }}
-                    >
-                      Ok
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => setRenameId(null)}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-1.5 text-xs"
-                      onClick={() => opts.onEditPersonal?.(pl.id)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-1.5 text-xs"
-                      onClick={() => {
-                        setRenameId(pl.id);
-                        setRenameValue(pl.name);
-                      }}
-                    >
-                      Rename
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-1.5 text-xs"
-                      onClick={() => opts.onPublishPersonal?.(pl.id)}
-                      disabled={!!opts.publishState}
-                    >
-                      Publish
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-xs"
-                      aria-label="Delete"
-                      onClick={() => {
-                        if (window.confirm(`Delete "${pl.name}"?`))
-                          opts.onDeletePersonal?.(pl.id);
-                      }}
-                    >
-                      🗑️
-                    </Button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => opts.onEditPersonal?.('__new_from_current')}
-        >
-          Edit current layout
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-auto min-h-7 w-full whitespace-normal py-1.5 text-xs leading-tight"
+            onClick={() => opts.onEditPersonal?.('__new_from_current')}
+          >
+            <Pencil className="size-3.5 shrink-0" />
+            <span className="text-center">Edit current layout</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-auto min-h-7 w-full whitespace-normal py-1.5 text-xs leading-tight"
+            onClick={onOpenManage}
+          >
+            <Layers className="size-3.5 shrink-0" />
+            <span className="text-center">Manage my layouts</span>
+          </Button>
+        </div>
       </div>
       {opts.publishState && (
         <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
@@ -228,10 +155,17 @@ export function InlineSettingsPanel({
         </div>
       )}
       <div className="space-y-2">
-        <Label>Skin</Label>
+        <Label className="inline-flex items-baseline gap-px text-sm font-medium tracking-tight">
+          <span className="inline-block text-pink-300/90">S</span>
+          <span className="inline-block text-amber-300/90">k</span>
+          <span className="inline-block text-cyan-300/90">i</span>
+          <span className="inline-block text-violet-300/90">n</span>
+        </Label>
         <Select value={skin} onValueChange={(v) => v && handleSkinChange(v)}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select skin" />
+            <span className="flex-1 truncate text-left text-sm">
+              {selectedSkinName || 'Select skin'}
+            </span>
           </SelectTrigger>
           <SelectContent>
             {SKINS.map((s) => (

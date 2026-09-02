@@ -303,8 +303,110 @@ export function renderLayout(
     },
     update: (nextDocument: LayoutDocument, viewport?: Viewport) => {
       const next = validateLayout(nextDocument) ? nextDocument : DEFAULT_LAYOUT;
+      const structuralChange = (() => {
+        if (layout.sections.length !== next.sections.length) return true;
+        for (let index = 0; index < layout.sections.length; index += 1) {
+          const left = layout.sections[index];
+          const right = next.sections[index];
+          if (left.id !== right.id) return true;
+          if (left.controls.length !== right.controls.length) return true;
+          for (
+            let controlIndex = 0;
+            controlIndex < left.controls.length;
+            controlIndex += 1
+          ) {
+            const leftControl = left.controls[controlIndex];
+            const rightControl = right.controls[controlIndex];
+            if (leftControl.id !== rightControl.id) return true;
+            if (leftControl.type !== rightControl.type) return true;
+            if (leftControl.shape !== rightControl.shape) return true;
+            if (
+              (leftControl as unknown as { hitShape?: string }).hitShape !==
+              (rightControl as unknown as { hitShape?: string }).hitShape
+            )
+              return true;
+            if (leftControl.label !== rightControl.label) return true;
+            if (leftControl.binding !== rightControl.binding) return true;
+            if (leftControl.parentId !== rightControl.parentId) return true;
+            if (
+              JSON.stringify(
+                (leftControl as unknown as { bindings?: unknown }).bindings,
+              ) !==
+              JSON.stringify(
+                (rightControl as unknown as { bindings?: unknown }).bindings,
+              )
+            )
+              return true;
+          }
+        }
+        return false;
+      })();
       layout = next;
       root.dataset.layoutId = layout.id;
+      if (structuralChange) {
+        pointerInput?.destroy();
+        const chromeEl = options.chrome;
+        if (chromeEl) chromeEl.remove();
+        composition.replaceChildren();
+        renderedSections.length = 0;
+        for (const section of layout.sections) {
+          const sectionElement = ownerDocument.createElement('section');
+          sectionElement.className = 'controller-section';
+          sectionElement.dataset.sectionId = section.id;
+          const renderedSection: RenderedSection = {
+            sectionId: section.id,
+            element: sectionElement,
+            controls: [],
+          };
+          for (const control of section.controls) {
+            const rendered = renderControl(ownerDocument, control, layout);
+            if (!rendered) continue;
+            renderedSection.controls.push(rendered);
+            if (rendered.target) sectionElement.append(rendered.target);
+            else sectionElement.append(rendered.visual);
+          }
+          renderedSections.push(renderedSection);
+          composition.append(sectionElement);
+        }
+        if (interactive && pointerInput) {
+          const visualById = new Map<string, HTMLElement>();
+          for (const section of renderedSections) {
+            for (const rc of section.controls) {
+              if (rc.control.type !== 'hitzone')
+                visualById.set(rc.control.id, rc.visual);
+            }
+          }
+          for (const section of renderedSections) {
+            for (const rc of section.controls) {
+              if (!rc.target) continue;
+              if (rc.control.type === 'hitzone') {
+                const parent = layout.sections
+                  .flatMap((candidate) => candidate.controls)
+                  .find((candidate) => candidate.id === rc.control.parentId);
+                if (!parent) continue;
+                const parentVisual = visualById.get(parent.id);
+                const effectiveControl = {
+                  ...rc.control,
+                  binding: parent.binding,
+                  bindings: parent.bindings,
+                } as Control;
+                pointerInput.bind(
+                  rc.target,
+                  effectiveControl,
+                  rc.visual,
+                  parentVisual,
+                );
+              } else {
+                pointerInput.bind(rc.target, rc.control, rc.visual);
+              }
+            }
+          }
+        }
+        if (chromeEl && interactive) {
+          const centerIndex = 1;
+          renderedSections[centerIndex]?.element.append(chromeEl);
+        }
+      }
       const size = viewport ?? readViewport(composition, view);
       applyOrientation(
         size.width < size.height ? 'portrait' : 'landscape',

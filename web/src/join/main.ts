@@ -543,13 +543,18 @@ function showController(options: {
     let docToEdit: LayoutDocument | undefined;
     if (editId === '__new_from_current') {
       const base = currentLayoutDoc;
-      const rawPlayer =
-        currentPlayerDisplayName || readStorage(DISPLAY_NAME_KEY) || '';
-      const isDefault =
-        !rawPlayer.trim() || DEFAULT_NAME_PATTERN.test(rawPlayer.trim());
-      const suffix = isDefault ? 'Copy' : rawPlayer.trim();
-      const newName = `${base.name} ${suffix}`.trim();
-      docToEdit = { ...structuredClone(base), name: newName };
+      const isPersonal = isPersonalLayout(base.id);
+      if (isPersonal) {
+        docToEdit = { ...structuredClone(base), name: base.name };
+      } else {
+        const rawPlayer =
+          currentPlayerDisplayName || readStorage(DISPLAY_NAME_KEY) || '';
+        const isDefault =
+          !rawPlayer.trim() || DEFAULT_NAME_PATTERN.test(rawPlayer.trim());
+        const suffix = isDefault ? 'Copy' : rawPlayer.trim();
+        const newName = `${base.name} ${suffix}`.trim();
+        docToEdit = { ...structuredClone(base), name: newName };
+      }
     } else {
       docToEdit = loadPersonalLayouts()[editId];
       if (!docToEdit) docToEdit = currentLayoutDoc;
@@ -837,7 +842,8 @@ function showController(options: {
       applyWelcome(welcome, slot, name, shell);
       availableLayouts = welcome.availableLayouts;
       playerId = welcome.playerId;
-      currentPlayerDisplayName = welcome.displayName || currentPlayerDisplayName;
+      currentPlayerDisplayName =
+        welcome.displayName || currentPlayerDisplayName;
       const stored = readStorage(SELECTED_LAYOUT_KEY);
       if (stored && isPersonalLayout(stored)) {
         const personalDoc = loadPersonalLayouts()[stored];
