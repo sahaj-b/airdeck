@@ -8,7 +8,13 @@ export interface InteractGeometryOptions {
   scale: number;
   getScale?: () => number;
   onDrag: (deltaX: number, deltaY: number) => void;
-  onResize: (deltaWidth: number, deltaHeight: number, locked: boolean) => void;
+  onResize: (
+    deltaWidth: number,
+    deltaHeight: number,
+    deltaLeft: number,
+    deltaTop: number,
+    locked: boolean,
+  ) => void;
   onDragEnd: () => void;
   onResizeEnd: () => void;
   locked: boolean;
@@ -118,7 +124,14 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
     instance.resizable({
       edges,
       listeners: {
-        move(event: { deltaRect: { width: number; height: number } }) {
+        move(event: {
+          deltaRect: {
+            left: number;
+            top: number;
+            width: number;
+            height: number;
+          };
+        }) {
           const scale = getScaleRef.current
             ? getScaleRef.current()
             : scaleRef.current || 1;
@@ -132,7 +145,15 @@ export function useInteractGeometry(options: InteractGeometryOptions): void {
           const locked = baseLocked || shiftLocked || eventShift;
           const deltaWidth = event.deltaRect.width / scale / vh;
           const deltaHeight = event.deltaRect.height / scale / vh;
-          onResizeRef.current(deltaWidth, deltaHeight, locked);
+          const deltaLeft = event.deltaRect.left / scale / vh;
+          const deltaTop = event.deltaRect.top / scale / vh;
+          onResizeRef.current(
+            deltaWidth,
+            deltaHeight,
+            deltaLeft,
+            deltaTop,
+            locked,
+          );
         },
         end() {
           onResizeEndRef.current();

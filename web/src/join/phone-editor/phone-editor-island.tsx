@@ -81,6 +81,22 @@ function PhoneEditorIsland({
   selectedIdRef.current = selectedId;
   const locksRef = useRef(locks);
   locksRef.current = locks;
+  const liveRafRef = useRef<number | null>(null);
+  const pendingLiveRef = useRef<LayoutDocument | null>(null);
+
+  const flushLive = useCallback(() => {
+    if (liveRafRef.current !== null) {
+      cancelAnimationFrame(liveRafRef.current);
+      liveRafRef.current = null;
+    }
+    pendingLiveRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (liveRafRef.current !== null) cancelAnimationFrame(liveRafRef.current);
+    };
+  }, []);
 
   const isPinchingRef = useRef(false);
   const isMultiTouchRef = useRef(false);
@@ -99,7 +115,15 @@ function PhoneEditorIsland({
     locksRef,
     (next) => {
       draftRef.current = next;
-      usePhoneEditorStore.getState().setDraftLive(next);
+      pendingLiveRef.current = next;
+      if (liveRafRef.current === null) {
+        liveRafRef.current = requestAnimationFrame(() => {
+          liveRafRef.current = null;
+          const pending = pendingLiveRef.current;
+          pendingLiveRef.current = null;
+          if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
+        });
+      }
     },
   );
 
@@ -143,12 +167,6 @@ function PhoneEditorIsland({
     return new Set<string>(getHitzonesOf(draft, selectedId));
   }, [draft, selectedId]);
 
-  const isParentWithHitzones = selectedControl
-    ? draft
-      ? getHitzonesOf(draft, selectedControl.id).length > 0
-      : false
-    : false;
-
   const locked = selectedControl
     ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
     : true;
@@ -165,66 +183,100 @@ function PhoneEditorIsland({
 
   const handleDraftLive = useCallback((next: LayoutDocument) => {
     draftRef.current = next;
-    usePhoneEditorStore.getState().setDraftLive(next);
+    pendingLiveRef.current = next;
+    if (liveRafRef.current === null) {
+      liveRafRef.current = requestAnimationFrame(() => {
+        liveRafRef.current = null;
+        const pending = pendingLiveRef.current;
+        pendingLiveRef.current = null;
+        if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
+      });
+    }
   }, []);
 
-  const handleCommit = useCallback((next: LayoutDocument) => {
-    draftRef.current = next;
-    usePhoneEditorStore.getState().commitDraft(next);
-  }, []);
+  const handleCommit = useCallback(
+    (next: LayoutDocument) => {
+      flushLive();
+      draftRef.current = next;
+      usePhoneEditorStore.getState().commitDraft(next);
+    },
+    [flushLive],
+  );
 
   const handleDrag = useCallback(
     (deltaX: number, deltaY: number) => {
       if (!selectedId) return;
       if (isMultiTouchRef.current || isPinchingRef.current) return;
+      const cur = draftRef.current as LayoutDocument;
+      if (!cur) return;
+      const hasHitzones = getHitzonesOf(cur, selectedId).length > 0;
       let next: LayoutDocument;
-      if (isParentWithHitzones) {
-        next = moveParentWithHitzones(
-          draftRef.current as LayoutDocument,
-          selectedId,
-          deltaX,
-          deltaY,
-        );
+      if (hasHitzones) {
+        next = moveParentWithHitzones(cur, selectedId, deltaX, deltaY);
       } else {
-        const found = findControl(
-          draftRef.current as LayoutDocument,
-          selectedId,
-        );
+        const found = findControl(cur, selectedId);
         if (!found) return;
         next = updateControlGeometry(
-          draftRef.current as LayoutDocument,
+          cur,
           selectedId,
           clampDrag(found.control.geometry, deltaX, deltaY, found.section),
         );
       }
+      // keep draftRef in sync for next delta, batch store update via rAF
       draftRef.current = next;
-      handleDraftLive(next);
+      pendingLiveRef.current = next;
+      if (liveRafRef.current === null) {
+        liveRafRef.current = requestAnimationFrame(() => {
+          liveRafRef.current = null;
+          const pending = pendingLiveRef.current;
+          pendingLiveRef.current = null;
+          if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
+        });
+      }
     },
-    [selectedId, isParentWithHitzones, handleDraftLive],
+    [selectedId],
   );
 
   const handleResize = useCallback(
-    (deltaWidth: number, deltaHeight: number) => {
+    (
+      deltaWidth: number,
+      deltaHeight: number,
+      deltaLeft: number,
+      deltaTop: number,
+      lockedArg: boolean,
+    ) => {
       if (!selectedId) return;
       if (isMultiTouchRef.current || isPinchingRef.current) return;
       const cur = draftRef.current as LayoutDocument;
+      const effectiveLocked = lockedArg ?? locked;
       const next = resizeControl(
         cur,
         selectedId,
         deltaWidth,
         deltaHeight,
-        locked,
+        effectiveLocked,
+        deltaLeft,
+        deltaTop,
       );
       draftRef.current = next;
-      handleDraftLive(next);
+      pendingLiveRef.current = next;
+      if (liveRafRef.current === null) {
+        liveRafRef.current = requestAnimationFrame(() => {
+          liveRafRef.current = null;
+          const pending = pendingLiveRef.current;
+          pendingLiveRef.current = null;
+          if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
+        });
+      }
     },
-    [selectedId, locked, handleDraftLive],
+    [selectedId, locked],
   );
 
   const commit = useCallback(() => {
     if (isPinchingRef.current || isMultiTouchRef.current) return;
+    flushLive();
     handleCommit(draftRef.current as LayoutDocument);
-  }, [handleCommit]);
+  }, [handleCommit, flushLive]);
 
   useInteractGeometry({
     enabled: Boolean(selectedRect && selectedId),

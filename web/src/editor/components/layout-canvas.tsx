@@ -108,6 +108,49 @@ export function LayoutCanvas({
   const selectedRef = useRef<HTMLDivElement>(null);
   const latestRef = useRef<LayoutDocument>(document);
   latestRef.current = document;
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  const liveRafRef = useRef<number | null>(null);
+  const pendingLiveRef = useRef<LayoutDocument | null>(null);
+
+  const scheduleLive = useCallback((doc: LayoutDocument) => {
+    pendingLiveRef.current = doc;
+    if (liveRafRef.current === null) {
+      liveRafRef.current = requestAnimationFrame(() => {
+        liveRafRef.current = null;
+        const pending = pendingLiveRef.current;
+        pendingLiveRef.current = null;
+        if (pending) onDraftChangeRef.current(pending, false);
+      });
+    }
+  }, []);
+
+  const flushLive = useCallback(() => {
+    if (liveRafRef.current !== null) {
+      cancelAnimationFrame(liveRafRef.current);
+      liveRafRef.current = null;
+    }
+    pendingLiveRef.current = null;
+  }, []);
+
+  const batchedHitDraftChange = useCallback(
+    (doc: LayoutDocument, commit: boolean) => {
+      latestRef.current = doc;
+      if (commit) {
+        flushLive();
+        onDraftChangeRef.current(doc, true);
+      } else {
+        scheduleLive(doc);
+      }
+    },
+    [scheduleLive, flushLive],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (liveRafRef.current !== null) cancelAnimationFrame(liveRafRef.current);
+    };
+  }, []);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   const [viewport, setViewport] = useState({ width: 844, height: 390 });
   const [zoom, setZoom] = useState(1);
@@ -374,9 +417,6 @@ export function LayoutCanvas({
   const locked = selectedControl
     ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
     : true;
-  const isParentWithHitzones = selectedControl
-    ? getHitzonesOf(document, selectedControl.id).length > 0
-    : false;
 
   const { resolvedRect } = useMemo(() => {
     if (!resolved || !selectedControlId) return { resolvedRect: null };
@@ -415,45 +455,47 @@ export function LayoutCanvas({
     },
     onDrag: (deltaX, deltaY) => {
       if (!selectedControlId) return;
+      const cur = latestRef.current;
+      const hasHitzones = getHitzonesOf(cur, selectedControlId).length > 0;
       let next: LayoutDocument;
-      if (isParentWithHitzones) {
-        next = moveParentWithHitzones(
-          document,
-          selectedControlId,
-          deltaX,
-          deltaY,
-        );
+      if (hasHitzones) {
+        next = moveParentWithHitzones(cur, selectedControlId, deltaX, deltaY);
       } else {
-        const found = findControl(document, selectedControlId);
+        const found = findControl(cur, selectedControlId);
         if (!found) return;
         next = updateControlGeometry(
-          document,
+          cur,
           selectedControlId,
           clampDrag(found.control.geometry, deltaX, deltaY, found.section),
         );
       }
       latestRef.current = next;
-      onDraftChange(next, false);
+      scheduleLive(next);
     },
-    onResize: (deltaWidth, deltaHeight, isLocked) => {
+    onResize: (deltaWidth, deltaHeight, deltaLeft, deltaTop, isLocked) => {
       if (!selectedControlId) return;
-      const found = findControl(document, selectedControlId);
+      const cur = latestRef.current;
+      const found = findControl(cur, selectedControlId);
       if (!found) return;
       const next = resizeControl(
-        document,
+        cur,
         selectedControlId,
         deltaWidth,
         deltaHeight,
         isLocked,
+        deltaLeft,
+        deltaTop,
       );
       latestRef.current = next;
-      onDraftChange(next, false);
+      scheduleLive(next);
     },
     onDragEnd: () => {
-      onDraftChange(latestRef.current, true);
+      flushLive();
+      onDraftChangeRef.current(latestRef.current, true);
     },
     onResizeEnd: () => {
-      onDraftChange(latestRef.current, true);
+      flushLive();
+      onDraftChangeRef.current(latestRef.current, true);
     },
   });
 
@@ -623,7 +665,7 @@ export function LayoutCanvas({
                   selectedRef={selectedRef}
                   onSelectControl={onSelectControl}
                   onSelectSection={onSelectSection}
-                  onDraftChange={onDraftChange}
+                  onDraftChange={batchedHitDraftChange}
                 />
               );
             }),

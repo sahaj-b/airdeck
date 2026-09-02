@@ -162,7 +162,7 @@ export class FeedbackController {
       const now = this.audio.currentTime;
       oscillator.type = 'sine';
       oscillator.frequency.value = 660;
-      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.setValueAtTime(0.7, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       oscillator.connect(gain);
       gain.connect(this.audio.destination);

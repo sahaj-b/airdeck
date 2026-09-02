@@ -71,7 +71,7 @@ export function PhoneEditorBar({
   return (
     <>
       <div
-        className="phone-editor-bar absolute top-0 left-0 right-0 h-8 flex items-center gap-2 px-2 bg-black/40 z-10 pointer-events-auto border-b border-white/10"
+        className="phone-editor-bar absolute top-0 left-0 right-0 h-8 flex items-center gap-3 px-2.5 bg-black/40 z-10 pointer-events-auto border-b border-white/10"
         data-phone-bar
       >
         <button
@@ -89,7 +89,7 @@ export function PhoneEditorBar({
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          className={`w-[132px] max-w-[32vw] shrink-0 truncate bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
+          className={`w-[108px] max-w-[26vw] shrink-0 truncate bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
           value={name}
           onChange={(e) => {
             onNameChange(e.target.value);
@@ -103,7 +103,7 @@ export function PhoneEditorBar({
           }}
           placeholder="Layout name"
         />
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-2.5">
           <button
             type="button"
             className="grid place-items-center size-6 shrink-0 rounded bg-red-500/90 hover:bg-red-500 border border-white/15 text-white cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
@@ -200,12 +200,12 @@ export function PhoneEditorBar({
             <Redo2 size={12} strokeWidth={2} />
           </button>
           <div
-            className="w-px h-4 bg-white/15 shrink-0 mx-1"
+            className="w-px h-4 bg-white/15 shrink-0 mx-1.5"
             aria-hidden="true"
           />
           <button
             type="button"
-            className="h-[22px] px-1 shrink-0 rounded-md border border-white/20 bg-white text-black text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90 mr-1.5"
+            className="h-[22px] px-2 shrink-0 rounded-md border border-white/20 bg-white text-black text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90"
             onClick={onSave}
           >
             {isCreate ? 'Create' : 'Save'}

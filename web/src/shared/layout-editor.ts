@@ -229,19 +229,66 @@ export function clampResize(
   deltaHeight: number,
   section: Section,
   locked: boolean,
+  deltaLeft = 0,
+  deltaTop = 0,
 ): Geometry {
   let width = geometry.size.width + deltaWidth;
   let height = geometry.size.height + deltaHeight;
+  const rawDeltaWidth = deltaWidth;
+  const rawDeltaHeight = deltaHeight;
   if (locked) {
     const ratio = geometry.size.width / geometry.size.height || 1;
-    if (Math.abs(deltaWidth) > Math.abs(deltaHeight)) {
+    if (Math.abs(rawDeltaWidth) > Math.abs(rawDeltaHeight)) {
       height = width / ratio;
     } else {
       width = height * ratio;
     }
   }
+  // clamp size before computing deltas so finalDelta is accurate
+  width = Math.min(Math.max(width, 0.01), 2);
+  height = Math.min(Math.max(height, 0.01), 2);
+
+  const finalDeltaWidth = width - geometry.size.width;
+  const finalDeltaHeight = height - geometry.size.height;
+
+  let deltaX = 0;
+  let deltaY = 0;
+  const hasLeft = Math.abs(deltaLeft) > 1e-9;
+  const hasTop = Math.abs(deltaTop) > 1e-9;
+  const hasWidthDrag = Math.abs(rawDeltaWidth) > 1e-9;
+  const hasHeightDrag = Math.abs(rawDeltaHeight) > 1e-9;
+
+  if (locked) {
+    if (hasWidthDrag && hasHeightDrag) {
+      if (hasLeft) deltaX = -finalDeltaWidth / 2;
+      else deltaX = finalDeltaWidth / 2;
+      if (hasTop) deltaY = -finalDeltaHeight / 2;
+      else deltaY = finalDeltaHeight / 2;
+    } else if (hasWidthDrag) {
+      if (hasLeft) deltaX = -finalDeltaWidth / 2;
+      else deltaX = finalDeltaWidth / 2;
+      deltaY = 0;
+    } else if (hasHeightDrag) {
+      if (hasTop) deltaY = -finalDeltaHeight / 2;
+      else deltaY = finalDeltaHeight / 2;
+      deltaX = 0;
+    }
+  } else {
+    if (hasWidthDrag) {
+      if (hasLeft) deltaX = -finalDeltaWidth / 2;
+      else deltaX = finalDeltaWidth / 2;
+    }
+    if (hasHeightDrag) {
+      if (hasTop) deltaY = -finalDeltaHeight / 2;
+      else deltaY = finalDeltaHeight / 2;
+    }
+  }
+
   const next: Geometry = {
-    position: { ...geometry.position },
+    position: {
+      x: geometry.position.x + deltaX,
+      y: geometry.position.y + deltaY,
+    },
     size: { width, height },
   };
   return clampGeometry(next, section);
@@ -397,6 +444,8 @@ export function resizeControl(
   deltaWidth: number,
   deltaHeight: number,
   locked: boolean,
+  deltaLeft = 0,
+  deltaTop = 0,
 ): LayoutDocument {
   const next = cloneDocument(document);
   for (const section of next.sections) {
@@ -410,6 +459,8 @@ export function resizeControl(
         deltaHeight,
         section,
         locked,
+        deltaLeft,
+        deltaTop,
       );
       break;
     }
