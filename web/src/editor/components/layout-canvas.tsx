@@ -980,6 +980,12 @@ const ControlHit = memo(function ControlHit({
       }}
       data-control-id={control.id}
       data-hit-shape={hitShape}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        onSelectControl(control.id);
+        onSelectSection(null);
+      }}
       onClick={(event) => {
         event.stopPropagation();
         onSelectControl(control.id);

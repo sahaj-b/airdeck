@@ -28,6 +28,8 @@ export interface EditorStoreState {
 
   locks: Record<string, boolean>;
 
+  sizeClipboard: { width: number; height: number } | null;
+
   addDialogSection: SectionId | null;
   pickerOpen: boolean;
   forkOpen: boolean;
@@ -69,6 +71,9 @@ export interface EditorStoreState {
   // locks
   toggleLock: (id: string, fallback: boolean) => void;
   setLocks: (locks: Record<string, boolean>) => void;
+  setSizeClipboard: (
+    clipboard: { width: number; height: number } | null,
+  ) => void;
 
   // ui dialogs / panels
   setAddDialogSection: (section: SectionId | null) => void;
@@ -139,6 +144,7 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   hoveredControlId: null,
   hoveredSectionId: null,
   locks: {},
+  sizeClipboard: null,
   addDialogSection: null,
   pickerOpen: false,
   forkOpen: false,
@@ -181,6 +187,7 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
       return { locks: { ...state.locks, [id]: !effective } };
     }),
   setLocks: (locks) => set({ locks }),
+  setSizeClipboard: (sizeClipboard) => set({ sizeClipboard }),
 
   setAddDialogSection: (addDialogSection) => set({ addDialogSection }),
   setPickerOpen: (pickerOpen) => set({ pickerOpen }),

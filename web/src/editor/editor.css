@@ -476,6 +476,13 @@
 /* Ghost runtime chrome preview inside editor canvas — shows where phone chrome lives */
 .editor-ghost-chrome {
   pointer-events: none;
+  cursor: default;
+}
+
+.editor-ghost-chrome .icon-button,
+.editor-ghost-chrome .fullscreen-button {
+  pointer-events: none !important;
+  cursor: default !important;
 }
 
 .editor-ghost-chrome .controller-identity,

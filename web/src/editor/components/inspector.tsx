@@ -1,4 +1,6 @@
 import {
+  Check,
+  ClipboardPaste,
   Copy,
   Lock,
   PanelRightClose,
@@ -35,6 +37,7 @@ import {
   isDefaultLocked,
 } from '@/shared/layout-editor';
 import { useIsShiftHeld } from '../hooks/use-is-shift-held';
+import { useEditorStore } from '../store/editor-store';
 
 export interface InspectorProps {
   document: LayoutDocument;
@@ -827,6 +830,22 @@ function GeometrySection({
 }) {
   const shiftHeld = useIsShiftHeld();
   const displayLocked = locked || shiftHeld;
+  const sizeClipboard = useEditorStore((s) => s.sizeClipboard);
+  const setSizeClipboard = useEditorStore((s) => s.setSizeClipboard);
+  const [copied, setCopied] = useState(false);
+  const copiedTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setCopied(false);
+  }, [control.id]);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimeoutRef.current)
+        window.clearTimeout(copiedTimeoutRef.current);
+    };
+  }, []);
+
   const handleResetToSquare = () => {
     const next = structuredClone(document);
     const found = findControl(next, control.id);
@@ -838,6 +857,37 @@ function GeometrySection({
     found.control.geometry.size.height = clamped;
     onDraftChange(next, true);
   };
+
+  const handleCopySize = () => {
+    const w = control.geometry.size.width;
+    const h = control.geometry.size.height;
+    setSizeClipboard({ width: w, height: h });
+    setCopied(true);
+    if (copiedTimeoutRef.current) window.clearTimeout(copiedTimeoutRef.current);
+    copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1200);
+    const text = `${formatNumber(w)}×${formatNumber(h)}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  };
+
+  const handlePasteSize = () => {
+    if (!sizeClipboard) return;
+    const next = structuredClone(document);
+    const found = findControl(next, control.id);
+    if (!found) return;
+    found.control.geometry.size.width = sizeClipboard.width;
+    found.control.geometry.size.height = sizeClipboard.height;
+    onDraftChange(next, true);
+  };
+
+  const hasClipboard = !!sizeClipboard;
+  const isSameSize =
+    hasClipboard &&
+    Math.abs(sizeClipboard.width - control.geometry.size.width) < 1e-4 &&
+    Math.abs(sizeClipboard.height - control.geometry.size.height) < 1e-4;
+  const pasteDisabled = !hasClipboard || isSameSize;
+
   return (
     <div className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center justify-between gap-2">
@@ -975,6 +1025,55 @@ function GeometrySection({
             {fieldErrors.get('geometry')}
           </p>
         )}
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5 border-t border-border/40 pt-2.5">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-full gap-1.5 px-2.5 text-xs font-medium active:scale-[0.98] transition-transform"
+                  onClick={handleCopySize}
+                  aria-label="Copy size"
+                >
+                  {copied ? (
+                    <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                  {copied ? 'Copied' : 'Copy size'}
+                </Button>
+              }
+            />
+            <TooltipContent side="top">Copy width × height</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-full gap-1.5 px-2.5 text-xs font-medium active:scale-[0.98] transition-transform disabled:opacity-40"
+                  onClick={handlePasteSize}
+                  disabled={pasteDisabled}
+                  aria-label="Paste size"
+                >
+                  <ClipboardPaste className="size-3.5" />
+                  Paste
+                </Button>
+              }
+            />
+            <TooltipContent side="top">
+              {!hasClipboard
+                ? 'No size copied'
+                : isSameSize
+                  ? 'Already same size'
+                  : 'Paste copied size'}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
       <p className="text-[11px] leading-[1.4] text-muted-foreground">
         X and Y are relative to the center of the section, in viewport-height
