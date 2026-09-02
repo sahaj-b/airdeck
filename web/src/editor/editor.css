@@ -315,8 +315,7 @@
   pointer-events: none;
   z-index: 1;
   background: transparent;
-  border: 1.5px dashed
-    color-mix(in oklch, var(--editor-accent) 65%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--editor-accent) 65%, transparent);
   border-radius: 8px;
 }
 
@@ -356,6 +355,7 @@
   border-color: var(--editor-accent);
   color: #0f0f14;
   opacity: 1;
+  font-weight: 700;
 }
 
 /* Viewport edge handles to resize the preview viewport */

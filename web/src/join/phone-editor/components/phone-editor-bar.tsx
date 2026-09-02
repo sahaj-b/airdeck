@@ -89,7 +89,7 @@ export function PhoneEditorBar({
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          className={`w-[108px] max-w-[26vw] shrink-0 truncate bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
+          className={`min-w-0 flex-1 max-w-[50vw] truncate bg-transparent border-0 border-b px-0.5 py-1 text-xs leading-none outline-none placeholder:text-white/50 ${nameError ? 'border-red-500 text-red-300 focus:border-red-500' : 'border-white/20 text-white focus:border-white/60'}`}
           value={name}
           onChange={(e) => {
             onNameChange(e.target.value);

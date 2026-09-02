@@ -1,4 +1,4 @@
-import { Copy, GripVertical, PanelLeftClose, Trash2 } from 'lucide-react';
+import { Copy, GripVertical, PanelLeftClose, Plus, Trash2 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -78,6 +78,17 @@ export function SectionsPanel({
     return new Set<string>(hitzones);
   }, [document, hoveredControlId]);
 
+  const targetSectionId = useMemo(() => {
+    if (selectedSectionId) return selectedSectionId;
+    if (selectedControlId) {
+      for (const section of document.sections) {
+        if (section.controls.some((c) => c.id === selectedControlId))
+          return section.id;
+      }
+    }
+    return document.sections[0]?.id ?? 'left';
+  }, [document.sections, selectedControlId, selectedSectionId]);
+
   return (
     <div className="flex min-h-0 w-full flex-col gap-4 p-0 overflow-y-auto bg-transparent">
       <div className="p-2 flex flex-col gap-2">
@@ -105,27 +116,42 @@ export function SectionsPanel({
             </Tooltip>
           )}
         </div>
-        <div className="flex flex-col gap-3">
-          {document.sections.map((section) => (
-            <SectionCard
+
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          className="w-full text-xs gap-1.5"
+          onClick={() => onAddControl(targetSectionId)}
+        >
+          <Plus className="size-3.5" />
+          Add control
+        </Button>
+
+        <div className="rounded-[10px] border bg-card overflow-hidden">
+          {document.sections.map((section, idx) => (
+            <div
               key={section.id}
-              section={section}
-              document={document}
-              selectedControlId={selectedControlId}
-              selectedSectionId={selectedSectionId ?? null}
-              selectedPeerIds={selectedPeerIds}
-              hoveredControlId={hoveredControlId ?? null}
-              hoveredPeerIds={hoveredPeerIds}
-              onSelectControl={onSelectControl}
-              onSelectSection={onSelectSection}
-              onHoverSection={onHoverSection}
-              onMoveControl={onMoveControl}
-              onDuplicateControl={onDuplicateControl}
-              onDeleteControl={onDeleteControl}
-              onReorderControl={onReorderControl}
-              onAddControl={onAddControl}
-              onHoverControl={onHoverControl}
-            />
+              className={cn(idx !== 0 && 'border-t border-border')}
+            >
+              <SectionBlock
+                section={section}
+                document={document}
+                selectedControlId={selectedControlId}
+                selectedSectionId={selectedSectionId ?? null}
+                selectedPeerIds={selectedPeerIds}
+                hoveredControlId={hoveredControlId ?? null}
+                hoveredPeerIds={hoveredPeerIds}
+                onSelectControl={onSelectControl}
+                onSelectSection={onSelectSection}
+                onHoverSection={onHoverSection}
+                onMoveControl={onMoveControl}
+                onDuplicateControl={onDuplicateControl}
+                onDeleteControl={onDeleteControl}
+                onReorderControl={onReorderControl}
+                onHoverControl={onHoverControl}
+              />
+            </div>
           ))}
         </div>
       </div>
@@ -133,7 +159,7 @@ export function SectionsPanel({
   );
 }
 
-const SectionCard = memo(function SectionCard({
+const SectionBlock = memo(function SectionBlock({
   section,
   document,
   selectedControlId,
@@ -148,7 +174,6 @@ const SectionCard = memo(function SectionCard({
   onDuplicateControl,
   onDeleteControl,
   onReorderControl,
-  onAddControl,
   onHoverControl,
 }: {
   section: LayoutDocument['sections'][number];
@@ -169,7 +194,6 @@ const SectionCard = memo(function SectionCard({
     fromIndex: number,
     toIndex: number,
   ) => void;
-  onAddControl: (sectionId: string) => void;
   onHoverControl?: (id: string | null) => void;
 }) {
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -298,12 +322,7 @@ const SectionCard = memo(function SectionCard({
   }, [document, section.controls]);
 
   return (
-    <div
-      className={cn(
-        'rounded-[10px] border bg-card overflow-hidden',
-        isSectionSelected && 'border-border',
-      )}
-    >
+    <div className="overflow-hidden">
       <button
         type="button"
         className={cn(
@@ -319,7 +338,12 @@ const SectionCard = memo(function SectionCard({
         aria-pressed={isSectionSelected}
         aria-label={`Select section ${section.id}`}
       >
-        <span className="text-[13px] font-medium capitalize text-foreground">
+        <span
+          className={cn(
+            'text-[13px] capitalize text-foreground',
+            isSectionSelected ? 'font-bold' : 'font-medium',
+          )}
+        >
           {section.id}
         </span>
         <span
@@ -432,18 +456,6 @@ const SectionCard = memo(function SectionCard({
               />
             )}
         </ul>
-      </div>
-
-      <div className="border-t border-border p-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full text-xs"
-          onClick={() => onAddControl(section.id)}
-        >
-          + Add control
-        </Button>
       </div>
     </div>
   );

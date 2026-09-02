@@ -106,11 +106,9 @@ func ValidateDocument(document Document) error {
 	}
 	// Second pass: hitzone parent relation validation (requires full id map)
 	controlByID := make(map[string]Control)
-	sectionByControlID := make(map[string]string)
 	for _, section := range document.Sections {
 		for _, control := range section.Controls {
 			controlByID[control.ID] = control
-			sectionByControlID[control.ID] = section.ID
 		}
 	}
 	for _, section := range document.Sections {
@@ -122,9 +120,6 @@ func ValidateDocument(document Document) error {
 				parent, ok := controlByID[control.ParentID]
 				if !ok {
 					return fmt.Errorf("control %q: parentId %q does not exist", control.ID, control.ParentID)
-				}
-				if sectionByControlID[control.ParentID] != section.ID {
-					return fmt.Errorf("control %q: parentId %q must be in same section", control.ID, control.ParentID)
 				}
 				if parent.Type == "hitzone" {
 					return fmt.Errorf("control %q: parentId %q must not reference another hitzone", control.ID, control.ParentID)

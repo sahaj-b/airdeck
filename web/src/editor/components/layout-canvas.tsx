@@ -31,16 +31,15 @@ import type {
   Document as LayoutDocument,
 } from '@/shared/generated/layout';
 import {
-  clampDrag,
   clampSectionDivider,
   effectiveHitShape,
   findControl,
   getHitzonesOf,
   getSectionControlMin,
   isDefaultLocked,
-  moveParentWithHitzones,
+  moveControlAcross,
+  moveParentWithHitzonesAcross,
   resizeControl,
-  updateControlGeometry,
 } from '@/shared/layout-editor';
 import { useInteractGeometry } from '../use-interact-geometry';
 import { ControlOverlay } from './control-overlay';
@@ -459,14 +458,20 @@ export function LayoutCanvas({
       const hasHitzones = getHitzonesOf(cur, selectedControlId).length > 0;
       let next: LayoutDocument;
       if (hasHitzones) {
-        next = moveParentWithHitzones(cur, selectedControlId, deltaX, deltaY);
-      } else {
-        const found = findControl(cur, selectedControlId);
-        if (!found) return;
-        next = updateControlGeometry(
+        next = moveParentWithHitzonesAcross(
           cur,
           selectedControlId,
-          clampDrag(found.control.geometry, deltaX, deltaY, found.section),
+          deltaX,
+          deltaY,
+          viewport,
+        );
+      } else {
+        next = moveControlAcross(
+          cur,
+          selectedControlId,
+          deltaX,
+          deltaY,
+          viewport,
         );
       }
       latestRef.current = next;
@@ -659,6 +664,7 @@ export function LayoutCanvas({
                   isPeer={isPeer}
                   isSelectedPeer={isSelectedPeer}
                   isHovered={isHovered}
+                  viewport={viewport}
                   viewportHeight={viewport.height}
                   scale={scale}
                   latestRef={latestRef}
@@ -797,6 +803,7 @@ const ControlHit = memo(function ControlHit({
   isPeer,
   isSelectedPeer,
   isHovered,
+  viewport,
   viewportHeight,
   scale,
   latestRef,
@@ -812,6 +819,7 @@ const ControlHit = memo(function ControlHit({
   isPeer: boolean;
   isSelectedPeer: boolean;
   isHovered: boolean;
+  viewport: { width: number; height: number };
   viewportHeight: number;
   scale: number;
   latestRef: React.MutableRefObject<LayoutDocument>;
@@ -823,6 +831,7 @@ const ControlHit = memo(function ControlHit({
   const hitRef = useRef<HTMLButtonElement>(null);
   const scaleRef = useRef(scale);
   const vhRef = useRef(viewportHeight);
+  const viewportRef = useRef(viewport);
   const onSelectRef = useRef(onSelectControl);
   const onDraftRef = useRef(onDraftChange);
   const isSelectedRef = useRef(isSelected);
@@ -836,6 +845,7 @@ const ControlHit = memo(function ControlHit({
   // direct sync without effects - cheaper than 7 useEffects
   scaleRef.current = scale;
   vhRef.current = viewportHeight;
+  viewportRef.current = viewport;
   onSelectRef.current = onSelectControl;
   onDraftRef.current = onDraftChange;
   isSelectedRef.current = isSelected;
@@ -865,14 +875,20 @@ const ControlHit = memo(function ControlHit({
             isParentRef.current && control.type !== 'hitzone';
           let next: LayoutDocument;
           if (isParentWithHitzones) {
-            next = moveParentWithHitzones(latest, control.id, deltaX, deltaY);
-          } else {
-            const found = findControl(latest, control.id);
-            if (!found) return;
-            next = updateControlGeometry(
+            next = moveParentWithHitzonesAcross(
               latest,
               control.id,
-              clampDrag(found.control.geometry, deltaX, deltaY, found.section),
+              deltaX,
+              deltaY,
+              viewportRef.current,
+            );
+          } else {
+            next = moveControlAcross(
+              latest,
+              control.id,
+              deltaX,
+              deltaY,
+              viewportRef.current,
             );
           }
           latestRef.current = next;

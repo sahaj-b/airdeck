@@ -92,13 +92,11 @@ export function validateLayout(value: unknown): value is LayoutDocument {
       if (!add(control.id) || !validControl(control, section)) return false;
     }
   }
-  // hitzone parent relation second pass
+  // hitzone parent relation second pass (cross-section allowed)
   const controlById = new Map<string, Control>();
-  const sectionByControlId = new Map<string, string>();
   for (const section of document.sections) {
     for (const control of section.controls) {
       controlById.set(control.id, control);
-      sectionByControlId.set(control.id, section.id);
     }
   }
   for (const section of document.sections) {
@@ -109,8 +107,6 @@ export function validateLayout(value: unknown): value is LayoutDocument {
         const parent = controlById.get(control.parentId);
         if (!parent) return false;
         if (parent.type === 'hitzone') return false;
-        if (sectionByControlId.get(control.parentId) !== section.id)
-          return false;
       }
     }
   }
@@ -189,14 +185,12 @@ export function getValidationErrors(value: unknown): ValidationError[] {
         });
     }
   }
-  // second pass for hitzone parent relation
+  // second pass for hitzone parent relation (cross-section allowed)
   if (document.sections) {
     const controlById = new Map<string, Control>();
-    const sectionByControlId = new Map<string, string>();
     for (const section of document.sections) {
       for (const control of section.controls ?? []) {
         controlById.set(control.id, control);
-        sectionByControlId.set(control.id, section.id);
       }
     }
     for (const section of document.sections) {
@@ -229,12 +223,6 @@ export function getValidationErrors(value: unknown): ValidationError[] {
             errors.push({
               path: `/sections/${section.id}/controls/${control.id}/parentId`,
               message: 'parentId must not reference another hitzone',
-            });
-          }
-          if (sectionByControlId.get(parentId) !== section.id) {
-            errors.push({
-              path: `/sections/${section.id}/controls/${control.id}/parentId`,
-              message: 'parentId must be in same section',
             });
           }
         }

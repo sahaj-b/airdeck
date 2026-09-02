@@ -155,7 +155,7 @@
         "parentId": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
-          "description": "Required for hitzone, must reference a non-hitzone control in the same section."
+          "description": "Required for hitzone, must reference a non-hitzone control (any section)."
         },
         "binding": { "$ref": "#/$defs/binding" },
         "bindings": {

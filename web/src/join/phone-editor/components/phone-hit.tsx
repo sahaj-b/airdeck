@@ -5,11 +5,9 @@ import type {
   Document as LayoutDocument,
 } from '@/shared/generated/layout';
 import {
-  clampDrag,
-  findControl,
   getHitzonesOf,
-  moveParentWithHitzones,
-  updateControlGeometry,
+  moveControlAcross,
+  moveParentWithHitzonesAcross,
 } from '@/shared/layout-editor';
 
 interface PhoneHitProps {
@@ -24,6 +22,7 @@ interface PhoneHitProps {
   isPeer: boolean;
   isForgiving: boolean;
   showHitzoneHatch: boolean;
+  viewport: { width: number; height: number };
   viewportHeight: number;
   draftRef: React.MutableRefObject<LayoutDocument | null>;
   selectedId: string | null;
@@ -48,6 +47,7 @@ export const PhoneHit = memo(function PhoneHit({
   isPeer,
   isForgiving,
   showHitzoneHatch,
+  viewport,
   viewportHeight,
   draftRef,
   selectedId,
@@ -60,12 +60,14 @@ export const PhoneHit = memo(function PhoneHit({
 }: PhoneHitProps) {
   const hitRef = useRef<HTMLButtonElement>(null);
   const vhRef = useRef(viewportHeight);
+  const viewportRef = useRef(viewport);
   const selectedIdRef = useRef(selectedId);
   const isSelectedRef = useRef(isSelected);
   const onSelectRef = useRef(onSelect);
   const onDraftLiveRef = useRef(onDraftLive);
   const onCommitRef = useRef(onCommit);
   vhRef.current = viewportHeight;
+  viewportRef.current = viewport;
   selectedIdRef.current = selectedId;
   isSelectedRef.current = isSelected;
   onSelectRef.current = onSelect;
@@ -102,14 +104,20 @@ export const PhoneHit = memo(function PhoneHit({
           if (!latest) return;
           let next: LayoutDocument;
           if (isParentRef.current) {
-            next = moveParentWithHitzones(latest, control.id, deltaX, deltaY);
-          } else {
-            const found = findControl(latest, control.id);
-            if (!found) return;
-            next = updateControlGeometry(
+            next = moveParentWithHitzonesAcross(
               latest,
               control.id,
-              clampDrag(found.control.geometry, deltaX, deltaY, found.section),
+              deltaX,
+              deltaY,
+              viewportRef.current,
+            );
+          } else {
+            next = moveControlAcross(
+              latest,
+              control.id,
+              deltaX,
+              deltaY,
+              viewportRef.current,
             );
           }
           draftRef.current = next;

@@ -10,7 +10,6 @@ import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import { validateLayout } from '@/shared/layout';
 import {
   addHitzone,
-  clampDrag,
   cloneDocument,
   deleteControl,
   duplicateControl,
@@ -18,9 +17,9 @@ import {
   findControl,
   getHitzonesOf,
   isDefaultLocked,
-  moveParentWithHitzones,
+  moveControlAcross,
+  moveParentWithHitzonesAcross,
   resizeControl,
-  updateControlGeometry,
 } from '@/shared/layout-editor';
 import {
   loadPersonalLayouts,
@@ -212,15 +211,15 @@ function PhoneEditorIsland({
       const hasHitzones = getHitzonesOf(cur, selectedId).length > 0;
       let next: LayoutDocument;
       if (hasHitzones) {
-        next = moveParentWithHitzones(cur, selectedId, deltaX, deltaY);
-      } else {
-        const found = findControl(cur, selectedId);
-        if (!found) return;
-        next = updateControlGeometry(
+        next = moveParentWithHitzonesAcross(
           cur,
           selectedId,
-          clampDrag(found.control.geometry, deltaX, deltaY, found.section),
+          deltaX,
+          deltaY,
+          viewport,
         );
+      } else {
+        next = moveControlAcross(cur, selectedId, deltaX, deltaY, viewport);
       }
       // keep draftRef in sync for next delta, batch store update via rAF
       draftRef.current = next;
@@ -234,7 +233,7 @@ function PhoneEditorIsland({
         });
       }
     },
-    [selectedId],
+    [selectedId, viewport],
   );
 
   const handleResize = useCallback(
@@ -505,6 +504,7 @@ function PhoneEditorIsland({
                 isPeer={isPeer}
                 isForgiving={isForgiving}
                 showHitzoneHatch={showHitzoneHatch}
+                viewport={viewport}
                 viewportHeight={viewport.height}
                 draftRef={draftRef}
                 selectedId={selectedId}

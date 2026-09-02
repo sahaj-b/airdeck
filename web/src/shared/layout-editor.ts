@@ -417,25 +417,313 @@ export function getHitzonesOf(
   return ids;
 }
 
+export function getSectionOffset(
+  document: LayoutDocument,
+  sectionId: string,
+): number {
+  let offset = 0;
+  for (const section of document.sections) {
+    if (section.id === sectionId) break;
+    offset += section.relativeWidth;
+  }
+  return offset;
+}
+
+export function findSectionForGlobalX(
+  document: LayoutDocument,
+  globalX: number,
+): Section {
+  let start = 0;
+  for (const section of document.sections) {
+    const end = start + section.relativeWidth;
+    if (globalX < end - 1e-9) return section;
+    start = end;
+  }
+  if (globalX < 0) return document.sections[0];
+  return document.sections[document.sections.length - 1];
+}
+
+// Viewport-aware helpers that preserve actual pixel position.
+// Authored relativeWidth defines the valid clamp range, but the visual
+// rects at a given viewport may be narrower (center shrinks, sides scale)
+// via allocateSections. Using allocated widths for the global -> local
+// conversion keeps the control under the finger without a jump.
+function getAllocatedWidths(
+  document: LayoutDocument,
+  viewport: { width: number; height: number },
+): number[] {
+  const reference = Math.max(0, viewport.height);
+  const available = reference > 0 ? Math.max(0, viewport.width / reference) : 0;
+  if (document.sections.length !== 3) return document.sections.map(() => 0);
+  const leftW = document.sections[0].relativeWidth;
+  const rightW = document.sections[2].relativeWidth;
+  const centerMin = document.sections[1].relativeMinWidth ?? 0;
+  const EPSILON = 1e-7;
+  const idealCenter = available - leftW - rightW;
+  if (idealCenter >= centerMin - EPSILON) {
+    return [leftW, idealCenter, rightW];
+  }
+  const sideAvailable = available - centerMin;
+  const totalSide = leftW + rightW;
+  if (sideAvailable >= -EPSILON) {
+    if (totalSide <= EPSILON) return [0, centerMin, 0];
+    const t = sideAvailable / totalSide;
+    return [leftW * t, centerMin, rightW * t];
+  }
+  const totalMin = centerMin;
+  if (totalMin <= EPSILON) {
+    if (available <= EPSILON) return [0, 0, 0];
+    const totalAuthored = leftW + rightW + Math.max(centerMin, idealCenter);
+    const factor = totalAuthored > 0 ? available / totalAuthored : 0;
+    return [
+      leftW * factor,
+      Math.max(0, available - leftW * factor - rightW * factor),
+      rightW * factor,
+    ];
+  }
+  const factor = available / totalMin;
+  return [0 * factor, centerMin * factor, 0 * factor];
+}
+
+export function getAllocatedSectionOffset(
+  document: LayoutDocument,
+  sectionId: string,
+  viewport: { width: number; height: number },
+): number {
+  const widths = getAllocatedWidths(document, viewport);
+  let offset = 0;
+  for (let i = 0; i < document.sections.length; i += 1) {
+    if (document.sections[i].id === sectionId) break;
+    offset += widths[i];
+  }
+  return offset;
+}
+
+export function getAllocatedSectionWidth(
+  document: LayoutDocument,
+  sectionId: string,
+  viewport: { width: number; height: number },
+): number {
+  const widths = getAllocatedWidths(document, viewport);
+  const idx = document.sections.findIndex((s) => s.id === sectionId);
+  return idx >= 0 ? widths[idx] : 0;
+}
+
+export function findAllocatedSectionForGlobalX(
+  document: LayoutDocument,
+  globalX: number,
+  viewport: { width: number; height: number },
+): Section {
+  const widths = getAllocatedWidths(document, viewport);
+  let start = 0;
+  for (let i = 0; i < document.sections.length; i += 1) {
+    const end = start + widths[i];
+    if (globalX < end - 1e-9) return document.sections[i];
+    start = end;
+  }
+  if (globalX < 0) return document.sections[0];
+  return document.sections[document.sections.length - 1];
+}
+
+export function moveControlAcross(
+  document: LayoutDocument,
+  controlId: string,
+  deltaX: number,
+  deltaY: number,
+  viewport?: { width: number; height: number },
+): LayoutDocument {
+  const found = findControl(document, controlId);
+  if (!found) return document;
+  const { control, section } = found;
+  const hasViewport = !!viewport && viewport.width > 0 && viewport.height > 0;
+  const offset = hasViewport
+    ? getAllocatedSectionOffset(document, section.id, viewport)
+    : getSectionOffset(document, section.id);
+  const width = hasViewport
+    ? getAllocatedSectionWidth(document, section.id, viewport)
+    : section.relativeWidth;
+  const globalX = offset + width / 2 + control.geometry.position.x;
+  const globalY = 0.5 + control.geometry.position.y;
+  const nextGlobalX = globalX + deltaX;
+  const nextGlobalY = globalY + deltaY;
+  const target = hasViewport
+    ? findAllocatedSectionForGlobalX(document, nextGlobalX, viewport)
+    : findSectionForGlobalX(document, nextGlobalX);
+  if (target.id === section.id) {
+    const next = cloneDocument(document);
+    const targetInNext = next.sections.find((s) => s.id === section.id);
+    if (!targetInNext) return document;
+    const ctrl = targetInNext.controls.find((c) => c.id === controlId);
+    if (!ctrl) return document;
+    ctrl.geometry = clampDrag(control.geometry, deltaX, deltaY, section);
+    return next;
+  }
+  const targetOffset = hasViewport
+    ? getAllocatedSectionOffset(document, target.id, viewport)
+    : getSectionOffset(document, target.id);
+  const targetWidth = hasViewport
+    ? getAllocatedSectionWidth(document, target.id, viewport)
+    : target.relativeWidth;
+  const newPosX = nextGlobalX - (targetOffset + targetWidth / 2);
+  const newPosY = nextGlobalY - 0.5;
+  const newGeometry = clampGeometry(
+    {
+      position: { x: newPosX, y: newPosY },
+      size: { ...control.geometry.size },
+    },
+    target,
+  );
+  const next = cloneDocument(document);
+  const sourceInNext = next.sections.find((s) => s.id === section.id);
+  if (!sourceInNext) return document;
+  const idx = sourceInNext.controls.findIndex((c) => c.id === controlId);
+  if (idx < 0) return document;
+  const [moved] = sourceInNext.controls.splice(idx, 1);
+  if (!moved) return document;
+  moved.geometry = newGeometry;
+  const targetInNext = next.sections.find((s) => s.id === target.id);
+  if (!targetInNext) return document;
+  if (moved.type === 'hitzone' && moved.parentId) {
+    const parentIdx = targetInNext.controls.findIndex(
+      (c) => c.id === moved.parentId,
+    );
+    if (parentIdx >= 0) {
+      targetInNext.controls.splice(parentIdx + 1, 0, moved);
+      return next;
+    }
+  }
+  targetInNext.controls.push(moved);
+  return next;
+}
+
+export function moveParentWithHitzonesAcross(
+  document: LayoutDocument,
+  parentId: string,
+  deltaX: number,
+  deltaY: number,
+  viewport?: { width: number; height: number },
+): LayoutDocument {
+  const found = findControl(document, parentId);
+  if (!found || found.control.type === 'hitzone') return document;
+  const hitzoneIds = getHitzonesOf(document, parentId);
+  const ids = [parentId, ...hitzoneIds];
+  const hasViewport = !!viewport && viewport.width > 0 && viewport.height > 0;
+  const parentOffset = hasViewport
+    ? getAllocatedSectionOffset(document, found.section.id, viewport)
+    : getSectionOffset(document, found.section.id);
+  const parentWidth = hasViewport
+    ? getAllocatedSectionWidth(document, found.section.id, viewport)
+    : found.section.relativeWidth;
+  const parentGlobalX =
+    parentOffset + parentWidth / 2 + found.control.geometry.position.x;
+  const nextParentGlobalX = parentGlobalX + deltaX;
+  const target = hasViewport
+    ? findAllocatedSectionForGlobalX(document, nextParentGlobalX, viewport)
+    : findSectionForGlobalX(document, nextParentGlobalX);
+  if (target.id === found.section.id) {
+    const next = cloneDocument(document);
+    for (const id of ids) {
+      const orig = findControl(document, id);
+      if (!orig) continue;
+      for (const section of next.sections) {
+        const ctrl = section.controls.find((c) => c.id === id);
+        if (ctrl) {
+          ctrl.geometry = clampDrag(
+            orig.control.geometry,
+            deltaX,
+            deltaY,
+            section,
+          );
+          break;
+        }
+      }
+    }
+    return next;
+  }
+  const next = cloneDocument(document);
+  const movedControls: Control[] = [];
+  // Preserve the hitzone's pixel offset from its parent so the gap fill
+  // stays exactly where it was relative to the parent. Using the parent's
+  // new position + original diff avoids independent clamping drift where
+  // the parent and hitzone hit different section walls.
+  const parentOrig = found;
+  // Compute parent's new local position first (pixel-preserved)
+  const targetOffsetForParent = hasViewport
+    ? getAllocatedSectionOffset(document, target.id, viewport)
+    : getSectionOffset(document, target.id);
+  const targetWidthForParent = hasViewport
+    ? getAllocatedSectionWidth(document, target.id, viewport)
+    : target.relativeWidth;
+  const parentNewPosX =
+    nextParentGlobalX - (targetOffsetForParent + targetWidthForParent / 2);
+  const parentGlobalY = 0.5 + parentOrig.control.geometry.position.y;
+  const nextParentGlobalY = parentGlobalY + deltaY;
+  const parentNewPosY = nextParentGlobalY - 0.5;
+  const parentNewGeom = clampGeometry(
+    {
+      position: { x: parentNewPosX, y: parentNewPosY },
+      size: { ...parentOrig.control.geometry.size },
+    },
+    target,
+  );
+  const parentCloned = structuredClone(parentOrig.control) as Control;
+  parentCloned.geometry = parentNewGeom;
+  movedControls.push(parentCloned);
+  for (const id of hitzoneIds) {
+    const origFound = findControl(document, id);
+    if (!origFound) continue;
+    // Keep hitzone at same pixel offset from parent as authored.
+    // Height-unit offset is same as pixel offset / ref, ref cancels.
+    const offsetX =
+      origFound.control.geometry.position.x -
+      parentOrig.control.geometry.position.x;
+    const offsetY =
+      origFound.control.geometry.position.y -
+      parentOrig.control.geometry.position.y;
+    const hzNewPosX = parentNewGeom.position.x + offsetX;
+    const hzNewPosY = parentNewGeom.position.y + offsetY;
+    const newGeom = clampGeometry(
+      {
+        position: { x: hzNewPosX, y: hzNewPosY },
+        size: { ...origFound.control.geometry.size },
+      },
+      target,
+    );
+    const cloned = structuredClone(origFound.control) as Control;
+    cloned.geometry = newGeom;
+    movedControls.push(cloned);
+  }
+  for (const id of ids) {
+    for (const section of next.sections) {
+      const idx = section.controls.findIndex((c) => c.id === id);
+      if (idx >= 0) {
+        section.controls.splice(idx, 1);
+        break;
+      }
+    }
+  }
+  const targetInNext = next.sections.find((s) => s.id === target.id);
+  if (!targetInNext) return document;
+  for (const mc of movedControls) {
+    targetInNext.controls.push(mc);
+  }
+  return next;
+}
+
 export function moveParentWithHitzones(
   document: LayoutDocument,
   parentId: string,
   deltaX: number,
   deltaY: number,
+  viewport?: { width: number; height: number },
 ): LayoutDocument {
-  const hitzoneIds = getHitzonesOf(document, parentId);
-  const ids = [parentId, ...hitzoneIds];
-  const next = cloneDocument(document);
-  for (const id of ids) {
-    for (const section of next.sections) {
-      const control = section.controls.find((candidate) => candidate.id === id);
-      if (control) {
-        control.geometry = clampDrag(control.geometry, deltaX, deltaY, section);
-        break;
-      }
-    }
-  }
-  return next;
+  return moveParentWithHitzonesAcross(
+    document,
+    parentId,
+    deltaX,
+    deltaY,
+    viewport,
+  );
 }
 
 export function resizeControl(

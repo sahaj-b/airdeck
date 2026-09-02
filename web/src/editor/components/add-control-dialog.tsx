@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
 import {
@@ -58,7 +58,11 @@ export function AddControlDialog({
   onOpenChange,
   onAdd,
 }: AddControlDialogProps) {
-  const section = document.sections.find((s) => s.id === sectionId);
+  const [activeSectionId, setActiveSectionId] = useState(sectionId);
+  useEffect(() => {
+    if (open) setActiveSectionId(sectionId);
+  }, [sectionId, open]);
+  const section = document.sections.find((s) => s.id === activeSectionId);
   const [type, setType] = useState<AddableControlType>('button');
   const [binding, setBinding] = useState<string>('south');
   const [label, setLabel] = useState('Button');
@@ -98,7 +102,7 @@ export function AddControlDialog({
     if (!section) return;
     const control = createControl();
     if (!control) return;
-    onAdd({ sectionId, control });
+    onAdd({ sectionId: activeSectionId, control });
   };
 
   return (
@@ -109,6 +113,27 @@ export function AddControlDialog({
           New controls land at the center of the {section?.id ?? ''} section.
         </DialogDescription>
         <div className="grid gap-4 py-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="add-section">Section</Label>
+            <Select
+              value={activeSectionId}
+              onValueChange={(value) => {
+                if (value) setActiveSectionId(value);
+              }}
+            >
+              <SelectTrigger id="add-section" className="capitalize">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {document.sections.map((sec) => (
+                  <SelectItem key={sec.id} value={sec.id}>
+                    {sec.id.charAt(0).toUpperCase() + sec.id.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-1.5">
             <Label htmlFor="add-type">Type</Label>
             <Select
