@@ -271,18 +271,22 @@
 .editor-handle-tl {
   top: -4px;
   left: -4px;
+  cursor: nwse-resize;
 }
 .editor-handle-tr {
   top: -4px;
   right: -4px;
+  cursor: nesw-resize;
 }
 .editor-handle-bl {
   bottom: -4px;
   left: -4px;
+  cursor: nesw-resize;
 }
 .editor-handle-br {
   bottom: -4px;
   right: -4px;
+  cursor: nwse-resize;
 }
 
 /* Section dividers between the three fixed sections */
@@ -365,7 +369,7 @@
   font-weight: 700;
 }
 
-/* Viewport edge handles to resize the preview viewport */
+/* Viewport edge handles to resize the preview viewport — like control handles but for the frame */
 .editor-viewport-handle {
   position: absolute;
   z-index: 5;
@@ -377,31 +381,117 @@
 
 .editor-handle-right {
   top: 0;
-  right: -6px;
-  width: 8px;
+  right: -8px;
+  width: 12px;
   height: 100%;
-  cursor: col-resize;
+  cursor: ew-resize;
+  border-radius: 4px;
+}
+
+.editor-handle-right::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  background: var(--border);
+  border-radius: 999px;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+
+.editor-handle-right:hover::after,
+.editor-handle-right:active::after {
+  opacity: 1;
+  background: var(--editor-accent);
 }
 
 .editor-handle-bottom {
-  bottom: -6px;
+  bottom: -8px;
   left: 0;
   width: 100%;
-  height: 8px;
-  cursor: row-resize;
+  height: 12px;
+  cursor: ns-resize;
+  border-radius: 4px;
+}
+
+.editor-handle-bottom::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  background: var(--border);
+  border-radius: 999px;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+
+.editor-handle-bottom:hover::after,
+.editor-handle-bottom:active::after {
+  opacity: 1;
+  background: var(--editor-accent);
 }
 
 .editor-handle-corner {
-  right: -6px;
-  bottom: -6px;
-  width: 16px;
-  height: 16px;
+  right: -10px;
+  bottom: -4px;
+  width: 20px;
+  height: 20px;
   cursor: nwse-resize;
   z-index: 6;
-  background: var(--editor-accent);
+  background: transparent;
   border: none;
-  border-radius: 3px;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.editor-handle-corner::before,
+.editor-handle-corner::after {
+  content: "";
+  position: absolute;
+  background: var(--border);
+  border-radius: 999px;
+  opacity: 0.95;
+  transition:
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+.editor-handle-corner::before {
+  width: 14px;
+  height: 2px;
+  bottom: 6px;
+  right: 2px;
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+
+.editor-handle-corner::after {
+  width: 8px;
+  height: 2px;
+  bottom: 3px;
+  right: 2px;
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+
+.editor-handle-corner:hover::before,
+.editor-handle-corner:hover::after {
+  background: var(--editor-accent);
+}
+
+.editor-handle-corner:active::before,
+.editor-handle-corner:active::after {
+  background: var(--editor-accent-hover);
 }
 
 .editor-control-row__drop-indicator {

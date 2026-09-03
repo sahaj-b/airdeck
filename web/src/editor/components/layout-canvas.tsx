@@ -196,11 +196,30 @@ export function LayoutCanvas({
     );
   }, [available, viewport]);
 
-  const scale = fitScale * zoom;
+  // Viewport now maps directly to pixels via zoom, FIT is a one-time zoom level
+  // instead of a permanent clamp. This lets the frame grow into empty space
+  // when zoomed out, instead of staying locked to available * zoom.
+  const scale = zoom;
   const pixelViewport = useMemo(
     () => ({ width: viewport.width * scale, height: viewport.height * scale }),
     [viewport, scale],
   );
+
+  // Auto-fit on first mount so the phone fits without manual zoom.
+  const hasAutoFittedRef = useRef(false);
+  useEffect(() => {
+    if (available.width === 0 || available.height === 0) return;
+    if (hasAutoFittedRef.current) return;
+    hasAutoFittedRef.current = true;
+    const fit = Math.min(
+      available.width / viewport.width,
+      available.height / viewport.height,
+    );
+    const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+    if (Math.abs(nextZoom - zoomRef.current) > 1e-4) {
+      setZoom(nextZoom);
+    }
+  }, [available, viewport.width, viewport.height]);
 
   const resolved: ResolvedLayout | null = useMemo(
     () =>
@@ -818,8 +837,16 @@ export function LayoutCanvas({
             const el = containerRef.current;
             if (!el) return;
             const rect = el.getBoundingClientRect();
+            const fit = (() => {
+              if (available.width === 0 || available.height === 0) return 1;
+              return Math.min(
+                available.width / viewport.width,
+                available.height / viewport.height,
+              );
+            })();
+            const target = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
             applyZoom(
-              1,
+              target,
               rect.left + rect.width / 2,
               rect.top + rect.height / 2,
             );
@@ -1184,9 +1211,6 @@ function ViewportEdgeHandles({
   const rightRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const cornerRef = useRef<HTMLDivElement>(null);
-  const startRef = useRef({ width: 0, height: 0 });
-  const accRef = useRef({ x: 0, y: 0 });
-  const startScaleRef = useRef(scale);
   const viewportRef = useRef(viewport);
   const scaleRef = useRef(scale);
   const onViewportChangeRef = useRef(onViewportChange);
@@ -1197,28 +1221,30 @@ function ViewportEdgeHandles({
   useEffect(() => {
     const el = rightRef.current;
     if (!el) return;
+    const start = { width: 0, height: 0 };
+    let accX = 0;
+    let startScale = 1;
     const instance = interact(el).draggable({
       lockAxis: 'x',
       startAxis: 'x',
+      cursorChecker: () => 'ew-resize',
       listeners: {
         start() {
-          startRef.current = {
-            width: viewportRef.current.width,
-            height: viewportRef.current.height,
-          };
-          startScaleRef.current = scaleRef.current;
-          accRef.current = { x: 0, y: 0 };
+          start.width = viewportRef.current.width;
+          start.height = viewportRef.current.height;
+          startScale = scaleRef.current || 1;
+          accX = 0;
         },
         move(event: { dx: number }) {
-          accRef.current.x += event.dx;
+          accX += event.dx;
           const width = clamp(
-            startRef.current.width + accRef.current.x / startScaleRef.current,
+            start.width + accX / startScale,
             VIEWPORT_MIN_W,
             VIEWPORT_MAX_W,
           );
           onViewportChangeRef.current({
             width,
-            height: startRef.current.height,
+            height: start.height,
           });
         },
       },
@@ -1229,27 +1255,29 @@ function ViewportEdgeHandles({
   useEffect(() => {
     const el = bottomRef.current;
     if (!el) return;
+    const start = { width: 0, height: 0 };
+    let accY = 0;
+    let startScale = 1;
     const instance = interact(el).draggable({
       lockAxis: 'y',
       startAxis: 'y',
+      cursorChecker: () => 'ns-resize',
       listeners: {
         start() {
-          startRef.current = {
-            width: viewportRef.current.width,
-            height: viewportRef.current.height,
-          };
-          startScaleRef.current = scaleRef.current;
-          accRef.current = { x: 0, y: 0 };
+          start.width = viewportRef.current.width;
+          start.height = viewportRef.current.height;
+          startScale = scaleRef.current || 1;
+          accY = 0;
         },
         move(event: { dy: number }) {
-          accRef.current.y += event.dy;
+          accY += event.dy;
           const height = clamp(
-            startRef.current.height + accRef.current.y / startScaleRef.current,
+            start.height + accY / startScale,
             VIEWPORT_MIN_H,
             VIEWPORT_MAX_H,
           );
           onViewportChangeRef.current({
-            width: startRef.current.width,
+            width: start.width,
             height,
           });
         },
@@ -1261,26 +1289,30 @@ function ViewportEdgeHandles({
   useEffect(() => {
     const el = cornerRef.current;
     if (!el) return;
+    const start = { width: 0, height: 0 };
+    let accX = 0;
+    let accY = 0;
+    let startScale = 1;
     const instance = interact(el).draggable({
+      cursorChecker: () => 'nwse-resize',
       listeners: {
         start() {
-          startRef.current = {
-            width: viewportRef.current.width,
-            height: viewportRef.current.height,
-          };
-          startScaleRef.current = scaleRef.current;
-          accRef.current = { x: 0, y: 0 };
+          start.width = viewportRef.current.width;
+          start.height = viewportRef.current.height;
+          startScale = scaleRef.current || 1;
+          accX = 0;
+          accY = 0;
         },
         move(event: { dx: number; dy: number }) {
-          accRef.current.x += event.dx;
-          accRef.current.y += event.dy;
+          accX += event.dx;
+          accY += event.dy;
           const width = clamp(
-            startRef.current.width + accRef.current.x / startScaleRef.current,
+            start.width + accX / startScale,
             VIEWPORT_MIN_W,
             VIEWPORT_MAX_W,
           );
           const height = clamp(
-            startRef.current.height + accRef.current.y / startScaleRef.current,
+            start.height + accY / startScale,
             VIEWPORT_MIN_H,
             VIEWPORT_MAX_H,
           );
@@ -1296,14 +1328,20 @@ function ViewportEdgeHandles({
       <div
         ref={rightRef}
         className="editor-viewport-handle editor-handle-right"
+        aria-label="Resize width"
+        title="Drag to resize width (horizontal)"
       />
       <div
         ref={bottomRef}
         className="editor-viewport-handle editor-handle-bottom"
+        aria-label="Resize height"
+        title="Drag to resize height (vertical)"
       />
       <div
         ref={cornerRef}
         className="editor-viewport-handle editor-handle-corner"
+        aria-label="Resize viewport"
+        title="Drag to resize (diagonal)"
       />
     </>
   );
