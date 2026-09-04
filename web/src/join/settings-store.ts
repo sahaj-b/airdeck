@@ -1,5 +1,6 @@
 import { persist } from 'zustand/middleware';
 import { createStore } from 'zustand/vanilla';
+import { isSkinId } from '../skins';
 
 export type StickFeelSetting = 'fixed' | 'floating' | 'following';
 export type StickGrabSetting = 'wide' | 'precise';
@@ -51,6 +52,21 @@ export interface SettingsActions {
 
 export type SettingsStore = SettingsState & SettingsActions;
 
+const LEGACY_SKIN_KEY = 'airdeck.skin';
+
+// One-time migration: the old loader kept the selection in its own key.
+// Seed from it once, then delete it so two keys can never disagree again.
+function seedSkin(): string {
+  let legacy: string | null = null;
+  try {
+    legacy = localStorage.getItem(LEGACY_SKIN_KEY);
+    localStorage.removeItem(LEGACY_SKIN_KEY);
+  } catch {
+    legacy = null;
+  }
+  return isSkinId(legacy) ? legacy : 'airdeck';
+}
+
 const DEFAULTS: SettingsState = {
   vibrationMs: 40,
   joystickPressMs: 35,
@@ -58,7 +74,7 @@ const DEFAULTS: SettingsState = {
   rumble: true,
   sound: false,
   ignoreCutout: true,
-  skin: 'airdeck',
+  skin: seedSkin(),
   stickFeel: 'following',
   stickGrab: 'wide',
   gyroEnabled: false,
@@ -84,7 +100,9 @@ export const settingsStore = createStore<SettingsStore>()(
       setRumble: (rumble) => set({ rumble }),
       setSound: (sound) => set({ sound }),
       setIgnoreCutout: (ignoreCutout) => set({ ignoreCutout }),
-      setSkin: (skin) => set({ skin }),
+      setSkin: (skin) => {
+        if (isSkinId(skin)) set({ skin });
+      },
       setStickFeel: (stickFeel) => set({ stickFeel }),
       setStickGrab: (stickGrab) => set({ stickGrab }),
       setGyroEnabled: (gyroEnabled) => set({ gyroEnabled }),
@@ -102,6 +120,14 @@ export const settingsStore = createStore<SettingsStore>()(
     {
       name: 'airdeck.settings.v1',
       version: 1,
+      merge: (persisted, current) => {
+        const next = {
+          ...current,
+          ...((persisted as Partial<SettingsState>) ?? {}),
+        };
+        if (!isSkinId(next.skin)) next.skin = current.skin;
+        return next;
+      },
     },
   ),
 );

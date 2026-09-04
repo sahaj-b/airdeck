@@ -1,0 +1,146 @@
+/* Live skin previews. The [data-skin] scope on the wrapper resolves that
+   skin's variables for this subtree only, so the real controller classes
+   below render exactly as they do on the controller.
+ *
+ * The :where() reset is the isolation boundary. Custom properties inherit,
+ * so without it a token the previewed skin omits would inherit the live
+ * skin's value straight through the wrapper. Resetting every token to
+ * initial (guaranteed-invalid) stops inheritance cold, and the skin scope
+ * always wins because :where() contributes zero specificity. Whatever the
+ * skin leaves unset then falls through to the base.css fallbacks, exactly
+ * like the unstyled controller. skins/contract.test.ts checks the reset
+ * covers every token base.css reads.
+ * Deliberately unscoped beyond this, so the contract test skips this file. */
+
+:where(.skin-preview) {
+  --slot-accent: #6ee7b7;
+  --sk-btn-bg: initial;
+  --sk-btn-border: initial;
+  --sk-btn-color: initial;
+  --sk-btn-hover-bg: initial;
+  --sk-btn-hover-color: initial;
+  --sk-control-bg: initial;
+  --sk-control-border: initial;
+  --sk-control-color: initial;
+  --sk-control-padding: initial;
+  --sk-control-radius: initial;
+  --sk-control-shadow: initial;
+  --sk-control-spacing: initial;
+  --sk-control-transition: initial;
+  --sk-control-weight: initial;
+  --sk-dpad-active-bg: initial;
+  --sk-dpad-active-color: initial;
+  --sk-dpad-active-filter: initial;
+  --sk-dpad-active-shadow: initial;
+  --sk-dpad-active-transform: initial;
+  --sk-dpad-bg: initial;
+  --sk-dpad-border: initial;
+  --sk-dpad-color: initial;
+  --sk-dpad-icon-size: initial;
+  --sk-dpad-idle-color: initial;
+  --sk-dpad-radius: initial;
+  --sk-dpad-shadow: initial;
+  --sk-dpad-transition: initial;
+  --sk-east-bg: initial;
+  --sk-east-color: initial;
+  --sk-east-shadow: initial;
+  --sk-face-bg: initial;
+  --sk-face-shadow: initial;
+  --sk-frame-bg: initial;
+  --sk-frame-border: initial;
+  --sk-frame-radius: initial;
+  --sk-frame-shadow: initial;
+  --sk-ink: initial;
+  --sk-knob-active-bg: initial;
+  --sk-knob-active-filter: initial;
+  --sk-knob-active-shadow: initial;
+  --sk-knob-bg: initial;
+  --sk-knob-border: initial;
+  --sk-knob-radius: initial;
+  --sk-knob-shadow: initial;
+  --sk-knob-size: initial;
+  --sk-knob-transition: initial;
+  --sk-label-color: initial;
+  --sk-name-color: initial;
+  --sk-north-bg: initial;
+  --sk-north-color: initial;
+  --sk-north-shadow: initial;
+  --sk-orient-bg: initial;
+  --sk-orient-border: initial;
+  --sk-orient-color: initial;
+  --sk-page-bg: initial;
+  --sk-pressed-bg: initial;
+  --sk-pressed-color: initial;
+  --sk-pressed-filter: initial;
+  --sk-pressed-shadow: initial;
+  --sk-pressed-transform: initial;
+  --sk-shell-bg: initial;
+  --sk-shell-font: initial;
+  --sk-slot-color: initial;
+  --sk-south-bg: initial;
+  --sk-south-color: initial;
+  --sk-south-shadow: initial;
+  --sk-status-bg: initial;
+  --sk-status-border: initial;
+  --sk-status-color: initial;
+  --sk-stick-active-shadow: initial;
+  --sk-stick-bg: initial;
+  --sk-stick-border: initial;
+  --sk-stick-shadow: initial;
+  --sk-stick-transition: initial;
+  --sk-sub-color: initial;
+  --sk-west-bg: initial;
+  --sk-west-color: initial;
+  --sk-west-shadow: initial;
+}
+
+.skin-preview,
+.skin-preview * {
+  pointer-events: none;
+}
+
+.skin-preview {
+  display: block;
+}
+
+.skin-preview-frame.controller-frame {
+  position: relative;
+  inset: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 62px;
+  padding: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.skin-preview .controller-control {
+  position: relative;
+  left: auto;
+  top: auto;
+  flex: none;
+}
+
+.skin-preview-chip.controller-control {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+
+.skin-preview-stick.control-joystick {
+  width: 46px;
+  height: 46px;
+}
+
+.skin-preview-dpad.controller-dpad {
+  position: relative;
+  left: auto;
+  top: auto;
+  flex: none;
+  width: 42px;
+  height: 42px;
+}

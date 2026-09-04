@@ -1,196 +1,113 @@
-/* Default airdeck skin. Dark, high-contrast, matching the dashboard and join
-   UI palette. Every rule is scoped to html[data-skin="airdeck"] so it only
-   fires when active. Uses darker shadcn tokens (background/card/border)
-   but keeps controls a touch lighter than the frame for contrast. */
+@scope ([data-skin="airdeck"]) to ([data-skin]) {
+  /* Airdeck default. Dark, high-contrast, matching the dashboard and join UI
+   palette. Uses darker shadcn tokens but keeps controls a touch lighter
+   than the frame for contrast. */
 
-html[data-skin="airdeck"] {
-  color-scheme: dark;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-}
+  :scope {
+    --slot-accent: #6ee7b7;
+    --sk-slot-color: var(--slot-accent);
+    --sk-ink: var(--foreground);
+    --sk-page-bg: var(--background);
+    --sk-shell-bg: var(--background);
 
-html[data-skin="airdeck"] body {
-  background: var(--background);
-}
+    --sk-frame-bg: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
+    --sk-frame-radius: clamp(0.8rem, 3vw, 1.8rem);
+    --sk-frame-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 4%), 0 8px 32px rgb(0 0 0 / 35%),
+      0 1rem 3rem rgb(0 0 0 / 20%);
 
-html[data-skin="airdeck"] .controller-shell {
-  --slot-accent: #6ee7b7;
-  background: var(--background);
-}
+    --sk-control-bg: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
+    --sk-control-color: var(--foreground);
+    --sk-control-border: 1px solid
+      color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
+    --sk-control-radius: 0.55rem;
+    --sk-control-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
+    --sk-control-weight: 800;
+    --sk-control-spacing: 0.04em;
+    --sk-control-padding: 0.3rem;
 
-html[data-skin="airdeck"] .controller-frame {
-  border-radius: clamp(0.8rem, 3vw, 1.8rem);
-  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 4%),
-    0 8px 32px rgb(0 0 0 / 35%),
-    0 1rem 3rem rgb(0 0 0 / 20%);
-}
-
-html[data-skin="airdeck"] .controller-control {
-  border: 1px solid color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
-  border-radius: 0.55rem;
-  padding: 0.3rem;
-  background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
-  color: var(--foreground);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
-}
-
-html[data-skin="airdeck"] .control-sub {
-  color: color-mix(
-    in oklch,
-    var(--foreground) 80%,
-    var(--muted-foreground) 20%
-  );
-}
-
-html[data-skin="airdeck"] .controller-control:hover,
-html[data-skin="airdeck"] .dpad-direction:hover {
-  border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
-}
-
-html[data-skin="airdeck"] .controller-control.is-pressed {
-  border-color: var(--slot-accent);
-  background: color-mix(
-    in srgb,
-    var(--slot-accent) 28%,
-    color-mix(in oklch, var(--card) 38%, var(--muted) 62%)
-  );
-}
-
-html[data-skin="airdeck"]
-  .controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
-  transform: scale(0.96);
-}
-
-html[data-skin="airdeck"] .control-joystick {
-  border: 1px solid color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
-  background: radial-gradient(
-    circle at 42% 34%,
-    color-mix(
+    --sk-sub-color: color-mix(
       in oklch,
-      color-mix(in oklch, var(--card) 38%, var(--muted) 62%) 88%,
-      white 12%
-    ),
-    color-mix(in oklch, var(--card) 38%, var(--muted) 62%) 72%
-  );
-  box-shadow: inset 0 0 1.2rem rgb(0 0 0 / 32%);
-}
+      var(--foreground) 80%,
+      var(--muted-foreground) 20%
+    );
 
-html[data-skin="airdeck"] .control-joystick[data-shape="round"] {
-  border-radius: 50%;
-}
+    --sk-pressed-bg: color-mix(
+      in srgb,
+      var(--slot-accent) 28%,
+      color-mix(in oklch, var(--card) 38%, var(--muted) 62%)
+    );
+    --sk-pressed-transform: scale(0.96);
 
-html[data-skin="airdeck"] .control-joystick[data-shape="rect"] {
-  border-radius: 0.55rem;
-}
+    --sk-stick-bg: radial-gradient(
+      circle at 42% 34%,
+      color-mix(
+        in oklch,
+        color-mix(in oklch, var(--card) 38%, var(--muted) 62%) 88%,
+        white 12%
+      ),
+      color-mix(in oklch, var(--card) 38%, var(--muted) 62%) 72%
+    );
+    --sk-stick-shadow: inset 0 0 1.2rem rgb(0 0 0 / 32%);
+    --sk-knob-bg: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
 
-html[data-skin="airdeck"] .control-joystick::after {
-  border: 2px solid var(--slot-accent);
-  background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
-}
+    --sk-dpad-bg: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
+    --sk-dpad-color: var(--muted-foreground);
+    --sk-dpad-radius: 12%;
+    --sk-dpad-border: 1px solid
+      color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
+    --sk-dpad-active-bg: color-mix(
+      in srgb,
+      var(--slot-accent) 28%,
+      color-mix(in oklch, var(--card) 38%, var(--muted) 62%)
+    );
+    --sk-dpad-active-color: var(--slot-accent);
 
-html[data-skin="airdeck"] .dpad-direction {
-  border: 1px solid color-mix(in oklch, var(--border) 28%, var(--ring) 72%);
-  border-radius: 12%;
-  padding: 0;
-  background: color-mix(in oklch, var(--card) 38%, var(--muted) 62%);
-  color: var(--muted-foreground);
-}
+    --sk-label-color: var(--muted-foreground);
+    --sk-name-color: var(--foreground);
 
-html[data-skin="airdeck"] .controller-dpad[data-direction="up"] .dpad-up,
-html[data-skin="airdeck"] .controller-dpad[data-direction="right"] .dpad-right,
-html[data-skin="airdeck"] .controller-dpad[data-direction="down"] .dpad-down,
-html[data-skin="airdeck"] .controller-dpad[data-direction="left"] .dpad-left {
-  border-color: var(--slot-accent);
-  background: color-mix(
-    in srgb,
-    var(--slot-accent) 28%,
-    color-mix(in oklch, var(--card) 38%, var(--muted) 62%)
-  );
-  color: var(--slot-accent);
-}
+    --sk-status-bg: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
+    --sk-status-border: 1px solid
+      color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
+    --sk-status-color: var(--card-foreground);
 
-html[data-skin="airdeck"] .controller-label {
-  color: var(--muted-foreground);
-  --_label-len: var(--label-len, 1);
-  --_fit-h: calc(var(--control-min, 32px) * 0.32);
-  --_fit-w: calc(
-    (var(--control-w, 32px) - 8px) /
-    (max(1, var(--_label-len)) * 0.6)
-  );
-  font-size: clamp(0.55rem, min(var(--_fit-w), var(--_fit-h)), 0.95rem);
-}
+    --sk-btn-bg: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
+    --sk-btn-border: 1px solid
+      color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
+    --sk-btn-color: var(--card-foreground);
+    --sk-btn-hover-bg: color-mix(in oklch, var(--card) 76%, var(--muted) 24%);
+    --sk-btn-hover-color: var(--foreground);
 
-html[data-skin="airdeck"] .controller-slot {
-  color: var(--slot-accent);
-}
+    --sk-orient-bg: var(--card);
+    --sk-orient-border: 1px solid
+      color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
+    --sk-orient-color: var(--card-foreground);
+  }
 
-html[data-skin="airdeck"] .controller-name {
-  color: var(--foreground);
-}
+  /* Extras: state border-color deltas live here because no fallback can
+   express "keep the resting border". */
+  .controller-control:hover,
+  .dpad-direction:hover {
+    border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
+  }
 
-html[data-skin="airdeck"] .controller-status {
-  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
-  background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
-  color: var(--card-foreground);
-}
+  .controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
+    border-color: var(--slot-accent);
+  }
 
-html[data-skin="airdeck"] .icon-button {
-  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
-  background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
-  color: var(--card-foreground);
-}
+  .controller-dpad[data-direction="up"] .dpad-up,
+  .controller-dpad[data-direction="right"] .dpad-right,
+  .controller-dpad[data-direction="down"] .dpad-down,
+  .controller-dpad[data-direction="left"] .dpad-left {
+    border-color: var(--slot-accent);
+  }
 
-html[data-skin="airdeck"] .icon-button:hover {
-  border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
-  background: color-mix(in oklch, var(--card) 76%, var(--muted) 24%);
-  color: var(--foreground);
-}
+  .icon-button:hover {
+    border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
+  }
 
-html[data-skin="airdeck"] .settings-backdrop {
-  background: rgb(0 0 0 / 55%);
-}
-
-html[data-skin="airdeck"] .settings-sheet {
-  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
-  background: var(--popover);
-}
-
-html[data-skin="airdeck"] .settings-row {
-  color: var(--foreground);
-}
-
-html[data-skin="airdeck"] .settings-row input[type="checkbox"] {
-  accent-color: var(--slot-accent, #6ee7b7);
-}
-
-html[data-skin="airdeck"] .controller-layout-picker {
-  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
-  background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
-  color: var(--foreground);
-}
-
-html[data-skin="airdeck"] .settings-value {
-  color: var(--muted-foreground);
-}
-
-html[data-skin="airdeck"] .settings-capabilities {
-  color: var(--muted-foreground);
-}
-
-html[data-skin="airdeck"] .orientation-message {
-  border: 1px solid color-mix(in oklch, var(--border) 58%, var(--ring) 42%);
-  background: var(--card);
-  color: var(--card-foreground);
-}
-
-/* Hitzone extends its parent touch area — it must never paint. The skin’s
-   .controller-control rules (background/border/shadow) must not apply to it,
-   so hide it outright. Pointer hits stay on the parent hit target. */
-html[data-skin="airdeck"] .controller-control.hit-only {
-  visibility: hidden;
+  /* Only airdeck opts the page into dark form controls and scrollbars. */
+  :scope {
+    color-scheme: dark;
+  }
 }

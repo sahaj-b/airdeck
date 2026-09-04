@@ -1,53 +1,40 @@
-import { DEFAULT_SKIN_ID, loadSkinCSS, SKINS } from './index';
+import { DEFAULT_SKIN_ID, isSkinId } from './index';
 
-export { DEFAULT_SKIN_ID, SKINS } from './index';
+// All skins ship as static CSS. Switching is just the data-skin attribute,
+// which also means a nested [data-skin] element (like a picker preview)
+// picks up that skin's variables with no extra work.
+import './base.css';
+import './airdeck.css';
+import './clay.css';
+import './console.css';
+import './minimal.css';
+import './moonlight.css';
+import './neumorph-light.css';
+import './neumorph.css';
+import './oled.css';
+import './retro.css';
 
-const STORAGE_KEY = 'airdeck.skin';
+export { DEFAULT_SKIN_ID, isSkinId, SKINS } from './index';
 
-let skinEl: HTMLStyleElement | undefined;
-
-function ensureStyleEl(): HTMLStyleElement {
-  if (!skinEl) {
-    skinEl = document.createElement('style');
-    skinEl.id = 'airdeck-skin';
-    document.head.append(skinEl);
-  }
-  return skinEl;
+// The settings store owns the selection. This module only paints it.
+export function applySkin(id: string): void {
+  document.documentElement.setAttribute(
+    'data-skin',
+    isSkinId(id) ? id : DEFAULT_SKIN_ID,
+  );
 }
 
-async function applySkin(id: string): Promise<void> {
-  const skin =
-    SKINS.find((candidate) => candidate.id === id) ??
-    SKINS.find((candidate) => candidate.id === DEFAULT_SKIN_ID);
-  if (!skin) return;
-  const css = await loadSkinCSS(skin.id);
-  const el = ensureStyleEl();
-  document.documentElement.setAttribute('data-skin', skin.id);
-  el.textContent = css;
+interface SkinSource {
+  getState(): { skin: string };
+  subscribe(
+    listener: (state: { skin: string }, prev: { skin: string }) => void,
+  ): () => void;
 }
 
-export function initSkin(): void {
-  void applySkin(getSkin());
-}
-
-export function setSkin(id: string): void {
-  if (!SKINS.some((skin) => skin.id === id)) return;
-  try {
-    localStorage.setItem(STORAGE_KEY, id);
-  } catch {
-    // Skin selection is convenience state; ignore storage failures.
-  }
-  void applySkin(id);
-}
-
-export function getSkin(): string {
-  let stored: string | null = null;
-  try {
-    stored = localStorage.getItem(STORAGE_KEY);
-  } catch {
-    stored = null;
-  }
-  return SKINS.some((skin) => skin.id === stored)
-    ? (stored as string)
-    : DEFAULT_SKIN_ID;
+// Paint the current selection and keep it painted. Returns the unsubscribe.
+export function startSkinSync(store: SkinSource): () => void {
+  applySkin(store.getState().skin);
+  return store.subscribe((state, prev) => {
+    if (state.skin !== prev.skin) applySkin(state.skin);
+  });
 }

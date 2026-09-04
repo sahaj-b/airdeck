@@ -1,0 +1,344 @@
+/* Skins contract — read this before touching any skin file.
+ *
+ * This file owns every controller selector exactly once. A skin is a bag of
+ * --sk-* variables under its own [data-skin="..."] scope, plus optional
+ * extras for things variables cannot express (structural one-offs like the
+ * console dpad plate, per-arm shadows, state border-color deltas).
+ *
+ * The fence, enforced by skins/contract.test.ts:
+ * - each skin file wraps everything in @scope ([data-skin="..."]) to
+ *   ([data-skin]). No html prefix (that breaks nested previews), no bare
+ *   selectors, no styling outside the scope (no body, no settings surface).
+ * - no !important in skins. Base rule plus scope specificity is enough.
+ * - layout and positioning stay in controller.css. Skins own visuals
+ *   (colors, borders, shadows, radii).
+ * - pressed tokens (--sk-pressed-*) apply to every button including face
+ *   buttons. Leave them unset and face-button identity pins automatically.
+ *
+ * Previews render the real controller classes inside a nested
+ * [data-skin="..."] element, so anything scoped correctly shows up in the
+ * picker with zero extra work. If it does not show in preview, the selector
+ * is wrong, not the preview. */
+
+:root,
+body {
+  background: var(--sk-page-bg, var(--background));
+}
+
+.controller-shell {
+  background: var(--sk-shell-bg, var(--sk-page-bg, var(--background)));
+  color: var(--sk-ink, inherit);
+  font-family: var(--sk-shell-font, inherit);
+}
+
+.controller-frame {
+  background: var(--sk-frame-bg, transparent);
+  border: var(--sk-frame-border, none);
+  border-radius: var(--sk-frame-radius, 0);
+  box-shadow: var(--sk-frame-shadow, none);
+}
+
+/* Face buttons, sticks, triggers. The dpad shell is excluded on purpose:
+   controller.css keeps it a transparent positioning wrapper
+   (.controller-dpad, same specificity but earlier source order), and this
+   exclusion preserves that so button chrome can never box the dpad.
+   :where() keeps the exclusion specificity-free, so this rule still ties
+   (0,1,0) with the stick/arm rules below and loses to them in order. */
+.controller-control:where(:not(.controller-dpad)) {
+  background: var(--sk-control-bg, #18212e);
+  color: var(--sk-control-color, #aeb9c9);
+  border: var(--sk-control-border, 2px solid #8a98ab);
+  border-radius: var(--sk-control-radius, 0.55rem);
+  box-shadow: var(--sk-control-shadow, none);
+  font-weight: var(--sk-control-weight, 400);
+  letter-spacing: var(--sk-control-spacing, normal);
+  padding: var(--sk-control-padding, 1px 2px);
+  transition: var(
+    --sk-control-transition,
+    background-color 100ms ease,
+    border-color 100ms ease,
+    transform 100ms ease
+  );
+}
+
+/* Sublabel buttons keep the tighter padding unless the skin sets its own
+   control padding (airdeck does). Ties controller.css, base loads later. */
+.controller-control[data-has-sublabel="true"] {
+  padding: var(--sk-control-padding, 2px 3px);
+}
+
+.control-sub {
+  color: var(--sk-sub-color, currentColor);
+}
+
+/* Pressed state skips sticks and the dpad shell: those get is-pressed at
+   runtime too, but answer through is-active / is-dragging / data-direction.
+   :where() keeps this at (0,2,0) so face-pressed rules and skin extras
+   always win their properties. */
+.controller-control:where(
+  :not(.control-joystick):not(.controller-dpad)
+).is-pressed {
+  background: var(--sk-pressed-bg, var(--sk-control-bg, #18212e));
+  color: var(--sk-pressed-color, var(--sk-control-color, #aeb9c9));
+  box-shadow: var(--sk-pressed-shadow, var(--sk-control-shadow, none));
+  transform: var(--sk-pressed-transform, none);
+  filter: var(--sk-pressed-filter, none);
+}
+
+/* Face buttons: an explicit pressed token wins everywhere, otherwise the
+   face identity pins so colored fills survive the press. */
+.controller-control[data-command="south"].is-pressed {
+  background: var(
+    --sk-pressed-bg,
+    var(--sk-south-bg, var(--sk-face-bg, var(--sk-control-bg, #18212e)))
+  );
+  color: var(
+    --sk-pressed-color,
+    var(--sk-south-color, var(--sk-control-color, #aeb9c9))
+  );
+  box-shadow: var(
+    --sk-pressed-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="east"].is-pressed {
+  background: var(
+    --sk-pressed-bg,
+    var(--sk-east-bg, var(--sk-face-bg, var(--sk-control-bg, #18212e)))
+  );
+  color: var(
+    --sk-pressed-color,
+    var(--sk-east-color, var(--sk-control-color, #aeb9c9))
+  );
+  box-shadow: var(
+    --sk-pressed-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="west"].is-pressed {
+  background: var(
+    --sk-pressed-bg,
+    var(--sk-west-bg, var(--sk-face-bg, var(--sk-control-bg, #18212e)))
+  );
+  color: var(
+    --sk-pressed-color,
+    var(--sk-west-color, var(--sk-control-color, #aeb9c9))
+  );
+  box-shadow: var(
+    --sk-pressed-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="north"].is-pressed {
+  background: var(
+    --sk-pressed-bg,
+    var(--sk-north-bg, var(--sk-face-bg, var(--sk-control-bg, #18212e)))
+  );
+  color: var(
+    --sk-pressed-color,
+    var(--sk-north-color, var(--sk-control-color, #aeb9c9))
+  );
+  box-shadow: var(
+    --sk-pressed-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="south"] {
+  background: var(
+    --sk-south-bg,
+    var(--sk-face-bg, var(--sk-control-bg, #18212e))
+  );
+  color: var(--sk-south-color, var(--sk-control-color, #aeb9c9));
+  box-shadow: var(
+    --sk-south-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="east"] {
+  background: var(
+    --sk-east-bg,
+    var(--sk-face-bg, var(--sk-control-bg, #18212e))
+  );
+  color: var(--sk-east-color, var(--sk-control-color, #aeb9c9));
+  box-shadow: var(
+    --sk-east-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="west"] {
+  background: var(
+    --sk-west-bg,
+    var(--sk-face-bg, var(--sk-control-bg, #18212e))
+  );
+  color: var(--sk-west-color, var(--sk-control-color, #aeb9c9));
+  box-shadow: var(
+    --sk-west-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.controller-control[data-command="north"] {
+  background: var(
+    --sk-north-bg,
+    var(--sk-face-bg, var(--sk-control-bg, #18212e))
+  );
+  color: var(--sk-north-color, var(--sk-control-color, #aeb9c9));
+  box-shadow: var(
+    --sk-north-shadow,
+    var(--sk-face-shadow, var(--sk-control-shadow, none))
+  );
+}
+
+.control-joystick {
+  background: var(
+    --sk-stick-bg,
+    var(
+      --sk-control-bg,
+      radial-gradient(circle at 42% 34%, #2b394d, #121a25 72%)
+    )
+  );
+  border: var(--sk-stick-border, var(--sk-control-border, 2px solid #8a98ab));
+  box-shadow: var(--sk-stick-shadow, inset 0 0 1.2rem rgb(0 0 0 / 45%));
+  transition: var(
+    --sk-stick-transition,
+    background-color 100ms ease,
+    border-color 100ms ease,
+    transform 100ms ease
+  );
+}
+
+/* Round is forced circular by the shape invariant in controller.css; rect
+   follows the skin's control radius. */
+.control-joystick[data-shape="rect"] {
+  border-radius: var(--sk-control-radius, 0.55rem);
+}
+
+.control-joystick::after {
+  width: var(--sk-knob-size, 42%);
+  height: var(--sk-knob-size, 42%);
+  background: var(--sk-knob-bg, #273447);
+  border: var(--sk-knob-border, 2px solid var(--slot-accent));
+  border-radius: var(--sk-knob-radius, 50%);
+  box-shadow: var(--sk-knob-shadow, none);
+  transition: var(--sk-knob-transition, none);
+}
+
+.control-joystick.is-active {
+  box-shadow: var(
+    --sk-stick-active-shadow,
+    var(--sk-stick-shadow, inset 0 0 1.2rem rgb(0 0 0 / 45%))
+  );
+}
+
+.control-joystick.is-dragging::after {
+  background: var(--sk-knob-active-bg, var(--sk-knob-bg, #273447));
+  box-shadow: var(--sk-knob-active-shadow, var(--sk-knob-shadow, none));
+  filter: var(--sk-knob-active-filter, none);
+}
+
+.dpad-direction {
+  background: var(--sk-dpad-bg, #18212e);
+  color: var(--sk-dpad-color, #aeb9c9);
+  border: var(--sk-dpad-border, 2px solid #8a98ab);
+  box-shadow: var(--sk-dpad-shadow, none);
+  transition: var(
+    --sk-dpad-transition,
+    background-color 100ms ease,
+    border-color 100ms ease,
+    transform 100ms ease
+  );
+}
+
+/* Arm corners follow the cross shape unless the skin sets one uniform
+   radius, which then beats per-arm geometry on every arm. */
+.dpad-direction.dpad-up {
+  border-radius: var(--sk-dpad-radius, 24% 24% 12% 12%);
+}
+
+.dpad-direction.dpad-down {
+  border-radius: var(--sk-dpad-radius, 12% 12% 24% 24%);
+}
+
+.dpad-direction.dpad-left {
+  border-radius: var(--sk-dpad-radius, 24% 12% 12% 24%);
+}
+
+.dpad-direction.dpad-right {
+  border-radius: var(--sk-dpad-radius, 12% 24% 24% 12%);
+}
+
+.dpad-direction svg {
+  width: var(--sk-dpad-icon-size, 48%);
+  height: var(--sk-dpad-icon-size, 48%);
+}
+
+/* Dim the idle arms while a direction is held; the active arm pops back via
+   the rules below. Only minimal sets the idle token, everywhere else it
+   no-ops to the arm color. */
+.controller-dpad[data-direction] .dpad-direction {
+  color: var(--sk-dpad-idle-color, var(--sk-dpad-color, #aeb9c9));
+}
+
+.controller-dpad[data-direction="up"] .dpad-up,
+.controller-dpad[data-direction="right"] .dpad-right,
+.controller-dpad[data-direction="down"] .dpad-down,
+.controller-dpad[data-direction="left"] .dpad-left {
+  background: var(
+    --sk-dpad-active-bg,
+    color-mix(in srgb, var(--slot-accent) 32%, #18212e)
+  );
+  color: var(--sk-dpad-active-color, var(--slot-accent));
+  border-color: var(--slot-accent);
+  box-shadow: var(--sk-dpad-active-shadow, var(--sk-dpad-shadow, none));
+  transform: var(--sk-dpad-active-transform, none);
+  filter: var(--sk-dpad-active-filter, none);
+}
+
+.controller-slot {
+  color: var(--sk-slot-color, inherit);
+}
+
+.controller-name {
+  color: var(--sk-name-color, inherit);
+}
+
+.controller-label {
+  color: var(--sk-label-color, inherit);
+}
+
+.controller-status {
+  background: var(--sk-status-bg, transparent);
+  border: var(--sk-status-border, none);
+  color: var(--sk-status-color, inherit);
+}
+
+.icon-button {
+  background: var(--sk-btn-bg, transparent);
+  border: var(--sk-btn-border, none);
+  color: var(--sk-btn-color, inherit);
+}
+
+.icon-button:hover {
+  background: var(--sk-btn-hover-bg, var(--sk-btn-bg, transparent));
+  color: var(--sk-btn-hover-color, var(--sk-btn-color, inherit));
+}
+
+.orientation-message {
+  background: var(--sk-orient-bg, transparent);
+  border: var(--sk-orient-border, none);
+  color: var(--sk-orient-color, inherit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .controller-control,
+  .dpad-direction,
+  .control-joystick::after {
+    transition: none;
+  }
+}

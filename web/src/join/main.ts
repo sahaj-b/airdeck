@@ -16,7 +16,7 @@ import { bindTap } from '../controller/tap';
 import type { Welcome } from '../shared/contracts';
 import type { LayoutDocument } from '../shared/layout';
 import { DEFAULT_LAYOUT, validateLayout } from '../shared/layout';
-import { getSkin, initSkin, setSkin } from '../skins/loader';
+import { startSkinSync } from '../skins/loader';
 import {
   CONNECTION_LABELS,
   DEFAULT_NAME_PATTERN,
@@ -65,13 +65,7 @@ let removeControllerDocumentHandlers: (() => void) | undefined;
 let removeJoinFullscreenHandler: (() => void) | undefined;
 
 renderJoinScreen();
-initSkin();
-
-// sync skin from zustand store (keeps loader + store aligned)
-{
-  const s = settingsStore.getState().skin;
-  if (s && s !== getSkin()) setSkin(s);
-}
+startSkinSync(settingsStore);
 
 function renderJoinScreen(errorMessage = '', revealCode = false): void {
   activeSocket?.close();

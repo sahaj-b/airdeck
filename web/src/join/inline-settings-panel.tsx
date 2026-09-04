@@ -1,5 +1,7 @@
 import {
   ChevronRight,
+  Circle,
+  CircleCheck,
   Gamepad2,
   Layers,
   Paintbrush,
@@ -9,7 +11,7 @@ import {
   Volume2,
   VolumeOff,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from 'zustand';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -24,7 +26,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { SKINS } from '@/skins';
-import { getSkin, setSkin } from '@/skins/loader';
+import { SkinPreview } from '@/skins/preview';
 import type { MountOptions } from './settings-island';
 import { StickFeelSettings } from './stick-feel-settings';
 
@@ -169,22 +171,10 @@ export function InlineSettingsPanel({
   const gyroEnabled = useStore(store, (s) => s.gyroEnabled);
   const gyroTarget = useStore(store, (s) => s.gyroTarget);
   const gyroMode = useStore(store, (s) => s.gyroMode);
-  const [skin, setSkinLocal] = useState(() => getSkin());
-
-  useEffect(() => {
-    const unsub = store.subscribe((state) => {
-      if (state.skin !== skin) {
-        setSkinLocal(state.skin);
-        setSkin(state.skin);
-      }
-    });
-    return unsub;
-  }, [store, skin]);
+  const skin = useStore(store, (s) => s.skin);
 
   const handleSkinChange = (id: string) => {
-    setSkinLocal(id);
     setStoreSkin(id);
-    setSkin(id);
   };
 
   const hapticsAvailable = feedback.hapticsAvailable;
@@ -254,8 +244,6 @@ export function InlineSettingsPanel({
     [...personalLayouts, ...hostLayouts].find(
       (l) => l.id === opts.selectedLayout,
     )?.name ?? opts.selectedLayout;
-  const selectedSkinName = SKINS.find((s) => s.id === skin)?.name ?? skin;
-
   return (
     <div className="space-y-5 min-w-0 max-w-full overflow-x-hidden">
       <div className="relative mt-3 rounded-xl border bg-card">
@@ -339,28 +327,43 @@ export function InlineSettingsPanel({
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between gap-3 px-3 py-3">
+          <div className="space-y-2 px-3 py-3">
             <div className="flex items-center gap-2">
               <Paintbrush className="size-4 shrink-0 text-muted-foreground" />
               <span className="text-sm font-medium">Skin</span>
             </div>
-            <Select
-              value={skin}
-              onValueChange={(v) => v && handleSkinChange(v)}
-            >
-              <SelectTrigger className="h-8 w-[calc(50%-4px)] shrink-0 gap-1.5 border-white/20 bg-white/[0.08] dark:bg-white/[0.08] pl-2.5 pr-2 backdrop-blur-sm shadow-sm">
-                <span className="flex-1 truncate text-left text-sm">
-                  {selectedSkinName || 'Select skin'}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {SKINS.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              {SKINS.map((s) => {
+                const isSelected = s.id === skin;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      if (s.id !== skin) handleSkinChange(s.id);
+                    }}
+                    aria-pressed={isSelected}
+                    className={`overflow-hidden rounded-xl border text-left transition-colors active:scale-[0.98] ${
+                      isSelected
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-white/10 bg-white/[0.04] hover:bg-accent/40'
+                    }`}
+                  >
+                    <SkinPreview id={s.id} />
+                    <span className="flex items-center gap-1.5 px-2 py-1.5">
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                        {s.name}
+                      </span>
+                      {isSelected ? (
+                        <CircleCheck className="size-3.5 shrink-0 text-primary" />
+                      ) : (
+                        <Circle className="size-3.5 shrink-0 text-muted-foreground/30" />
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <button
             type="button"
