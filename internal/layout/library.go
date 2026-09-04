@@ -35,6 +35,7 @@ type Control struct {
 	Type     string           `json:"type" tstype:"'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'hitzone'"`
 	Geometry Geometry         `json:"geometry"`
 	Label    string           `json:"label"`
+	SubLabel string           `json:"subLabel,omitempty"`
 	Shape    string           `json:"shape,omitempty" tstype:"'round' | 'rect'"`
 	HitShape string           `json:"hitShape,omitempty" tstype:"'rect'"`
 	Binding  protocol.Command `json:"binding,omitempty"`

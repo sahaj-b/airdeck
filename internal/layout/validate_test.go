@@ -142,3 +142,48 @@ func TestValidateRejectsLegacyFields(t *testing.T) {
 		t.Fatal("legacy fields were accepted by schema")
 	}
 }
+
+func TestValidateSubLabel(t *testing.T) {
+	section := Section{ID: "left", RelativeWidth: 0.86}
+	button := Control{
+		ID: "a", Type: "button", Geometry: baseGeometry(), Label: "A", Binding: "south",
+	}
+	button.SubLabel = "Dash"
+	if err := validateControl(button, section); err != nil {
+		t.Fatalf("valid subLabel was rejected: %v", err)
+	}
+	button.SubLabel = ""
+	if err := validateControl(button, section); err != nil {
+		t.Fatalf("empty subLabel was rejected: %v", err)
+	}
+	button.SubLabel = "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥"
+	if err := validateControl(button, section); err != nil {
+		t.Fatalf("20-emoji subLabel was rejected: %v", err)
+	}
+	button.SubLabel += "🔥"
+	if err := validateControl(button, section); err == nil {
+		t.Fatal("21-emoji subLabel was accepted")
+	}
+	button.SubLabel = "way too long for a hint label"
+	if err := validateControl(button, section); err == nil {
+		t.Fatal("overlong subLabel was accepted")
+	}
+	label := Control{
+		ID: "l", Type: "label", Geometry: baseGeometry(), Label: "Hint", SubLabel: "Dash",
+	}
+	if err := validateControl(label, section); err == nil {
+		t.Fatal("label subLabel was accepted")
+	}
+	hitzone := Control{
+		ID: "h", Type: "hitzone", Geometry: baseGeometry(), Label: "",
+		ParentID: "a", SubLabel: "Dash",
+	}
+	if err := validateControl(hitzone, section); err == nil {
+		t.Fatal("hitzone subLabel was accepted")
+	}
+	// schema-level: label controls must reject subLabel in raw JSON
+	raw := `{"id":"test","name":"Test","schemaVersion":1,"sections":[{"id":"left","relativeWidth":0.86,"controls":[{"id":"note","type":"label","geometry":{"position":{"x":0,"y":0},"size":{"width":0.2,"height":0.2}},"label":"Hint","subLabel":"Dash"}]},{"id":"center","relativeWidth":0.5,"controls":[]},{"id":"right","relativeWidth":0.94,"controls":[]}]}`
+	if _, err := ValidateJSON([]byte(raw)); err == nil {
+		t.Fatal("schema accepted label subLabel")
+	}
+}

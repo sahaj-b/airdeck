@@ -304,6 +304,24 @@ export function getControlErrors(
         message: `unsupported hitShape ${hitShape}`,
       });
   }
+  if (control.subLabel !== undefined && control.subLabel !== null) {
+    if (typeof control.subLabel !== 'string') {
+      errors.push({ path: 'subLabel', message: 'subLabel must be a string' });
+    } else if ([...control.subLabel].length > 20) {
+      errors.push({
+        path: 'subLabel',
+        message: 'subLabel must be at most 20 characters',
+      });
+    } else if (
+      control.subLabel !== '' &&
+      (control.type === 'label' || control.type === 'hitzone')
+    ) {
+      errors.push({
+        path: 'subLabel',
+        message: 'label and hitzone controls cannot have subLabel',
+      });
+    }
+  }
   if (control.type === 'label' && control.binding)
     errors.push({
       path: 'binding',

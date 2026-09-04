@@ -400,6 +400,8 @@ export function renderLayout(
             )
               return true;
             if (leftControl.label !== rightControl.label) return true;
+            if ((leftControl.subLabel ?? '') !== (rightControl.subLabel ?? ''))
+              return true;
             if (leftControl.binding !== rightControl.binding) return true;
             if (leftControl.parentId !== rightControl.parentId) return true;
             if (
@@ -554,8 +556,23 @@ function renderControl(
     button.dataset.controlId = control.id;
     button.dataset.shape = control.shape ?? 'rect';
     button.dataset.command = control.binding ?? '';
-    button.textContent = control.label;
-    button.setAttribute('aria-label', control.label);
+    const hasSub = Boolean(control.subLabel?.trim());
+    if (hasSub) button.dataset.hasSublabel = 'true';
+    if (hasSub) {
+      const main = document.createElement('span');
+      main.className = 'control-main';
+      main.textContent = control.label;
+      const sub = document.createElement('span');
+      sub.className = 'control-sub';
+      sub.textContent = control.subLabel ?? '';
+      button.append(main, sub);
+    } else {
+      button.textContent = control.label;
+    }
+    const aria = hasSub
+      ? `${control.label} ${control.subLabel}`.trim()
+      : control.label;
+    button.setAttribute('aria-label', aria);
     if (control.type === 'button') button.setAttribute('aria-pressed', 'false');
     if (control.type === 'trigger') {
       button.setAttribute('aria-valuemin', '0');
@@ -633,6 +650,9 @@ function applyDynamicSizing(rendered: RenderedControl, rect: PixelRect): void {
   visual.style.setProperty('--control-max', `${max}px`);
   const len = control.label ? [...control.label].length : 1;
   visual.style.setProperty('--label-len', String(Math.max(1, len)));
+  const subLen = control.subLabel ? [...control.subLabel].length : 0;
+  if (subLen > 0) visual.style.setProperty('--sublabel-len', String(subLen));
+  else visual.style.removeProperty('--sublabel-len');
 }
 
 function setLocalRect(

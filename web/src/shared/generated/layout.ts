@@ -27,6 +27,7 @@ export interface Control {
   type: 'button' | 'dpad' | 'joystick' | 'trigger' | 'label' | 'hitzone';
   geometry: Geometry;
   label: string;
+  subLabel?: string;
   shape?: 'round' | 'rect';
   hitShape?: 'rect';
   binding?: Command;

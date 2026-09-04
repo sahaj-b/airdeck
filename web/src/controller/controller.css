@@ -196,6 +196,53 @@ select {
   font-size: clamp(0.72rem, min(var(--_fit-w), var(--_fit-h)), 1.42rem);
 }
 
+.controller-control[data-has-sublabel="true"] {
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1;
+  padding: 2px 3px;
+}
+
+.control-main,
+.control-sub {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.control-main {
+  font-weight: 700;
+}
+
+.control-sub {
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  --_sublabel-len: var(--sublabel-len, 1);
+  --_sub-fit-h: calc(var(--control-min, 44px) * 0.16);
+  --_sub-fit-w: calc(
+    (var(--control-w, 44px) - 10px) /
+    (max(1, var(--_sublabel-len)) * 0.55)
+  );
+  font-size: clamp(0.38rem, min(var(--_sub-fit-w), var(--_sub-fit-h)), 0.68rem);
+}
+
+.controller-control[data-has-sublabel="true"].control-trigger .control-sub,
+.controller-control[data-has-sublabel="true"][data-command="north"]
+  .control-sub,
+.controller-control[data-has-sublabel="true"][data-command="south"]
+  .control-sub,
+.controller-control[data-has-sublabel="true"][data-command="east"] .control-sub,
+.controller-control[data-has-sublabel="true"][data-command="west"]
+  .control-sub {
+  --_sub-fit-h: calc(var(--control-min, 48px) * 0.18);
+  font-size: clamp(0.42rem, min(var(--_sub-fit-w), var(--_sub-fit-h)), 0.72rem);
+}
+
 .controller-control:focus-visible {
   outline: 3px solid var(--slot-accent);
   outline-offset: 3px;

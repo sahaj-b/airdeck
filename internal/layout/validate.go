@@ -8,6 +8,7 @@ import (
 	"math"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sahaj-b/airdeck/internal/protocol"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -192,6 +193,12 @@ func validateControl(control Control, section Section) error {
 	}
 	if err := validateGeometry(control.Geometry, section, "geometry"); err != nil {
 		return err
+	}
+	if utf8.RuneCountInString(control.SubLabel) > 20 {
+		return errors.New("subLabel must be at most 20 characters")
+	}
+	if control.SubLabel != "" && (control.Type == "label" || control.Type == "hitzone") {
+		return errors.New("label and hitzone controls cannot have subLabel")
 	}
 	if control.Type == "label" && control.Binding != "" {
 		return errors.New("label controls cannot bind input")

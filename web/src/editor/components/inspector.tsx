@@ -600,6 +600,51 @@ function ControlFields({
         )}
       </div>
 
+      {(control.type === 'button' || control.type === 'trigger') && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Label
+              htmlFor={`sublabel-${control.id}`}
+              className="w-14 shrink-0 text-xs font-medium text-muted-foreground"
+            >
+              Sublabel
+            </Label>
+            <Input
+              id={`sublabel-${control.id}`}
+              className="flex-1 h-8"
+              placeholder="e.g. Dash"
+              maxLength={20}
+              value={control.subLabel ?? ''}
+              onChange={(event) => {
+                const next = structuredClone(document);
+                const found = findControl(next, control.id);
+                if (found) found.control.subLabel = event.target.value;
+                onDraftChange(next, false);
+              }}
+              onBlur={(event) => {
+                const next = structuredClone(document);
+                const found = findControl(next, control.id);
+                if (found) {
+                  const raw = (event.target as HTMLInputElement).value;
+                  const ctl = found.control;
+                  if (raw.trim() === '') delete ctl.subLabel;
+                  else ctl.subLabel = raw;
+                  onDraftChange(next, true);
+                }
+              }}
+            />
+          </div>
+          {fieldErrors.get('subLabel') && (
+            <p className="ml-17 text-[11px] text-destructive">
+              {fieldErrors.get('subLabel')}
+            </p>
+          )}
+          <p className="ml-17 text-[10px] leading-tight text-muted-foreground">
+            Small hint under label, max 20 chars
+          </p>
+        </div>
+      )}
+
       {allowed.length > 0 && !isDpad && (
         <div className="space-y-1">
           <div className="flex items-center gap-3">

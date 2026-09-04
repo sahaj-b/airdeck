@@ -152,6 +152,11 @@
           "type": "string",
           "maxLength": 40
         },
+        "subLabel": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "Optional secondary hint rendered under label, e.g. Dash or Throw"
+        },
         "parentId": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
@@ -198,6 +203,22 @@
           "then": {
             "properties": {
               "hitShape": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hitzone" } } },
+          "then": {
+            "properties": {
+              "subLabel": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "label" } } },
+          "then": {
+            "properties": {
+              "subLabel": false
             }
           }
         }

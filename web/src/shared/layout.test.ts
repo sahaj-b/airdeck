@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import xboxDefault from '../layouts/xbox-default.json';
-import { DEFAULT_LAYOUT, parseLayoutDocument, validateLayout } from './layout';
+import {
+  DEFAULT_LAYOUT,
+  getControlErrors,
+  parseLayoutDocument,
+  validateLayout,
+} from './layout';
 
 describe('validateLayout', () => {
   it('accepts the built-in document', () => {
@@ -86,5 +91,51 @@ describe('validateLayout', () => {
       aspectRatio: 1,
     }));
     expect(validateLayout(legacy)).toBe(false);
+  });
+});
+
+describe('subLabel', () => {
+  const section = {
+    id: 'left',
+    relativeWidth: 0.86,
+    controls: [],
+  } as unknown as import('./layout').Section;
+  const button = {
+    id: 'a',
+    type: 'button',
+    geometry: {
+      position: { x: 0, y: 0 },
+      size: { width: 0.2, height: 0.2 },
+    },
+    label: 'A',
+    binding: 'south',
+  } as unknown as import('./layout').Control;
+
+  it('accepts short hints and counts emoji as single characters', () => {
+    expect(getControlErrors({ ...button, subLabel: 'Dash' }, section)).toEqual(
+      [],
+    );
+    expect(getControlErrors({ ...button }, section)).toEqual([]);
+    expect(
+      getControlErrors({ ...button, subLabel: '🔥'.repeat(20) }, section),
+    ).toEqual([]);
+  });
+
+  it('rejects overlong hints and hints on label or hitzone controls', () => {
+    const long = getControlErrors(
+      { ...button, subLabel: '🔥'.repeat(21) },
+      section,
+    );
+    expect(long.some((error) => error.path === 'subLabel')).toBe(true);
+    const label = getControlErrors(
+      { ...button, type: 'label', subLabel: 'Dash' },
+      section,
+    );
+    expect(label.some((error) => error.path === 'subLabel')).toBe(true);
+    const hitzone = getControlErrors(
+      { ...button, type: 'hitzone', parentId: 'a', subLabel: 'Dash' },
+      section,
+    );
+    expect(hitzone.some((error) => error.path === 'subLabel')).toBe(true);
   });
 });
