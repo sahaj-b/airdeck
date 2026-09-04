@@ -983,13 +983,9 @@ const ControlHit = memo(function ControlHit({
         'editor-control-hit',
         isDpad && 'editor-control-dpad',
         isHitzone && 'editor-hit-only',
-        !isDpad && isSelected && 'editor-control-selected',
-        !isDpad && isPeer && !isSelected && 'editor-control-peer',
-        !isDpad &&
-          isHovered &&
-          !isSelected &&
-          !isPeer &&
-          'editor-control-hovered',
+        isSelected && 'editor-control-selected',
+        isPeer && !isSelected && 'editor-control-peer',
+        isHovered && !isSelected && !isPeer && 'editor-control-hovered',
       )}
       style={{
         left: rect.left,
@@ -1020,7 +1016,7 @@ const ControlHit = memo(function ControlHit({
       )}
       {isSelected && (
         <div ref={selectedRef} className="editor-interaction-layer">
-          <ControlOverlay selected isHitzone={isHitzone} isDpad={isDpad} />
+          <ControlOverlay selected isHitzone={isHitzone} />
         </div>
       )}
     </button>

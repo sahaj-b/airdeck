@@ -75,7 +75,6 @@ export const PhoneHit = memo(function PhoneHit({
   onCommitRef.current = onCommit;
   const startWasSelectedRef = useRef(false);
   const isParentRef = useRef(false);
-  const isDpad = control.type === 'dpad';
   const parentCheck = draftRef.current
     ? getHitzonesOf(draftRef.current, control.id).length > 0
     : false;
@@ -141,14 +140,12 @@ export const PhoneHit = memo(function PhoneHit({
       data-phone-hit
       className={
         'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
-        (isDpad
-          ? `border-transparent bg-transparent ${isSelected ? 'z-10 ' : ''}`
-          : isSelected
-            ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] z-10 '
-            : isHitzone
-              ? 'border-dashed border-white/35 bg-white/[0.06] opacity-35 '
-              : 'border-white/10 bg-transparent ') +
-        (isPeer && !isSelected && !isDpad
+        (isSelected
+          ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] z-10 '
+          : isHitzone
+            ? 'border-dashed border-white/35 bg-white/[0.06] opacity-35 '
+            : 'border-white/10 bg-transparent ') +
+        (isPeer && !isSelected
           ? '!border-dashed !border-[rgb(250_204_21/0.95)] !bg-[rgb(250_204_21/0.12)] ' +
             (isHitzone ? '!bg-[rgb(250_204_21/0.14)] ' : '')
           : '') +

@@ -108,7 +108,7 @@ export function GyroSheet({
 
       {secureHint && (
         <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs font-medium text-amber-300">
-          Gyro needs HTTPS — tilt controls require a secure connection
+          Gyro needs HTTPS
         </p>
       )}
       {permissionDenied && (

@@ -3,14 +3,12 @@ import { cn } from '@/lib/utils';
 export interface ControlOverlayProps {
   selected: boolean;
   isHitzone?: boolean;
-  isDpad?: boolean;
   className?: string;
 }
 
 export function ControlOverlay({
   selected,
   isHitzone,
-  isDpad,
   className,
 }: ControlOverlayProps) {
   if (!selected) return null;
@@ -22,7 +20,7 @@ export function ControlOverlay({
         className,
       )}
     >
-      {!isDpad && <div className="editor-selection-frame" />}
+      <div className="editor-selection-frame" />
       <div className="editor-handles">
         <span className="editor-handle editor-handle-tl" />
         <span className="editor-handle editor-handle-tr" />

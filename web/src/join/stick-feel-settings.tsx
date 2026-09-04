@@ -25,7 +25,7 @@ export function StickFeelSettings({ opts }: { opts: MountOptions }) {
   return (
     <div className="relative mt-6 rounded-xl border bg-card">
       <div className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card px-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-        Sticks
+        Stick Feel
       </div>
       <div className="space-y-3 p-3 pt-4">
         <TryPad feel={feel} grab={grab} />
