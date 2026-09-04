@@ -42,6 +42,7 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 		mux.HandleFunc("/ws", s.options.Transport.ServeHTTP)
 		mux.HandleFunc("/api/layouts/publish", s.handlePublishCreate)
 		mux.HandleFunc("/api/layouts/publish/", s.handlePublishCancel)
+		mux.HandleFunc("/api/layouts/", s.handlePublicLayoutGet)
 	}
 	mux.HandleFunc("/api/admin/", func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackRequest(r) {
@@ -160,6 +161,24 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (s *Server) handlePublicLayoutGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/layouts/")
+	if id == "" || strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	doc, ok := s.options.Layouts.Get(id)
+	if !ok {
+		writeErrorStatus(w, errors.New("layout not found"), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
 }
 
 func (s *Server) layoutAdminAPI(w http.ResponseWriter, r *http.Request, path string) {

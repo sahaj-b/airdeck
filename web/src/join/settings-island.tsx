@@ -6,8 +6,9 @@ import type { FeedbackController } from '@/controller/feedback';
 import type { GyroController, GyroStatus } from '@/controller/gyro/controller';
 import { GyroSheet } from './gyro-sheet';
 import { InlineSettingsPanel } from './inline-settings-panel';
-import { ManageLayoutsSheet } from './manage-layouts-sheet';
+import { LayoutsSheet } from './layouts-sheet';
 import type { settingsStore } from './settings-store';
+import { SkinsSheet } from './skins-sheet';
 
 type Store = typeof settingsStore;
 
@@ -43,6 +44,9 @@ export interface SettingsIsland {
   isDestroyed: () => boolean;
 }
 
+const VIEW_SCROLL_CLASS =
+  'flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 min-w-0';
+
 function IslandRoot({
   opts,
   open,
@@ -52,7 +56,9 @@ function IslandRoot({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
-  const [view, setView] = useState<'main' | 'gyro' | 'manage'>('main');
+  const [view, setView] = useState<'main' | 'gyro' | 'layouts' | 'skins'>(
+    'main',
+  );
   const gyroStatus = opts.gyroStatus ?? 'idle';
   const liveX = opts.gyroLiveX ?? 0;
   const liveY = opts.gyroLiveY ?? 0;
@@ -71,26 +77,33 @@ function IslandRoot({
       swipeDirection="right"
     >
       <DrawerContent
-        className="flex flex-col max-w-full"
+        className="flex flex-col max-w-[32rem] data-[swipe-axis=x]:![--drawer-content-width:55%]"
         aria-describedby={undefined}
       >
-        {view === 'main' ? (
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 min-w-0"
-          >
+        <div
+          ref={scrollRef}
+          className={
+            view === 'gyro'
+              ? `${VIEW_SCROLL_CLASS} space-y-5`
+              : VIEW_SCROLL_CLASS
+          }
+        >
+          {view === 'main' && (
             <InlineSettingsPanel
               opts={opts}
               onOpenGyro={() => setView('gyro')}
-              onOpenManage={() => setView('manage')}
+              onOpenLayouts={() => setView('layouts')}
+              onOpenSkins={() => setView('skins')}
               onClose={() => onOpenChange(false)}
             />
-          </div>
-        ) : view === 'gyro' ? (
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 space-y-5 min-w-0"
-          >
+          )}
+          {view === 'layouts' && (
+            <LayoutsSheet opts={opts} onBack={() => setView('main')} />
+          )}
+          {view === 'skins' && (
+            <SkinsSheet opts={opts} onBack={() => setView('main')} />
+          )}
+          {view === 'gyro' && (
             <GyroSheet
               store={opts.store}
               gyro={opts.gyro}
@@ -99,15 +112,8 @@ function IslandRoot({
               liveY={liveY}
               onBack={() => setView('main')}
             />
-          </div>
-        ) : (
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 min-w-0"
-          >
-            <ManageLayoutsSheet opts={opts} onBack={() => setView('main')} />
-          </div>
-        )}
+          )}
+        </div>
       </DrawerContent>
     </Drawer>
   );
