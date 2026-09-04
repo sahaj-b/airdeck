@@ -11,10 +11,13 @@ import {
   getBlockingControls,
   getHitzonesOf,
   getSectionControlMin,
+  isAspectLockForced,
   isDefaultLocked,
   LayoutHistory,
   moveParentWithHitzones,
   pixelsToHeightUnits,
+  resolveAspectLock,
+  soloStick,
   updateControlGeometry,
 } from './layout-editor';
 
@@ -192,5 +195,36 @@ describe('layout-editor helpers', () => {
     );
     expect(pixelsToHeightUnits(100, 500)).toBe(0.2);
     expect(pixelsToHeightUnits(10, 0)).toBe(0);
+  });
+
+  it('forces square aspect lock on joysticks and finds the solo stick per section', () => {
+    const left = base.sections[0];
+    const right = base.sections[2];
+    const center = base.sections[1];
+    expect(soloStick(left)?.id).toBe('left-stick');
+    expect(soloStick(right)?.id).toBe('right-stick');
+    expect(soloStick(center)).toBeNull();
+    const leftStick = left.controls.find((c) => c.id === 'left-stick');
+    if (!leftStick) throw new Error('left-stick missing');
+    expect(isAspectLockForced(leftStick)).toBe(true);
+    expect(resolveAspectLock(leftStick, {})).toBe(true);
+    expect(resolveAspectLock(leftStick, { 'left-stick': false })).toBe(true);
+    const button = left.controls.find((c) => c.type === 'button');
+    if (!button) throw new Error('button missing');
+    expect(isAspectLockForced(button)).toBe(false);
+    expect(resolveAspectLock(button, {})).toBe(isDefaultLocked(button));
+  });
+
+  it('finds a solo stick regardless of feel, null when crowded', () => {
+    expect(soloStick(base.sections[0])?.id).toBe('left-stick');
+    expect(soloStick(base.sections[2])?.id).toBe('right-stick');
+    expect(soloStick(base.sections[1])).toBeNull();
+    const multi = structuredClone(base);
+    const leftStick = multi.sections[0].controls.find(
+      (c) => c.id === 'left-stick',
+    );
+    if (!leftStick) throw new Error('left-stick missing');
+    multi.sections[0].controls.push({ ...leftStick, id: 'extra-stick' });
+    expect(soloStick(multi.sections[0])).toBeNull();
   });
 });

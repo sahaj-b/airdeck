@@ -34,7 +34,8 @@ import type { ValidationError } from '@/shared/layout';
 import {
   findControl,
   getAllowedBindings,
-  isDefaultLocked,
+  isAspectLockForced,
+  resolveAspectLock,
 } from '@/shared/layout-editor';
 import { useIsShiftHeld } from '../hooks/use-is-shift-held';
 import { useEditorStore } from '../store/editor-store';
@@ -417,7 +418,7 @@ function ControlFields({
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
   onAddHitzone?: (parentId: string) => void;
 }) {
-  const locked = locks[control.id] ?? isDefaultLocked(control);
+  const locked = resolveAspectLock(control, locks);
   const allowed = getAllowedBindings(control.type);
   const isDpad = control.type === 'dpad';
   const isHitzone = control.type === 'hitzone';
@@ -639,9 +640,6 @@ function ControlFields({
               {fieldErrors.get('subLabel')}
             </p>
           )}
-          <p className="ml-17 text-[10px] leading-tight text-muted-foreground">
-            Small hint under label, max 20 chars
-          </p>
         </div>
       )}
 
@@ -874,12 +872,14 @@ function GeometrySection({
   onDraftChange: (next: LayoutDocument, commit: boolean) => void;
 }) {
   const shiftHeld = useIsShiftHeld();
+  const forced = isAspectLockForced(control);
   const displayLocked = locked || shiftHeld;
   const sizeClipboard = useEditorStore((s) => s.sizeClipboard);
   const setSizeClipboard = useEditorStore((s) => s.setSizeClipboard);
   const [copied, setCopied] = useState(false);
   const copiedTimeoutRef = useRef<number | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: control.id re-runs copy feedback on selection change; the effect only writes stable setState
   useEffect(() => {
     setCopied(false);
   }, [control.id]);
@@ -947,13 +947,14 @@ function GeometrySection({
                   type="button"
                   variant={displayLocked ? 'secondary' : 'outline'}
                   size="sm"
-                  className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${displayLocked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+                  disabled={forced}
+                  className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${displayLocked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''} ${forced ? 'opacity-70' : ''}`}
                   onClick={() => onToggleLock(control.id)}
                 >
                   {displayLocked ? (
                     <>
                       <Lock className="size-3" />
-                      {shiftHeld && !locked ? 'Locked (⇧)' : 'Locked'}
+                      {forced || !shiftHeld || locked ? 'Locked' : 'Locked (⇧)'}
                     </>
                   ) : (
                     <>
@@ -965,11 +966,13 @@ function GeometrySection({
               }
             />
             <TooltipContent side="top">
-              {displayLocked
-                ? shiftHeld && !locked
-                  ? 'Shift held, temporarily locked'
-                  : 'Unlock aspect ratio'
-                : 'Lock aspect ratio (hold Shift)'}
+              {forced
+                ? 'Joysticks stay square'
+                : !displayLocked
+                  ? 'Lock aspect ratio (hold Shift)'
+                  : shiftHeld && !locked
+                    ? 'Shift held, temporarily locked'
+                    : 'Unlock aspect ratio'}
             </TooltipContent>
           </Tooltip>
           <Tooltip>

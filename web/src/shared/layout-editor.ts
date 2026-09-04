@@ -158,6 +158,30 @@ export function isDefaultLocked(control: Control): boolean {
   return false;
 }
 
+export function isAspectLockForced(control: Control): boolean {
+  return control.type === 'joystick';
+}
+
+export function resolveAspectLock(
+  control: Control,
+  locks: Record<string, boolean>,
+): boolean {
+  if (isAspectLockForced(control)) return true;
+  return locks[control.id] ?? isDefaultLocked(control);
+}
+
+export function soloStick(section: Section): Control | null {
+  let solo: Control | null = null;
+  let count = 0;
+  for (const control of section.controls) {
+    if (control.type !== 'joystick') continue;
+    count += 1;
+    solo = control;
+  }
+  if (count !== 1 || !solo) return null;
+  return solo;
+}
+
 export function cloneDocument(document: LayoutDocument): LayoutDocument {
   return structuredClone(document);
 }

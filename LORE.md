@@ -29,6 +29,12 @@
 - **Tilt Steer:** Gyro mode where phone roll maps to a single stick axis (X only, Y forced neutral). For driving/steering.
 - **Tilt Aim:** Gyro mode where phone roll maps to stick X and phone pitch maps to stick Y. For camera/aim.
 - **Calibrated neutral:** The captured tilt angles at calibration time that become 0 output. Recalibrated on enable and on demand.
+- **Floating joystick:** A joystick whose base center jumps to the touch-down point on grab, so deflection is always relative to where the finger landed, not the authored rest position. Phone client setting, not layout data.
+- **Following joystick:** A floating joystick whose base center drifts toward the finger when the finger pushes past the rim, so returning to neutral needs only a short drag back to the drifted center instead of all the way to the original touchdown. Phone client setting, not layout data.
+- **Section-fallback catcher:** A runtime-only invisible touch layer covering a joystick section at z-index 0. Real controls sit above it and win hit-testing; touches landing on empty section space fall through to it and start the section's joystick. Enabled only when the phone sets a floating feel plus wide grab and the section holds exactly one joystick.
+- **Stick feel:** Phone-local preference with `fixed`, `floating`, `following`. `fixed` is the old fixed-center stick. `floating` jumps its center to the grab point with no follow. `following` is floating plus rim-glued base drift. Stored in `airdeck.settings.v1`, never in `LayoutDocument`.
+- **Grab area:** Phone-local preference with `wide`, `precise`. `wide` allows empty section background to start the stick via the catcher. `precise` restricts grabs to the base plus its hitzones. `fixed` ignores grab area. A section with more than one joystick forces `precise` behavior for all its sticks.
+- **Square stick:** A joystick whose authored width equals height within epsilon. V1 forbids oval sticks so output, paint, and follow share one radius.
 
 # ADRs
 
@@ -162,9 +168,13 @@ Airdeck uses an explicit `hitzone` control type instead of generic `visible`/`hi
 
 Airdeck uses React for the low-rate host dashboard and the lazy phone editor, while the high-frequency phone controller runtime stays vanilla TypeScript. The dashboard full editor and phone minimal editor both use React and `interact.js`. The phone play bundle stays vanilla because the editor is loaded only after the user taps Edit.
 
+## Stick feel is a phone setting, not layout data
+
+Stick feel (`fixed`, `floating`, `following`) and grab area (`wide`, `precise`) live in the phone-local settings store (`airdeck.settings.v1`), never in `LayoutDocument`. How a stick grabs is user and device specific: thumb size, grip, and taste differ per player, and two phones on the same session can disagree. Layout data stays about authored geometry that every client shares. Baking feel into the layout would fork validation, versioning, and the editor UI for a preference, and every new feel would become a schema migration. The trade off is that hosts cannot force a feel on guests, which is accepted because feel changes nothing about what the layout means.
+
 ## Lazy islands for phone settings and editing
 
-Phone controller settings are lazy React islands inside the vanilla join app, and phone minimal editing is a second lazy React island in the same app. Both keep the 60hz input path free of framework reconciliation when not open. The initial join entry contains no React or editor code. A `zustand/vanilla` store (`airdeck.settings.v1`, `version:1`) holds low-frequency config and is shared between the vanilla core and React islands via `getState()/subscribe` vs `useStore`. The settings island mounts on gear click via `await import('./settings-island')` -> `createRoot(host).render(<SettingsPanel/>)` and unmounts on close. The phone editor island loads only on `Edit` via a nested dynamic import, and its `interact.js` dependency stays in that async editor graph. Manual vendor chunking keeps `react|react-dom|scheduler` together (Vite #12209/#17653).
+Phone controller settings are lazy React islands inside the vanilla join app, and phone minimal editing is a second lazy React island in the same app. Both keep the 60hz input path free of framework reconciliation when not open. The initial join entry contains no React or editor code. A `zustand/vanilla` store (`airdeck.settings.v1`, `version:1`) holds low-frequency config including stick feel plus grab area and is shared between the vanilla core and React islands via `getState()/subscribe` vs `useStore`. The settings island mounts on gear click via `await import('./settings-island')` -> `createRoot(host).render(<SettingsPanel/>)` and unmounts on close. The phone editor island loads only on `Edit` via a nested dynamic import, and its `interact.js` dependency stays in that async editor graph. Manual vendor chunking keeps `react|react-dom|scheduler` together (Vite #12209/#17653).
 
 ## Validated layout documents
 

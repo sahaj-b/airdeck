@@ -142,7 +142,7 @@ export const PhoneHit = memo(function PhoneHit({
       className={
         'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
         (isDpad
-          ? 'border-transparent bg-transparent ' + (isSelected ? 'z-10 ' : '')
+          ? `border-transparent bg-transparent ${isSelected ? 'z-10 ' : ''}`
           : isSelected
             ? 'border-[#7c86ff] bg-[rgba(124,134,255,0.08)] z-10 '
             : isHitzone

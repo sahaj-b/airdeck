@@ -34,14 +34,17 @@ describe('validateLayout', () => {
     expect(validateLayout(incomplete)).toBe(false);
   });
 
-  it('allows non-square joysticks for gyro oval and rejects legacy shapes', () => {
+  it('rejects oval sticks and accepts square sticks', () => {
     const oval = structuredClone(xboxDefault) as typeof xboxDefault;
     const stick = oval.sections[0].controls.find(
       (control) => control.type === 'joystick',
     );
     if (!stick) throw new Error('built-in joystick missing');
     stick.geometry.size.height = stick.geometry.size.width / 2;
-    expect(validateLayout(oval)).toBe(true);
+    expect(validateLayout(oval)).toBe(false);
+
+    const square = structuredClone(xboxDefault) as typeof xboxDefault;
+    expect(validateLayout(square)).toBe(true);
 
     const shaped = structuredClone(xboxDefault) as typeof xboxDefault;
     shaped.sections[0].controls[0].shape = 'circle' as unknown as string;

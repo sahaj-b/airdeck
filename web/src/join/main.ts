@@ -9,6 +9,7 @@ import {
   type RenderedLayout,
   renderLayout,
 } from '../controller/layout-renderer';
+import type { StickPrefs } from '../controller/pointer-input';
 import { ControllerSocket, SELECTED_LAYOUT_KEY } from '../controller/socket';
 import { InputStateStore } from '../controller/state';
 import { bindTap } from '../controller/tap';
@@ -372,6 +373,18 @@ function showController(options: {
       syncGyroLock();
   });
 
+  const getStickPrefs = (): StickPrefs => {
+    const s = settingsStore.getState();
+    return { feel: s.stickFeel, grab: s.stickGrab };
+  };
+  const syncStickPrefs = () => {
+    activeRenderer?.setStickPrefs(getStickPrefs());
+  };
+  const unsubStickPrefs = settingsStore.subscribe((s, prev) => {
+    if (s.stickFeel !== prev.stickFeel || s.stickGrab !== prev.stickGrab)
+      syncStickPrefs();
+  });
+
   const shell = document.createElement('main');
   shell.className = 'controller-shell';
   shell.style.setProperty('--slot-accent', '#6ee7b7');
@@ -497,7 +510,12 @@ function showController(options: {
 
   const renderLocalLayout = (doc: LayoutDocument) => {
     activeRenderer?.destroy();
-    activeRenderer = renderLayout(host, doc, { state, feedback, chrome });
+    activeRenderer = renderLayout(host, doc, {
+      state,
+      feedback,
+      chrome,
+      stickPrefs: getStickPrefs(),
+    });
     currentLayoutDoc = doc;
     currentLayoutId = doc.id;
     writeStorage(SELECTED_LAYOUT_KEY, doc.id);
@@ -806,6 +824,7 @@ function showController(options: {
     clearPublishTimer();
     unsubFeedback();
     unsubGyroLock();
+    unsubStickPrefs();
     gyro.destroy();
     activeGyro = undefined;
     island?.unmount();
@@ -888,6 +907,7 @@ function showController(options: {
         state,
         feedback,
         chrome,
+        stickPrefs: getStickPrefs(),
       });
       currentLayoutDoc = layout;
       currentLayoutId = layout.id;

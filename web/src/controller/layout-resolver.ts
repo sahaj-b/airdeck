@@ -107,7 +107,6 @@ export function allocateSections(
   // Phase 2: center at min, sides shrink proportionally toward 0
   const sideAvailable = available - centerMin;
   const totalSide = leftW + rightW;
-  const totalSideMin = 0;
 
   if (sideAvailable >= -EPSILON) {
     if (totalSide <= EPSILON) {

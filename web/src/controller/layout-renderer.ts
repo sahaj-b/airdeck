@@ -1,12 +1,12 @@
-import { effectiveHitShape } from '@/shared/layout-editor';
+import { effectiveHitShape, soloStick } from '@/shared/layout-editor';
 import type { Orientation } from '../shared/contracts';
 import {
   type Control,
   DEFAULT_LAYOUT,
   type LayoutDocument,
+  type Section,
   validateLayout,
 } from '../shared/layout';
-import { bindTap } from './tap';
 import {
   type PixelRect,
   type ResolvedControl,
@@ -14,8 +14,14 @@ import {
   resolveLayout,
   type Viewport,
 } from './layout-resolver';
-import { type PointerFeedback, PointerInput } from './pointer-input';
+import {
+  DEFAULT_STICK_PREFS,
+  type PointerFeedback,
+  PointerInput,
+  type StickPrefs,
+} from './pointer-input';
 import type { InputStateStore } from './state';
+import { bindTap } from './tap';
 
 export interface LayoutRendererOptions {
   state: InputStateStore;
@@ -23,11 +29,13 @@ export interface LayoutRendererOptions {
   orientation?: Orientation;
   chrome?: HTMLElement;
   interactive?: boolean;
+  stickPrefs?: StickPrefs;
 }
 
 export interface RenderedLayout {
   root: HTMLElement;
   pointerInput: PointerInput | null;
+  setStickPrefs(prefs: StickPrefs): void;
   setOrientation(orientation: Orientation, viewport?: Viewport): void;
   setGyroLocked(target: 'leftStick' | 'rightStick' | null): void;
   updateGyroThumb(
@@ -50,6 +58,8 @@ interface RenderedSection {
   sectionId: string;
   element: HTMLElement;
   controls: RenderedControl[];
+  floatLayer: HTMLElement;
+  catcher?: HTMLElement;
 }
 
 const CHEVRON_SVG =
@@ -67,6 +77,7 @@ export function renderLayout(
   const pointerInput = interactive
     ? new PointerInput(options.state, options.feedback)
     : null;
+  let stickPrefs: StickPrefs = options.stickPrefs ?? { ...DEFAULT_STICK_PREFS };
   const root = ownerDocument.createElement('div');
   root.className = 'controller-layout';
   root.dataset.layoutId = layout.id;
@@ -157,58 +168,23 @@ export function renderLayout(
 
   const renderedSections: RenderedSection[] = [];
   for (const section of layout.sections) {
-    const sectionElement = ownerDocument.createElement('section');
-    sectionElement.className = 'controller-section';
-    sectionElement.dataset.sectionId = section.id;
-    const renderedSection: RenderedSection = {
-      sectionId: section.id,
-      element: sectionElement,
-      controls: [],
-    };
-    for (const control of section.controls) {
-      const rendered = renderControl(ownerDocument, control, layout);
-      if (!rendered) continue;
-      renderedSection.controls.push(rendered);
-      if (rendered.target) sectionElement.append(rendered.target);
-      else sectionElement.append(rendered.visual);
-    }
+    const renderedSection = createRenderedSection(
+      ownerDocument,
+      layout,
+      section,
+    );
     renderedSections.push(renderedSection);
-    composition.append(sectionElement);
+    composition.append(renderedSection.element);
   }
 
   if (interactive && pointerInput) {
-    const visualById = new Map<string, HTMLElement>();
-    for (const section of renderedSections) {
-      for (const rc of section.controls) {
-        if (rc.control.type !== 'hitzone')
-          visualById.set(rc.control.id, rc.visual);
-      }
-    }
-    for (const section of renderedSections) {
-      for (const rc of section.controls) {
-        if (!rc.target) continue;
-        if (rc.control.type === 'hitzone') {
-          const parent = layout.sections
-            .flatMap((s) => s.controls)
-            .find((c) => c.id === rc.control.parentId);
-          if (!parent) continue;
-          const parentVisual = visualById.get(parent.id);
-          const effectiveControl = {
-            ...rc.control,
-            binding: parent.binding,
-            bindings: parent.bindings,
-          } as Control;
-          pointerInput.bind(
-            rc.target,
-            effectiveControl,
-            rc.visual,
-            parentVisual,
-          );
-        } else {
-          pointerInput.bind(rc.target, rc.control, rc.visual);
-        }
-      }
-    }
+    bindStickInputs(
+      ownerDocument,
+      layout,
+      renderedSections,
+      pointerInput,
+      stickPrefs,
+    );
   }
 
   if (options.chrome && interactive) {
@@ -359,9 +335,29 @@ export function renderLayout(
     }
   };
 
+  const setStickPrefs = (prefs: StickPrefs): void => {
+    if (stickPrefs.feel === prefs.feel && stickPrefs.grab === prefs.grab)
+      return;
+    stickPrefs = { ...prefs };
+    if (!interactive || !pointerInput) return;
+    pointerInput.destroy();
+    for (const section of renderedSections) {
+      section.catcher?.remove();
+      section.catcher = undefined;
+    }
+    bindStickInputs(
+      ownerDocument,
+      layout,
+      renderedSections,
+      pointerInput,
+      stickPrefs,
+    );
+  };
+
   return {
     root,
     pointerInput,
+    setStickPrefs,
     setOrientation: applyOrientation,
     setGyroLocked,
     updateGyroThumb,
@@ -377,6 +373,7 @@ export function renderLayout(
     },
     update: (nextDocument: LayoutDocument, viewport?: Viewport) => {
       const next = validateLayout(nextDocument) ? nextDocument : DEFAULT_LAYOUT;
+      pointerInput?.clear();
       const structuralChange = (() => {
         if (layout.sections.length !== next.sections.length) return true;
         for (let index = 0; index < layout.sections.length; index += 1) {
@@ -426,57 +423,22 @@ export function renderLayout(
         composition.replaceChildren();
         renderedSections.length = 0;
         for (const section of layout.sections) {
-          const sectionElement = ownerDocument.createElement('section');
-          sectionElement.className = 'controller-section';
-          sectionElement.dataset.sectionId = section.id;
-          const renderedSection: RenderedSection = {
-            sectionId: section.id,
-            element: sectionElement,
-            controls: [],
-          };
-          for (const control of section.controls) {
-            const rendered = renderControl(ownerDocument, control, layout);
-            if (!rendered) continue;
-            renderedSection.controls.push(rendered);
-            if (rendered.target) sectionElement.append(rendered.target);
-            else sectionElement.append(rendered.visual);
-          }
+          const renderedSection = createRenderedSection(
+            ownerDocument,
+            layout,
+            section,
+          );
           renderedSections.push(renderedSection);
-          composition.append(sectionElement);
+          composition.append(renderedSection.element);
         }
         if (interactive && pointerInput) {
-          const visualById = new Map<string, HTMLElement>();
-          for (const section of renderedSections) {
-            for (const rc of section.controls) {
-              if (rc.control.type !== 'hitzone')
-                visualById.set(rc.control.id, rc.visual);
-            }
-          }
-          for (const section of renderedSections) {
-            for (const rc of section.controls) {
-              if (!rc.target) continue;
-              if (rc.control.type === 'hitzone') {
-                const parent = layout.sections
-                  .flatMap((candidate) => candidate.controls)
-                  .find((candidate) => candidate.id === rc.control.parentId);
-                if (!parent) continue;
-                const parentVisual = visualById.get(parent.id);
-                const effectiveControl = {
-                  ...rc.control,
-                  binding: parent.binding,
-                  bindings: parent.bindings,
-                } as Control;
-                pointerInput.bind(
-                  rc.target,
-                  effectiveControl,
-                  rc.visual,
-                  parentVisual,
-                );
-              } else {
-                pointerInput.bind(rc.target, rc.control, rc.visual);
-              }
-            }
-          }
+          bindStickInputs(
+            ownerDocument,
+            layout,
+            renderedSections,
+            pointerInput,
+            stickPrefs,
+          );
         }
         if (chromeEl && interactive) {
           const centerIndex = 1;
@@ -490,6 +452,135 @@ export function renderLayout(
       );
     },
   };
+}
+
+function bindStickInputs(
+  ownerDocument: Document,
+  layout: LayoutDocument,
+  renderedSections: RenderedSection[],
+  pointerInput: PointerInput,
+  prefs: StickPrefs,
+): void {
+  const visualById = new Map<string, HTMLElement>();
+  for (const section of renderedSections) {
+    for (const rc of section.controls) {
+      if (rc.control.type !== 'hitzone')
+        visualById.set(rc.control.id, rc.visual);
+    }
+  }
+  const controlById = new Map<string, Control>();
+  const sectionIdByControlId = new Map<string, string>();
+  for (const section of layout.sections) {
+    for (const control of section.controls) {
+      controlById.set(control.id, control);
+      sectionIdByControlId.set(control.id, section.id);
+    }
+  }
+  const renderedBySectionId = new Map(
+    renderedSections.map((section) => [section.sectionId, section]),
+  );
+  for (const sectionDoc of layout.sections) {
+    const section = renderedBySectionId.get(sectionDoc.id);
+    if (!section) continue;
+    for (const rc of section.controls) {
+      if (!rc.target) continue;
+      if (rc.control.type === 'hitzone') {
+        const parent = rc.control.parentId
+          ? controlById.get(rc.control.parentId)
+          : undefined;
+        if (!parent) continue;
+        const parentVisual = visualById.get(parent.id);
+        const effectiveControl = {
+          ...rc.control,
+          binding: parent.binding,
+          bindings: parent.bindings,
+        } as Control;
+        const isStickHitzone =
+          parent.type === 'joystick' &&
+          (parent.binding === 'leftStick' || parent.binding === 'rightStick');
+        if (isStickHitzone && parentVisual) {
+          const parentSectionId = sectionIdByControlId.get(parent.id);
+          const parentRendered =
+            (parentSectionId && renderedBySectionId.get(parentSectionId)) ||
+            section;
+          pointerInput.bind(
+            rc.target,
+            effectiveControl,
+            rc.visual,
+            parentVisual,
+            {
+              sectionEl: parentRendered.element,
+              floatLayer: parentRendered.floatLayer,
+              feel: prefs.feel,
+            },
+          );
+        } else {
+          pointerInput.bind(
+            rc.target,
+            effectiveControl,
+            rc.visual,
+            parentVisual,
+          );
+        }
+      } else if (rc.control.type === 'joystick') {
+        pointerInput.bind(rc.target, rc.control, rc.visual, undefined, {
+          sectionEl: section.element,
+          floatLayer: section.floatLayer,
+          feel: prefs.feel,
+        });
+      } else {
+        pointerInput.bind(rc.target, rc.control, rc.visual);
+      }
+    }
+  }
+  if (prefs.feel === 'fixed' || prefs.grab !== 'wide') return;
+  for (const sectionDoc of layout.sections) {
+    const section = renderedBySectionId.get(sectionDoc.id);
+    if (!section) continue;
+    const solo = soloStick(sectionDoc);
+    if (!solo) continue;
+    const stickVisual = visualById.get(solo.id);
+    if (!stickVisual) continue;
+    const catcher = ownerDocument.createElement('div');
+    catcher.className = 'controller-section-catcher';
+    catcher.dataset.stickId = solo.id;
+    catcher.setAttribute('aria-hidden', 'true');
+    section.element.prepend(catcher);
+    section.catcher = catcher;
+    pointerInput.bind(catcher, solo, stickVisual, undefined, {
+      sectionEl: section.element,
+      floatLayer: section.floatLayer,
+      feel: prefs.feel,
+    });
+  }
+}
+
+function createRenderedSection(
+  ownerDocument: Document,
+  layout: LayoutDocument,
+  section: Section,
+): RenderedSection {
+  const sectionElement = ownerDocument.createElement('section');
+  sectionElement.className = 'controller-section';
+  sectionElement.dataset.sectionId = section.id;
+  const floatLayer = ownerDocument.createElement('div');
+  floatLayer.className = 'controller-float-layer';
+  floatLayer.setAttribute('aria-hidden', 'true');
+  const renderedSection: RenderedSection = {
+    sectionId: section.id,
+    element: sectionElement,
+    controls: [],
+    floatLayer,
+  };
+  for (const control of section.controls) {
+    const rendered = renderControl(ownerDocument, control, layout);
+    if (!rendered) continue;
+    renderedSection.controls.push(rendered);
+    if (rendered.target) sectionElement.append(rendered.target);
+    else sectionElement.append(rendered.visual);
+  }
+  sectionElement.append(floatLayer);
+  return renderedSection;
 }
 
 function renderControl(

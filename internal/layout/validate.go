@@ -55,6 +55,9 @@ func ValidateJSON(data []byte) (Document, error) {
 
 var parentIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
+// joystickSquareEpsilon bounds authored width/height drift (height units).
+const joystickSquareEpsilon = 0.001
+
 func ValidateDocument(document Document) error {
 	if document.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported layout schema version %d", document.SchemaVersion)
@@ -151,6 +154,11 @@ func validateControl(control Control, section Section) error {
 	case "button", "dpad", "joystick", "trigger", "label", "hitzone":
 	default:
 		return fmt.Errorf("unsupported control type %q", control.Type)
+	}
+	if control.Type == "joystick" {
+		if math.Abs(control.Geometry.Size.Width-control.Geometry.Size.Height) > joystickSquareEpsilon {
+			return errors.New("joystick geometry must be square")
+		}
 	}
 	isHitzone := control.Type == "hitzone"
 	if isHitzone {

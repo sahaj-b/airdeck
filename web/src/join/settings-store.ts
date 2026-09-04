@@ -1,6 +1,9 @@
 import { persist } from 'zustand/middleware';
 import { createStore } from 'zustand/vanilla';
 
+export type StickFeelSetting = 'fixed' | 'floating' | 'following';
+export type StickGrabSetting = 'wide' | 'precise';
+
 export interface SettingsState {
   vibrationMs: number;
   joystickPressMs: number;
@@ -9,6 +12,8 @@ export interface SettingsState {
   sound: boolean;
   ignoreCutout: boolean;
   skin: string;
+  stickFeel: StickFeelSetting;
+  stickGrab: StickGrabSetting;
   gyroEnabled: boolean;
   gyroTarget: 'leftStick' | 'rightStick';
   gyroMode: 'steer' | 'aim';
@@ -30,6 +35,8 @@ export interface SettingsActions {
   setSound: (v: boolean) => void;
   setIgnoreCutout: (v: boolean) => void;
   setSkin: (id: string) => void;
+  setStickFeel: (v: SettingsState['stickFeel']) => void;
+  setStickGrab: (v: SettingsState['stickGrab']) => void;
   setGyroEnabled: (v: boolean) => void;
   setGyroTarget: (v: SettingsState['gyroTarget']) => void;
   setGyroMode: (v: SettingsState['gyroMode']) => void;
@@ -52,6 +59,8 @@ const DEFAULTS: SettingsState = {
   sound: false,
   ignoreCutout: true,
   skin: 'airdeck',
+  stickFeel: 'following',
+  stickGrab: 'wide',
   gyroEnabled: false,
   gyroTarget: 'leftStick',
   gyroMode: 'steer',
@@ -76,6 +85,8 @@ export const settingsStore = createStore<SettingsStore>()(
       setSound: (sound) => set({ sound }),
       setIgnoreCutout: (ignoreCutout) => set({ ignoreCutout }),
       setSkin: (skin) => set({ skin }),
+      setStickFeel: (stickFeel) => set({ stickFeel }),
+      setStickGrab: (stickGrab) => set({ stickGrab }),
       setGyroEnabled: (gyroEnabled) => set({ gyroEnabled }),
       setGyroTarget: (gyroTarget) => set({ gyroTarget }),
       setGyroMode: (gyroMode) => set({ gyroMode }),

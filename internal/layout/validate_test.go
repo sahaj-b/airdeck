@@ -101,7 +101,7 @@ func TestValidateFixedSections(t *testing.T) {
 	}
 }
 
-func TestValidateControlShapesAndUnlockedJoystick(t *testing.T) {
+func TestValidateControlShapesAndSquareJoystick(t *testing.T) {
 	newDoc := func(size Size, shape string) Document {
 		doc := baseDocument()
 		doc.Sections[0].Controls = []Control{{
@@ -111,9 +111,22 @@ func TestValidateControlShapesAndUnlockedJoystick(t *testing.T) {
 		}}
 		return doc
 	}
-	// Non-square joystick must now be ACCEPTED (unlocked for gyro oval)
-	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.2}, "")); err != nil {
-		t.Fatalf("non-square joystick was rejected but should be allowed: %v", err)
+	// Oval sticks are rejected, epsilon-close sizes still count as square.
+	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.2}, "")); err == nil {
+		t.Fatal("non-square joystick was accepted")
+	}
+	if err := ValidateDocument(newDoc(Size{Width: 0.336, Height: 0.34}, "round")); err == nil {
+		t.Fatal("oval stick was accepted")
+	}
+	if err := ValidateDocument(newDoc(Size{Width: 0.336, Height: 0.336}, "round")); err != nil {
+		t.Fatalf("square joystick was rejected: %v", err)
+	}
+	if err := ValidateDocument(newDoc(Size{Width: 0.336, Height: 0.3365}, "round")); err != nil {
+		t.Fatalf("epsilon square rejected: %v", err)
+	}
+	raw := `{"id":"test","name":"Test","schemaVersion":1,"sections":[{"id":"left","relativeWidth":0.86,"controls":[{"id":"stick","type":"joystick","geometry":{"position":{"x":0,"y":0},"size":{"width":0.336,"height":0.336}},"label":"Left stick","binding":"leftStick"}]},{"id":"center","relativeWidth":0.5,"controls":[]},{"id":"right","relativeWidth":0.94,"controls":[]}]}`
+	if _, err := ValidateJSON([]byte(raw)); err != nil {
+		t.Fatalf("square joystick rejected: %v", err)
 	}
 	if err := ValidateDocument(newDoc(Size{Width: 0.4, Height: 0.4}, "triangle")); err == nil {
 		t.Fatal("unknown control shape was accepted")

@@ -16,10 +16,11 @@ import {
   effectiveHitShape,
   findControl,
   getHitzonesOf,
-  isDefaultLocked,
+  isAspectLockForced,
   moveControlAcross,
   moveParentWithHitzonesAcross,
   resizeControl,
+  resolveAspectLock,
 } from '@/shared/layout-editor';
 import {
   loadPersonalLayouts,
@@ -139,7 +140,6 @@ function PhoneEditorIsland({
         renderer?.update(initialDoc);
       } catch {}
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDoc]);
 
   useEffect(() => {
@@ -167,7 +167,7 @@ function PhoneEditorIsland({
   }, [draft, selectedId]);
 
   const locked = selectedControl
-    ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
+    ? resolveAspectLock(selectedControl, locks)
     : true;
 
   const selectedRect = useMemo(() => {
@@ -426,13 +426,12 @@ function PhoneEditorIsland({
     if (!sid || !cur) return;
     const found = findControl(cur, sid);
     if (!found) return;
-    const curLock = locks[sid] ?? isDefaultLocked(found.control as never);
+    if (isAspectLockForced(found.control)) return;
+    const curLock = resolveAspectLock(found.control, locks);
     usePhoneEditorStore.getState().toggleLock(sid, curLock);
   };
 
   if (!draft || !resolved) return null;
-
-  const isSelectedHitzone = selectedControl?.type === 'hitzone';
 
   return (
     <div

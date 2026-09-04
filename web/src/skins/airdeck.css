@@ -39,6 +39,14 @@ html[data-skin="airdeck"] .controller-control {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
 }
 
+html[data-skin="airdeck"] .control-sub {
+  color: color-mix(
+    in oklch,
+    var(--foreground) 80%,
+    var(--muted-foreground) 20%
+  );
+}
+
 html[data-skin="airdeck"] .controller-control:hover,
 html[data-skin="airdeck"] .dpad-direction:hover {
   border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);

@@ -11,7 +11,11 @@ import {
   Undo2,
 } from 'lucide-react';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
-import { findControl, isDefaultLocked } from '@/shared/layout-editor';
+import {
+  findControl,
+  isAspectLockForced,
+  resolveAspectLock,
+} from '@/shared/layout-editor';
 import { loadPersonalLayouts } from '../../personal-layouts';
 
 interface PhoneEditorBarProps {
@@ -61,10 +65,12 @@ export function PhoneEditorBar({
     selectedId && draft
       ? (findControl(draft, selectedId)?.control ?? null)
       : null;
-
   const locked = selectedControl
-    ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
+    ? resolveAspectLock(selectedControl, locks)
     : true;
+  const lockDisabled =
+    !selectedId ||
+    (selectedControl ? isAspectLockForced(selectedControl) : false);
 
   const isCreate = originalId ? !loadPersonalLayouts()[originalId] : true;
 
@@ -118,8 +124,14 @@ export function PhoneEditorBar({
             type="button"
             className={`grid place-items-center size-6 shrink-0 rounded border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${selectedId && locked ? 'bg-white text-black border-white hover:bg-white/90' : 'bg-white/10 text-white border-white/15 hover:bg-white/20'}`}
             aria-label={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-            title={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-            disabled={!selectedId}
+            title={
+              lockDisabled && selectedId
+                ? 'Joysticks stay square'
+                : locked
+                  ? 'Unlock aspect ratio'
+                  : 'Lock aspect ratio'
+            }
+            disabled={lockDisabled}
             onClick={onToggleLock}
           >
             {locked ? <Lock size={12} /> : <LockOpen size={12} />}

@@ -26,6 +26,7 @@ import { Switch } from '@/components/ui/switch';
 import { SKINS } from '@/skins';
 import { getSkin, setSkin } from '@/skins/loader';
 import type { MountOptions } from './settings-island';
+import { StickFeelSettings } from './stick-feel-settings';
 
 function GyroIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -559,6 +560,7 @@ export function InlineSettingsPanel({
           )}
         </div>
       </div>
+      <StickFeelSettings opts={opts} />
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor="cutout-toggle" className="flex-1">
           Ignore punchole

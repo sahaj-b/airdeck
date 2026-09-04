@@ -64,6 +64,9 @@ const validateSchema: ValidateFunction = new Ajv2020({
 
 const parentIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
+// Authored width must equal height within this epsilon (height units).
+const JOYSTICK_SQUARE_EPSILON = 0.001;
+
 export const DEFAULT_LAYOUT: LayoutDocument = defaultLayout as LayoutDocument;
 
 export interface LayoutParseResult {
@@ -247,6 +250,20 @@ export function getControlErrors(
       path: 'geometry',
       message: 'geometry center is outside section bounds or has invalid size',
     });
+  if (control.type === 'joystick') {
+    const w = control.geometry?.size?.width;
+    const h = control.geometry?.size?.height;
+    if (
+      typeof w === 'number' &&
+      typeof h === 'number' &&
+      Math.abs(w - h) > JOYSTICK_SQUARE_EPSILON
+    ) {
+      errors.push({
+        path: 'geometry',
+        message: 'joystick geometry must be square',
+      });
+    }
+  }
   const isHitzone = control.type === 'hitzone';
   if (isHitzone) {
     if (!control.parentId) {

@@ -3,7 +3,7 @@ import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import {
   clampGeometry,
   findControl,
-  isDefaultLocked,
+  resolveAspectLock,
   updateControlGeometry,
 } from '@/shared/layout-editor';
 import { usePhoneEditorStore } from '../store/phone-editor-store';
@@ -59,8 +59,7 @@ export function usePhoneGestures(
               h: found.control.geometry.size.height,
             };
             const locks = locksRef.current;
-            startLocked =
-              (locks[sid] ?? isDefaultLocked(found.control as never)) === true;
+            startLocked = resolveAspectLock(found.control, locks);
             startDist = dist(e.touches[0], e.touches[1]);
           } else {
             startSize = null;

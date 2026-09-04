@@ -36,10 +36,10 @@ import {
   findControl,
   getHitzonesOf,
   getSectionControlMin,
-  isDefaultLocked,
   moveControlAcross,
   moveParentWithHitzonesAcross,
   resizeControl,
+  resolveAspectLock,
 } from '@/shared/layout-editor';
 import { useInteractGeometry } from '../use-interact-geometry';
 import { ControlOverlay } from './control-overlay';
@@ -187,14 +187,6 @@ export function LayoutCanvas({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  const fitScale = useMemo(() => {
-    if (available.width === 0 || available.height === 0) return 1;
-    return Math.min(
-      available.width / viewport.width,
-      available.height / viewport.height,
-    );
-  }, [available, viewport]);
 
   // Viewport now maps directly to pixels via zoom, FIT is a one-time zoom level
   // instead of a permanent clamp. This lets the frame grow into empty space
@@ -477,7 +469,7 @@ export function LayoutCanvas({
   }, [document, hoveredControlId]);
 
   const locked = selectedControl
-    ? (locks[selectedControl.id] ?? isDefaultLocked(selectedControl))
+    ? resolveAspectLock(selectedControl, locks)
     : true;
 
   const { resolvedRect } = useMemo(() => {

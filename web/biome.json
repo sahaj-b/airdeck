@@ -86,11 +86,50 @@
       }
     },
     {
-      "includes": ["src/editor/use-interact-geometry.ts"],
+      "includes": ["src/hooks/use-interact-geometry.ts"],
       "linter": {
         "rules": {
           "correctness": {
             "useExhaustiveDependencies": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/join/phone-editor/components/phone-hit.tsx",
+        "src/join/phone-editor/hooks/use-phone-gestures.ts",
+        "src/join/phone-editor/hooks/use-phone-viewport.ts",
+        "src/join/phone-editor/phone-editor-island.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/join/phone-editor/phone-editor-island.tsx",
+        "src/join/phone-editor/components/phone-onboarding.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noStaticElementInteractions": "off",
+            "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/editor/editor.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
           }
         }
       }

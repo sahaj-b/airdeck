@@ -15,6 +15,7 @@ import {
   deleteControl,
   duplicateControl,
   findControl,
+  isAspectLockForced,
   isDefaultLocked,
   moveControl,
   slugifyId,
@@ -346,7 +347,9 @@ export function useEditorActions() {
     const cur = useEditorStore.getState().draft;
     if (!cur) return;
     const entry = findControl(cur, id);
-    const fallback = entry ? isDefaultLocked(entry.control) : false;
+    if (!entry) return;
+    if (isAspectLockForced(entry.control)) return;
+    const fallback = isDefaultLocked(entry.control);
     useEditorStore.getState().toggleLock(id, fallback);
   }, []);
 

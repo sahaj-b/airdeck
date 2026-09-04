@@ -8,3 +8,4 @@ benchmarks/
 .airdeck-config/
 .DS_Store
 Caddyfile
+node_modules/

@@ -45,6 +45,44 @@ interface PointerOwnership {
   command?: Command;
 }
 
+export type StickFeel = 'fixed' | 'floating' | 'following';
+export type StickGrab = 'wide' | 'precise';
+
+export interface StickPrefs {
+  feel: StickFeel;
+  grab: StickGrab;
+}
+
+export const DEFAULT_STICK_PREFS: StickPrefs = {
+  feel: 'following',
+  grab: 'wide',
+};
+
+export interface FloatContext {
+  sectionEl: HTMLElement;
+  floatLayer: HTMLElement;
+  feel: StickFeel;
+}
+
+interface FloatSession {
+  stickId: string;
+  ownerPointerId: number;
+  source: string;
+  binding: StickCommand;
+  behavior: 'floating' | 'following';
+  driftCenter: Point;
+  radiusPx: number;
+  sectionEl: HTMLElement;
+  floatLayer: HTMLElement;
+  stickVisual: HTMLElement;
+  originalParent: HTMLElement;
+  originalNextSibling: Node | null;
+  origLeft: string;
+  origTop: string;
+  origWidth: string;
+  origHeight: string;
+}
+
 const defaultJoystickOptions: Required<
   Pick<JoystickOptions, 'deadzone' | 'sensitivity'>
 > = {
@@ -111,6 +149,32 @@ export function joystickVisualOffset(point: Point, rect: RectLike): Point {
   );
 }
 
+export function clampFloatCenter(
+  finger: Point,
+  direction: Point,
+  radiusPx: number,
+  sectionRect: RectLike,
+): Point {
+  const unclamped: Point = {
+    x: finger.x - direction.x * radiusPx,
+    y: finger.y - direction.y * radiusPx,
+  };
+  const minX = sectionRect.left + radiusPx;
+  const maxX = sectionRect.left + sectionRect.width - radiusPx;
+  const minY = sectionRect.top + radiusPx;
+  const maxY = sectionRect.top + sectionRect.height - radiusPx;
+  if (maxX < minX || maxY < minY) {
+    return {
+      x: sectionRect.left + sectionRect.width / 2,
+      y: sectionRect.top + sectionRect.height / 2,
+    };
+  }
+  return {
+    x: Math.max(minX, Math.min(maxX, unclamped.x)),
+    y: Math.max(minY, Math.min(maxY, unclamped.y)),
+  };
+}
+
 export function dpadDirection(
   point: Point,
   rect: RectLike,
@@ -125,6 +189,7 @@ export function dpadDirection(
 
 export class PointerInput {
   private readonly pointers = new Map<number, PointerOwnership>();
+  private readonly floats = new Map<string, FloatSession>();
   private readonly elementPointers = new WeakMap<HTMLElement, Set<number>>();
   private readonly cleanups: (() => void)[] = [];
   private readonly joystickArmed = new Map<string, boolean>();
@@ -141,9 +206,10 @@ export class PointerInput {
     control: Control,
     visual: HTMLElement = target,
     parentVisual?: HTMLElement,
+    floatCtx?: FloatContext,
   ): () => void {
     const onPointerDown = (event: PointerEvent) =>
-      this.pointerDown(event, target, visual, control, parentVisual);
+      this.pointerDown(event, target, visual, control, parentVisual, floatCtx);
     const onPointerMove = (event: PointerEvent) => this.pointerMove(event);
     const onPointerUp = (event: PointerEvent) =>
       this.finishPointer(event.pointerId);
@@ -199,14 +265,20 @@ export class PointerInput {
     visual: HTMLElement,
     control: Control,
     parentVisual?: HTMLElement,
+    floatCtx?: FloatContext,
   ): void {
+    const floatDecision = this.floatGrabDecision(control, floatCtx);
+    if (floatDecision === 'float') {
+      this.startFloat(event, target, visual, control, parentVisual, floatCtx);
+      return;
+    }
+    if (floatDecision === 'rejected') {
+      event.preventDefault();
+      return;
+    }
     if (
-      control.binding &&
-      this.gyroLocked === control.binding &&
-      (control.type === 'joystick' ||
-        (control.type === 'hitzone' &&
-          (control.binding === 'leftStick' ||
-            control.binding === 'rightStick')))
+      this.stickBindingFor(control) !== null &&
+      this.gyroLocked === control.binding
     )
       return;
     event.preventDefault();
@@ -240,10 +312,213 @@ export class PointerInput {
   }
 
   private pointerMove(event: PointerEvent): void {
+    const floatSession = this.findFloatByOwner(event.pointerId);
+    if (floatSession) {
+      event.preventDefault();
+      this.updateFloat(event, floatSession);
+      return;
+    }
     const ownership = this.pointers.get(event.pointerId);
     if (!ownership) return;
     event.preventDefault();
     this.updatePointer(event, ownership);
+  }
+
+  private stickIdFor(control: Control): string {
+    if (control.type === 'hitzone') return control.parentId ?? control.id;
+    return control.id;
+  }
+
+  private stickBindingFor(control: Control): StickCommand | null {
+    if (control.binding === 'leftStick' || control.binding === 'rightStick') {
+      return control.binding as StickCommand;
+    }
+    return null;
+  }
+
+  private behaviorFor(floatCtx?: FloatContext): StickFeel {
+    const raw = floatCtx?.feel ?? 'fixed';
+    if (raw === 'floating' || raw === 'following') return raw;
+    return 'fixed';
+  }
+
+  private floatGrabDecision(
+    control: Control,
+    floatCtx?: FloatContext,
+  ): 'float' | 'rejected' | 'fixed' {
+    if (this.stickBindingFor(control) === null) return 'fixed';
+    if (control.type !== 'joystick' && control.type !== 'hitzone')
+      return 'fixed';
+    if (!floatCtx) return 'fixed';
+    if (this.behaviorFor(floatCtx) === 'fixed') return 'fixed';
+    if (this.floats.has(this.stickIdFor(control))) return 'rejected';
+    if (this.gyroLocked === control.binding) return 'rejected';
+    return 'float';
+  }
+
+  private startFloat(
+    event: PointerEvent,
+    target: HTMLElement,
+    visual: HTMLElement,
+    control: Control,
+    parentVisual: HTMLElement | undefined,
+    floatCtx: FloatContext | undefined,
+  ): void {
+    if (!floatCtx) return;
+    const stickId = this.stickIdFor(control);
+    const binding = this.stickBindingFor(control);
+    if (!binding) return;
+    const behavior = this.behaviorFor(floatCtx);
+    if (behavior === 'fixed') return;
+    event.preventDefault();
+    this.finishPointer(event.pointerId);
+    const stickVisual = parentVisual ?? visual;
+    const restRect = stickVisual.getBoundingClientRect();
+    const radiusPx = Math.max(1, Math.min(restRect.width, restRect.height) / 2);
+    const source = `pointer:${event.pointerId}:${stickId}`;
+    const originalParent = stickVisual.parentElement;
+    if (!originalParent) return;
+    const session: FloatSession = {
+      stickId,
+      ownerPointerId: event.pointerId,
+      source,
+      binding,
+      behavior,
+      driftCenter: { x: event.clientX, y: event.clientY },
+      radiusPx,
+      sectionEl: floatCtx.sectionEl,
+      floatLayer: floatCtx.floatLayer,
+      stickVisual,
+      originalParent,
+      originalNextSibling: stickVisual.nextSibling,
+      origLeft: stickVisual.style.left,
+      origTop: stickVisual.style.top,
+      origWidth: stickVisual.style.width,
+      origHeight: stickVisual.style.height,
+    };
+    this.floats.set(stickId, session);
+    const ownership: PointerOwnership = {
+      target,
+      visual: stickVisual,
+      control,
+      source,
+    };
+    this.pointers.set(event.pointerId, ownership);
+    this.markElement(stickVisual, event.pointerId, true);
+    try {
+      target.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is unavailable in a few embedded browser contexts.
+    }
+    floatCtx.floatLayer.append(stickVisual);
+    this.positionFloatVisual(session);
+    stickVisual.classList.add('is-floating-active');
+    stickVisual.style.setProperty('--axis-x', '0%');
+    stickVisual.style.setProperty('--axis-y', '0%');
+    this.state.setStick(source, binding, 0, 0);
+    this.feedback?.joystickPress?.();
+  }
+
+  private positionFloatVisual(session: FloatSession): void {
+    const layerRect = session.floatLayer.getBoundingClientRect();
+    const left = session.driftCenter.x - layerRect.left - session.radiusPx;
+    const top = session.driftCenter.y - layerRect.top - session.radiusPx;
+    const size = session.radiusPx * 2;
+    session.stickVisual.style.left = `${left}px`;
+    session.stickVisual.style.top = `${top}px`;
+    session.stickVisual.style.width = `${size}px`;
+    session.stickVisual.style.height = `${size}px`;
+  }
+
+  private updateFloat(event: PointerEvent, session: FloatSession): void {
+    const finger: Point = { x: event.clientX, y: event.clientY };
+    const dx = finger.x - session.driftCenter.x;
+    const dy = finger.y - session.driftCenter.y;
+    const length = Math.hypot(dx, dy);
+    if (
+      session.behavior === 'following' &&
+      length > session.radiusPx &&
+      length > 0
+    ) {
+      const direction: Point = { x: dx / length, y: dy / length };
+      session.driftCenter = clampFloatCenter(
+        finger,
+        direction,
+        session.radiusPx,
+        session.sectionEl.getBoundingClientRect(),
+      );
+      this.positionFloatVisual(session);
+    }
+    const driftedRect: RectLike = {
+      left: session.driftCenter.x - session.radiusPx,
+      top: session.driftCenter.y - session.radiusPx,
+      width: session.radiusPx * 2,
+      height: session.radiusPx * 2,
+    };
+    this.emitStick(
+      session.source,
+      session.binding,
+      finger,
+      driftedRect,
+      session.stickVisual,
+    );
+  }
+
+  private findFloatByOwner(pointerId: number): FloatSession | undefined {
+    for (const session of this.floats.values()) {
+      if (session.ownerPointerId === pointerId) return session;
+    }
+    return undefined;
+  }
+
+  private endFloatByOwner(pointerId: number): void {
+    const session = this.findFloatByOwner(pointerId);
+    if (!session) return;
+    this.floats.delete(session.stickId);
+    this.joystickArmed.delete(session.source);
+    this.state.clearSource(session.source);
+    session.stickVisual.classList.remove('is-floating-active');
+    session.stickVisual.style.setProperty('--axis-x', '0%');
+    session.stickVisual.style.setProperty('--axis-y', '0%');
+    session.stickVisual.setAttribute('aria-valuenow', '0');
+    session.stickVisual.style.left = session.origLeft;
+    session.stickVisual.style.top = session.origTop;
+    session.stickVisual.style.width = session.origWidth;
+    session.stickVisual.style.height = session.origHeight;
+    // The original subtree can be gone after a layout rebuild; the next
+    // render recreates the visual, so the drifted node is left for GC.
+    if (!session.originalParent.isConnected) return;
+    if (
+      session.originalNextSibling &&
+      session.originalNextSibling.parentNode === session.originalParent
+    ) {
+      session.originalParent.insertBefore(
+        session.stickVisual,
+        session.originalNextSibling,
+      );
+    } else {
+      session.originalParent.append(session.stickVisual);
+    }
+  }
+
+  private emitStick(
+    source: string,
+    binding: StickCommand,
+    finger: Point,
+    rect: RectLike,
+    thumbTarget: HTMLElement,
+  ): void {
+    const thumb = joystickVisualOffset(finger, rect);
+    const output = applyDeadzone(
+      thumb.x,
+      thumb.y,
+      this.joystickOptions.deadzone,
+      this.joystickOptions.sensitivity,
+    );
+    this.state.setStick(source, binding, output.x, output.y);
+    thumbTarget.style.setProperty('--axis-x', `${thumb.x * 100}%`);
+    thumbTarget.style.setProperty('--axis-y', `${thumb.y * 100}%`);
+    this.maybeTriggerJoystickEdge(source, Math.hypot(thumb.x, thumb.y));
   }
 
   private updatePointer(
@@ -292,27 +567,12 @@ export class PointerInput {
       }
       if (control.binding === 'leftStick' || control.binding === 'rightStick') {
         const rect = (parentVisual ?? visual).getBoundingClientRect();
-        const value = normalizeJoystickPoint(
-          { x: event.clientX, y: event.clientY },
-          rect,
-          this.joystickOptions,
-        );
-        this.state.setStick(
+        this.emitStick(
           source,
           control.binding as StickCommand,
-          value.x,
-          value.y,
-        );
-        const thumbOffset = joystickVisualOffset(
           { x: event.clientX, y: event.clientY },
           rect,
-        );
-        const thumbTarget = parentVisual ?? visual;
-        thumbTarget.style.setProperty('--axis-x', `${thumbOffset.x * 100}%`);
-        thumbTarget.style.setProperty('--axis-y', `${thumbOffset.y * 100}%`);
-        this.maybeTriggerJoystickEdge(
-          source,
-          Math.hypot(thumbOffset.x, thumbOffset.y),
+          parentVisual ?? visual,
         );
         return;
       }
@@ -355,29 +615,15 @@ export class PointerInput {
       control.type === 'joystick' &&
       (control.binding === 'leftStick' || control.binding === 'rightStick')
     ) {
-      const value = normalizeJoystickPoint(
-        { x: event.clientX, y: event.clientY },
-        rect,
-        this.joystickOptions,
-      );
-      this.state.setStick(
-        source,
-        control.binding as StickCommand,
-        value.x,
-        value.y,
-      );
       // The thumb tracks the finger 1:1 (deadzone only affects the output
       // value), clamped so its center stops at the rim and half the thumb
       // hangs over the base edge, like a physical stick.
-      const thumbOffset = joystickVisualOffset(
+      this.emitStick(
+        source,
+        control.binding as StickCommand,
         { x: event.clientX, y: event.clientY },
         rect,
-      );
-      visual.style.setProperty('--axis-x', `${thumbOffset.x * 100}%`);
-      visual.style.setProperty('--axis-y', `${thumbOffset.y * 100}%`);
-      this.maybeTriggerJoystickEdge(
-        source,
-        Math.hypot(thumbOffset.x, thumbOffset.y),
+        visual,
       );
       return;
     }
@@ -408,6 +654,7 @@ export class PointerInput {
   }
 
   private finishPointer(pointerId: number): void {
+    this.endFloatByOwner(pointerId);
     const ownership = this.pointers.get(pointerId);
     if (!ownership) return;
     this.pointers.delete(pointerId);
