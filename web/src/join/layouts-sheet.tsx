@@ -1,20 +1,75 @@
-import { ChevronLeftIcon, Pencil, Trash2 } from 'lucide-react';
+import {
+  ChevronLeftIcon,
+  Circle,
+  CircleCheck,
+  Pencil,
+  SquarePen,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { MountOptions } from './settings-island';
 
-interface ManageLayoutsSheetProps {
+interface LayoutsSheetProps {
   opts: MountOptions;
   onBack: () => void;
 }
 
-export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
+const rowClass = (selected: boolean) =>
+  `flex items-center gap-1 rounded-lg border px-2 py-1.5 ${
+    selected
+      ? 'border-primary/40 bg-primary/10'
+      : 'border-white/10 bg-white/[0.04]'
+  }`;
+
+export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
   const personalLayouts = opts.personalLayouts ?? [];
+  const hostLayouts = opts.layouts;
   const selectedId = opts.selectedLayout;
   const publishState = opts.publishState ?? null;
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  const selectBtn = (id: string, name: string) => {
+    const isSelected = id === selectedId;
+    return (
+      <button
+        type="button"
+        onClick={() => opts.onSelectLayout(id)}
+        aria-pressed={isSelected}
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+      >
+        {isSelected ? (
+          <CircleCheck className="size-3.5 shrink-0 text-primary" />
+        ) : (
+          <Circle className="size-3.5 shrink-0 text-muted-foreground/40" />
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm font-medium leading-tight">
+          {name}
+        </span>
+      </button>
+    );
+  };
+
+  const hostRow = (id: string, name: string) => (
+    <div key={id} className={rowClass(id === selectedId)}>
+      {selectBtn(id, name)}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 shrink-0 gap-1 px-1.5 text-xs"
+        onClick={(e) => {
+          e.stopPropagation();
+          opts.onEditPersonal?.(id);
+        }}
+      >
+        <Pencil className="size-3 shrink-0" />
+        Edit
+      </Button>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -27,17 +82,15 @@ export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
         >
           <ChevronLeftIcon className="size-4" />
         </Button>
-        <h3 className="text-sm font-semibold">Manage my layouts</h3>
-        {personalLayouts.length > 0 && (
-          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-            {personalLayouts.length} saved
-          </span>
-        )}
+        <h3 className="text-sm font-semibold">Layout</h3>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {personalLayouts.length + hostLayouts.length}
+        </span>
       </div>
 
       {publishState && (
-        <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
-          <p className="font-medium leading-relaxed">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+          <p className="font-medium">
             Publishing &apos;{publishState.name}&apos; — waiting for host
             approval... {publishState.remaining}s
           </p>
@@ -54,27 +107,15 @@ export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
         </div>
       )}
 
-      {personalLayouts.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center">
-          <p className="text-sm font-medium">No personal edits yet</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Tap{' '}
-            <span className="inline-flex relative items-center gap-1 mt-1 top-0.5  font-medium text-foreground">
-              <Pencil className="size-3" /> Edit current layout
-            </span>{' '}
-            to create a personalized copy.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
+      {personalLayouts.length > 0 && (
+        <section className="space-y-1.5">
+          <h4 className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            My edits
+          </h4>
           {personalLayouts.map((pl) => {
-            const isSelected = pl.id === selectedId;
             const isRenaming = renameId === pl.id;
             return (
-              <div
-                key={pl.id}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 ${isSelected ? 'border-violet-500/25 bg-violet-500/10' : 'border-white/10 bg-white/5'}`}
-              >
+              <div key={pl.id} className={rowClass(pl.id === selectedId)}>
                 {isRenaming ? (
                   <div className="flex min-w-0 flex-1 items-center gap-1">
                     <Input
@@ -94,7 +135,7 @@ export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-2 text-xs shrink-0"
+                      className="h-7 shrink-0 px-2 text-xs"
                       onClick={() => {
                         opts.onRenamePersonal?.(pl.id, renameValue);
                         setRenameId(null);
@@ -105,7 +146,7 @@ export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2 text-xs shrink-0"
+                      className="h-7 shrink-0 px-2 text-xs"
                       onClick={() => setRenameId(null)}
                     >
                       ✕
@@ -113,44 +154,46 @@ export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
                   </div>
                 ) : (
                   <>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium leading-none">
-                        {pl.name}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    {selectBtn(pl.id, pl.name)}
+                    <div className="flex shrink-0 items-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs"
+                        className="h-6 gap-1 px-1.5 text-xs"
                         onClick={() => opts.onEditPersonal?.(pl.id)}
                       >
+                        <Pencil className="size-3 shrink-0" />
                         Edit
                       </Button>
+                      <span className="mx-1 h-3 w-px shrink-0 bg-white/10" />
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs"
+                        className="h-6 gap-1 px-1.5 text-xs"
                         onClick={() => {
                           setRenameId(pl.id);
                           setRenameValue(pl.name);
                         }}
                       >
+                        <SquarePen className="size-3 shrink-0" />
                         Rename
                       </Button>
+                      <span className="mx-1 h-3 w-px shrink-0 bg-white/10" />
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs"
+                        className="h-6 gap-1 px-1.5 text-xs"
                         onClick={() => opts.onPublishPersonal?.(pl.id)}
                         disabled={!!publishState}
                       >
+                        <Upload className="size-3 shrink-0" />
                         Publish
                       </Button>
+                      <span className="mx-1 h-3 w-px shrink-0 bg-white/10" />
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="size-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         aria-label={`Delete ${pl.name}`}
                         onClick={() => opts.onDeletePersonal?.(pl.id)}
                       >
@@ -162,13 +205,21 @@ export function ManageLayoutsSheet({ opts, onBack }: ManageLayoutsSheetProps) {
               </div>
             );
           })}
-        </div>
+        </section>
       )}
 
-      <p className="pt-1 text-xs leading-relaxed text-muted-foreground">
-        Personal edits are stored locally on this device. Publish sends a copy
-        to the host for approval.
-      </p>
+      <section className="space-y-1.5">
+        <h4 className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+          Host layouts
+        </h4>
+        {hostLayouts.length === 0 ? (
+          <p className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+            No host layouts available.
+          </p>
+        ) : (
+          hostLayouts.map((l) => hostRow(l.id, l.name))
+        )}
+      </section>
     </div>
   );
 }

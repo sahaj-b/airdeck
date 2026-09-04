@@ -467,7 +467,6 @@ function showController(options: {
 
   let availableLayouts: { id: string; name: string }[] = [];
   let currentLayoutId = '';
-  let currentLayoutDoc: LayoutDocument = DEFAULT_LAYOUT;
   let playerId = '';
   let currentPlayerDisplayName = options.displayName || '';
   let connectionText = CONNECTION_LABELS.connecting;
@@ -516,7 +515,6 @@ function showController(options: {
       chrome,
       stickPrefs: getStickPrefs(),
     });
-    currentLayoutDoc = doc;
     currentLayoutId = doc.id;
     writeStorage(SELECTED_LAYOUT_KEY, doc.id);
     syncGyroLock();
@@ -569,25 +567,40 @@ function showController(options: {
     if (socket.selectLayout(id)) updateStatus('Loading layout...');
   };
 
+  // Personal copies get the player's name so two phones editing the same
+  // host layout don't overwrite each other's doc.
+  const editNameFor = (base: LayoutDocument): string => {
+    const rawPlayer =
+      currentPlayerDisplayName || readStorage(DISPLAY_NAME_KEY) || '';
+    const isDefault =
+      !rawPlayer.trim() || DEFAULT_NAME_PATTERN.test(rawPlayer.trim());
+    const suffix = isDefault ? 'Copy' : rawPlayer.trim();
+    return `${base.name} ${suffix}`.trim();
+  };
+
   const handleEditPersonal = async (editId: string) => {
-    let docToEdit: LayoutDocument | undefined;
-    if (editId === '__new_from_current') {
-      const base = currentLayoutDoc;
-      const isPersonal = isPersonalLayout(base.id);
-      if (isPersonal) {
-        docToEdit = { ...structuredClone(base), name: base.name };
-      } else {
-        const rawPlayer =
-          currentPlayerDisplayName || readStorage(DISPLAY_NAME_KEY) || '';
-        const isDefault =
-          !rawPlayer.trim() || DEFAULT_NAME_PATTERN.test(rawPlayer.trim());
-        const suffix = isDefault ? 'Copy' : rawPlayer.trim();
-        const newName = `${base.name} ${suffix}`.trim();
-        docToEdit = { ...structuredClone(base), name: newName };
+    let docToEdit: LayoutDocument | undefined = loadPersonalLayouts()[editId];
+    if (!docToEdit) {
+      // Host layout: the client only has id+name, so fetch the full doc.
+      if (!availableLayouts.some((l) => l.id === editId)) return;
+      try {
+        const res = await fetch(`/api/layouts/${encodeURIComponent(editId)}`);
+        if (!res.ok) throw new Error(`layout fetch failed: ${res.status}`);
+        const doc: unknown = await res.json();
+        if (validateLayout(doc)) {
+          docToEdit = {
+            ...structuredClone(doc),
+            name: editNameFor(doc),
+          };
+        }
+      } catch (err) {
+        console.error('Failed to load layout for editing', err);
       }
-    } else {
-      docToEdit = loadPersonalLayouts()[editId];
-      if (!docToEdit) docToEdit = currentLayoutDoc;
+      if (!docToEdit) {
+        updateStatus('Could not load that layout.');
+        setTimeout(() => updateStatus(null), 3000);
+        return;
+      }
     }
     // Close settings drawer while editing to avoid overlapping overlays
     if (island && !island.isDestroyed()) {
@@ -882,7 +895,6 @@ function showController(options: {
         const personalDoc = loadPersonalLayouts()[stored];
         if (personalDoc && validateLayout(personalDoc)) {
           currentLayoutId = stored;
-          currentLayoutDoc = personalDoc;
           renderLocalLayout(personalDoc);
           if (island && !island.isDestroyed())
             island.update({
@@ -909,7 +921,6 @@ function showController(options: {
         chrome,
         stickPrefs: getStickPrefs(),
       });
-      currentLayoutDoc = layout;
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
       syncGyroLock();

@@ -19,6 +19,9 @@ export function StickFeelSettings({ opts }: { opts: MountOptions }) {
   const store = opts.store;
   const feel = useStore(store, (s) => s.stickFeel);
   const grab = useStore(store, (s) => s.stickGrab);
+  const gyroEnabled = useStore(store, (s) => s.gyroEnabled);
+  const gyroTarget = useStore(store, (s) => s.gyroTarget);
+  const gyroMode = useStore(store, (s) => s.gyroMode);
   const setFeel = useStore(store, (s) => s.setStickFeel);
   const setGrab = useStore(store, (s) => s.setStickGrab);
 
@@ -28,6 +31,12 @@ export function StickFeelSettings({ opts }: { opts: MountOptions }) {
         Stick Feel
       </div>
       <div className="space-y-3 p-3 pt-4">
+        {gyroEnabled && (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed">
+            Gyro drives {gyroTarget === 'leftStick' ? 'left' : 'right'} stick (
+            {gyroMode}). Touch still works, but tilt owns that stick.
+          </p>
+        )}
         <TryPad feel={feel} grab={grab} />
         <fieldset className="grid grid-cols-3 gap-2">
           <legend className="sr-only">Stick feel</legend>

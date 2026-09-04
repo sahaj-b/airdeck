@@ -1,30 +1,19 @@
 import {
   ChevronRight,
   Gamepad2,
-  Layers,
   Paintbrush,
-  Pencil,
   Vibrate,
   VibrateOff,
   Volume2,
   VolumeOff,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from 'zustand';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-} from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
+import { NativeSlider } from '@/components/ui/native-slider';
 import { Switch } from '@/components/ui/switch';
 import { SKINS } from '@/skins';
-import { getSkin, setSkin } from '@/skins/loader';
 import type { MountOptions } from './settings-island';
 import { StickFeelSettings } from './stick-feel-settings';
 
@@ -140,15 +129,23 @@ function formatVibration(ms: number): string {
   return ms > 0 ? `${ms} ms` : 'Off';
 }
 
+const drillRow =
+  'flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-accent/50';
+const drillLabel = 'flex shrink-0 items-center gap-2 text-sm font-medium';
+const drillValue = 'truncate text-sm text-muted-foreground';
+const drillValueWrap = 'flex min-w-0 flex-1 items-center justify-end gap-1.5';
+
 export function InlineSettingsPanel({
   opts,
   onOpenGyro,
-  onOpenManage,
+  onOpenLayouts,
+  onOpenSkins,
   onClose,
 }: {
   opts: MountOptions;
   onOpenGyro: () => void;
-  onOpenManage: () => void;
+  onOpenLayouts: () => void;
+  onOpenSkins: () => void;
   onClose: () => void;
 }) {
   const store = opts.store;
@@ -165,27 +162,10 @@ export function InlineSettingsPanel({
   const setRumble = useStore(store, (s) => s.setRumble);
   const setSound = useStore(store, (s) => s.setSound);
   const setIgnoreCutout = useStore(store, (s) => s.setIgnoreCutout);
-  const setStoreSkin = useStore(store, (s) => s.setSkin);
+  const skin = useStore(store, (s) => s.skin);
   const gyroEnabled = useStore(store, (s) => s.gyroEnabled);
   const gyroTarget = useStore(store, (s) => s.gyroTarget);
   const gyroMode = useStore(store, (s) => s.gyroMode);
-  const [skin, setSkinLocal] = useState(() => getSkin());
-
-  useEffect(() => {
-    const unsub = store.subscribe((state) => {
-      if (state.skin !== skin) {
-        setSkinLocal(state.skin);
-        setSkin(state.skin);
-      }
-    });
-    return unsub;
-  }, [store, skin]);
-
-  const handleSkinChange = (id: string) => {
-    setSkinLocal(id);
-    setStoreSkin(id);
-    setSkin(id);
-  };
 
   const hapticsAvailable = feedback.hapticsAvailable;
   const feedbackOn =
@@ -263,115 +243,32 @@ export function InlineSettingsPanel({
           Controller
         </div>
         <div className="divide-y">
-          <div className="space-y-2.5 px-3 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Gamepad2 className="size-4 shrink-0 text-muted-foreground" />
-                <span className="text-sm font-medium">Layout</span>
-              </div>
-              <Select
-                value={opts.selectedLayout}
-                onValueChange={(v) => v && opts.onSelectLayout(v)}
-              >
-                <SelectTrigger className="h-8 w-[calc(50%-4px)] shrink-0 gap-1.5 border-white/20 bg-white/[0.08] dark:bg-white/[0.08] pl-2.5 pr-2 backdrop-blur-sm shadow-sm">
-                  <span className="flex-1 truncate text-left text-sm">
-                    {selectedLayoutName || 'Select layout'}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {personalLayouts.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>My edits</SelectLabel>
-                      {personalLayouts.map((l) => (
-                        <SelectItem key={l.id} value={l.id}>
-                          {l.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  <SelectGroup>
-                    <SelectLabel>Host layouts</SelectLabel>
-                    {hostLayouts.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-auto min-h-7 w-full whitespace-normal bg-black/20 py-1.5 text-xs leading-tight backdrop-blur-sm hover:bg-black/30 dark:bg-zinc-900 dark:border-white/15"
-                onClick={() => opts.onEditPersonal?.('__new_from_current')}
-              >
-                <Pencil className="size-3.5 shrink-0" />
-                <span className="text-center">Edit current layout</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-auto min-h-7 w-full whitespace-normal border-white/30 bg-black/20 py-1.5 text-xs leading-tight backdrop-blur-sm hover:bg-black/30 dark:bg-zinc-900 dark:border-white/15"
-                onClick={onOpenManage}
-              >
-                <Layers className="size-3.5 shrink-0" />
-                <span className="text-center">Manage my layouts</span>
-              </Button>
-            </div>
-            {opts.publishState && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
-                <p className="font-medium">
-                  Publishing &apos;{opts.publishState.name}&apos; — waiting for
-                  host approval... {opts.publishState.remaining}s
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => opts.onCancelPublish?.()}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between gap-3 px-3 py-3">
-            <div className="flex items-center gap-2">
-              <Paintbrush className="size-4 shrink-0 text-muted-foreground" />
-              <span className="text-sm font-medium">Skin</span>
-            </div>
-            <Select
-              value={skin}
-              onValueChange={(v) => v && handleSkinChange(v)}
-            >
-              <SelectTrigger className="h-8 w-[calc(50%-4px)] shrink-0 gap-1.5 border-white/20 bg-white/[0.08] dark:bg-white/[0.08] pl-2.5 pr-2 backdrop-blur-sm shadow-sm">
-                <span className="flex-1 truncate text-left text-sm">
-                  {selectedSkinName || 'Select skin'}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {SKINS.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-accent/50"
-            onClick={onOpenGyro}
-          >
-            <span className="flex items-center gap-2">
-              <GyroIcon className="size-[18px] shrink-0 text-foreground" />
-              <span className="text-sm font-medium">Gyroscope</span>
+          <button type="button" className={drillRow} onClick={onOpenLayouts}>
+            <span className={drillLabel}>
+              <Gamepad2 className="size-4 shrink-0 text-muted-foreground" />
+              Layout
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className={drillValueWrap}>
+              <span className={drillValue}>{selectedLayoutName}</span>
+              <ChevronRight className="size-4 shrink-0 text-foreground" />
+            </span>
+          </button>
+          <button type="button" className={drillRow} onClick={onOpenSkins}>
+            <span className={drillLabel}>
+              <Paintbrush className="size-4 shrink-0 text-muted-foreground" />
+              Skins
+            </span>
+            <span className={drillValueWrap}>
+              <span className={drillValue}>{selectedSkinName}</span>
+              <ChevronRight className="size-4 shrink-0 text-foreground" />
+            </span>
+          </button>
+          <button type="button" className={drillRow} onClick={onOpenGyro}>
+            <span className={drillLabel}>
+              <GyroIcon className="size-[18px] shrink-0 text-foreground" />
+              Gyroscope
+            </span>
+            <span className={drillValueWrap}>
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest ${gyroEnabled ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground ring-1 ring-border'}`}
               >
@@ -379,7 +276,7 @@ export function InlineSettingsPanel({
                   ? `${gyroMode.toUpperCase()} · ${gyroTarget === 'leftStick' ? 'LEFT STICK' : 'RIGHT STICK'}`
                   : 'OFF'}
               </span>
-              <ChevronRight className="size-3.5 shrink-0 opacity-60" />
+              <ChevronRight className="size-4 shrink-0 text-foreground" />
             </span>
           </button>
         </div>
@@ -483,25 +380,17 @@ export function InlineSettingsPanel({
                 <span className="w-11 text-right text-sm font-semibold tabular-nums whitespace-nowrap">
                   {formatVibration(vibrationMs)}
                 </span>
-                <Slider
-                  className="w-full"
-                  value={[vibrationMs]}
+                <NativeSlider
+                  label="Button press vibration"
+                  value={vibrationMs}
                   min={0}
                   max={100}
                   step={5}
-                  onValueChange={(value) => {
-                    const next = Array.isArray(value)
-                      ? (value[0] ?? 0)
-                      : ((value as number) ?? 0);
+                  onChange={(next) => {
                     setVibrationMs(next);
                     feedback.setPreferences({ pressVibrationMs: next });
                   }}
-                  onValueCommitted={(value) => {
-                    const next = Array.isArray(value)
-                      ? (value[0] ?? 0)
-                      : ((value as number) ?? 0);
-                    previewVibration(next);
-                  }}
+                  onCommit={previewVibration}
                 />
               </div>
               <div className="grid grid-cols-[1fr_auto_135px] sm:grid-cols-[1fr_auto_165px] items-center gap-2">
@@ -509,25 +398,17 @@ export function InlineSettingsPanel({
                 <span className="w-11 text-right text-sm font-semibold tabular-nums whitespace-nowrap">
                   {formatVibration(joystickPressMs)}
                 </span>
-                <Slider
-                  className="w-full"
-                  value={[joystickPressMs]}
+                <NativeSlider
+                  label="Joystick press vibration"
+                  value={joystickPressMs}
                   min={0}
                   max={100}
                   step={5}
-                  onValueChange={(value) => {
-                    const next = Array.isArray(value)
-                      ? (value[0] ?? 0)
-                      : ((value as number) ?? 0);
+                  onChange={(next) => {
                     setJoystickPressMs(next);
                     feedback.setPreferences({ joystickPressMs: next });
                   }}
-                  onValueCommitted={(value) => {
-                    const next = Array.isArray(value)
-                      ? (value[0] ?? 0)
-                      : ((value as number) ?? 0);
-                    previewVibration(next);
-                  }}
+                  onCommit={previewVibration}
                 />
               </div>
               <div className="grid grid-cols-[1fr_auto_135px] sm:grid-cols-[1fr_auto_165px] items-center gap-2">
@@ -535,25 +416,17 @@ export function InlineSettingsPanel({
                 <span className="w-11 text-right text-sm font-semibold tabular-nums whitespace-nowrap">
                   {formatVibration(joystickEdgeMs)}
                 </span>
-                <Slider
-                  className="w-full"
-                  value={[joystickEdgeMs]}
+                <NativeSlider
+                  label="Joystick at edge vibration"
+                  value={joystickEdgeMs}
                   min={0}
                   max={100}
                   step={5}
-                  onValueChange={(value) => {
-                    const next = Array.isArray(value)
-                      ? (value[0] ?? 0)
-                      : ((value as number) ?? 0);
+                  onChange={(next) => {
                     setJoystickEdgeMs(next);
                     feedback.setPreferences({ joystickEdgeMs: next });
                   }}
-                  onValueCommitted={(value) => {
-                    const next = Array.isArray(value)
-                      ? (value[0] ?? 0)
-                      : ((value as number) ?? 0);
-                    previewVibration(next);
-                  }}
+                  onCommit={previewVibration}
                 />
               </div>
             </div>
