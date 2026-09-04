@@ -9,6 +9,13 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import type { MountOptions } from './settings-island';
 
@@ -31,6 +38,8 @@ export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
   const publishState = opts.publishState ?? null;
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const deleteTarget = personalLayouts.find((pl) => pl.id === deleteId) ?? null;
 
   const selectBtn = (id: string, name: string) => {
     const isSelected = id === selectedId;
@@ -91,7 +100,7 @@ export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
       {publishState && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
           <p className="font-medium">
-            Publishing &apos;{publishState.name}&apos; — waiting for host
+            Publishing &apos;{publishState.name}&apos;. Waiting for host
             approval... {publishState.remaining}s
           </p>
           <div className="mt-2 flex gap-2">
@@ -165,7 +174,7 @@ export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
                         <Pencil className="size-3 shrink-0" />
                         Edit
                       </Button>
-                      <span className="mx-1 h-3 w-px shrink-0 bg-white/10" />
+                      <span className="h-3 w-px shrink-0 bg-white/40" />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -178,7 +187,7 @@ export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
                         <SquarePen className="size-3 shrink-0" />
                         Rename
                       </Button>
-                      <span className="mx-1 h-3 w-px shrink-0 bg-white/10" />
+                      <span className="h-3 w-px shrink-0 bg-white/40" />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -189,13 +198,13 @@ export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
                         <Upload className="size-3 shrink-0" />
                         Publish
                       </Button>
-                      <span className="mx-1 h-3 w-px shrink-0 bg-white/10" />
+                      <span className="h-3 w-px shrink-0 bg-white/40" />
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         className="size-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         aria-label={`Delete ${pl.name}`}
-                        onClick={() => opts.onDeletePersonal?.(pl.id)}
+                        onClick={() => setDeleteId(pl.id)}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -220,6 +229,39 @@ export function LayoutsSheet({ opts, onBack }: LayoutsSheetProps) {
           hostLayouts.map((l) => hostRow(l.id, l.name))
         )}
       </section>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Delete layout?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Delete &quot;{deleteTarget?.name}&quot;? This cannot be undone.
+          </AlertDialogDescription>
+          <div className="flex justify-end gap-2 pt-2">
+            <AlertDialogCancel
+              render={
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (deleteTarget) opts.onDeletePersonal?.(deleteTarget.id);
+                setDeleteId(null);
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

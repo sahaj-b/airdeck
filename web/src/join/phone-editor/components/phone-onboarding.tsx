@@ -12,7 +12,7 @@ import {
   PinchGestureIcon,
   ThreeFingerTapIcon,
   TwoFingerTapIcon,
-} from './phone-icons';
+} from '../../phone-icons';
 
 interface OnboardingProps {
   onDismiss: () => void;

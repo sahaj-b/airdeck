@@ -1,69 +1,9 @@
-.try-pad {
-  cursor: grab;
-}
-
-.try-pad:active {
-  cursor: grabbing;
-}
-
-.try-pad-wide {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    rgb(255 255 255 / 0.05) 0 2px,
-    transparent 2px 8px
-  );
-  pointer-events: none;
-}
-
-.try-pad-base {
-  position: absolute;
-  border-radius: 9999px;
-  border: 2px solid rgb(255 255 255 / 0.75);
-  background: rgb(255 255 255 / 0.08);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.45);
-  pointer-events: none;
-  display: grid;
-  place-items: center;
-}
-
-.try-pad-thumb {
-  width: 22px;
-  height: 22px;
-  border-radius: 9999px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.5);
-  pointer-events: none;
-}
-
-.try-pad-base--precise::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: repeating-linear-gradient(
-    135deg,
-    rgb(255 255 255 / 0.05) 0 2px,
-    transparent 2px 8px
-  );
-  pointer-events: none;
-}
-
-.try-pad-base--precise .try-pad-thumb {
-  position: relative;
-  z-index: 1;
-}
-
 .stick-mini {
   position: relative;
   display: block;
   width: 44px;
   height: 32px;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 0.06);
-  border: 1px solid rgb(255 255 255 / 0.12);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .stick-mini-base {
@@ -93,29 +33,33 @@
 }
 
 .stick-mini--floating .stick-mini-base {
-  animation: stick-float-jump 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+  animation: stick-float-jump 1.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
 }
 
-.stick-mini--floating .stick-mini-base::after {
+.stick-mini--floating .stick-mini-base::after,
+.stick-mini--following .stick-mini-base::after {
   content: "";
   position: absolute;
   inset: -1.5px;
   border-radius: 9999px;
-  border: 1.5px solid rgb(255 255 255 / 0.8);
-  animation: stick-float-tap 2.4s ease-out infinite;
+  border: 2px solid rgb(255 255 255 / 0.95);
   pointer-events: none;
 }
 
-.stick-mini--floating .stick-mini-thumb {
-  animation: none;
+.stick-mini--floating .stick-mini-base::after {
+  animation: stick-float-tap 1.6s ease-out infinite;
 }
 
 .stick-mini--following .stick-mini-base {
-  animation: stick-follow-base 2.4s ease-in-out infinite;
+  animation: stick-follow-base 1.2s ease-in-out infinite;
+}
+
+.stick-mini--following .stick-mini-base::after {
+  animation: stick-follow-tap 1.2s ease-out infinite;
 }
 
 .stick-mini--following .stick-mini-thumb {
-  animation: stick-follow-thumb 2.4s ease-in-out infinite;
+  animation: stick-follow-thumb 1.2s ease-in-out infinite;
 }
 
 @keyframes stick-fixed-orbit {
@@ -138,22 +82,22 @@
 
 @keyframes stick-float-jump {
   0%,
-  30% {
+  15% {
     transform: translate(-8px, -4px) scale(1);
   }
-  35%,
-  40% {
+  25%,
+  30% {
     transform: translate(8px, 4px) scale(0.92);
   }
-  45%,
-  80% {
+  35%,
+  65% {
     transform: translate(8px, 4px) scale(1);
   }
-  85%,
-  90% {
+  75%,
+  80% {
     transform: translate(-8px, -4px) scale(0.92);
   }
-  95%,
+  85%,
   100% {
     transform: translate(-8px, -4px) scale(1);
   }
@@ -161,59 +105,97 @@
 
 @keyframes stick-float-tap {
   0%,
-  32% {
+  18% {
     transform: scale(0.6);
     opacity: 0;
   }
-  34% {
+  22% {
     transform: scale(0.6);
-    opacity: 0.9;
+    opacity: 1;
   }
-  50% {
+  38% {
     transform: scale(1.5);
     opacity: 0;
   }
-  51%,
-  78% {
+  39%,
+  68% {
     transform: scale(0.6);
     opacity: 0;
   }
-  83% {
+  72% {
     transform: scale(0.6);
-    opacity: 0.9;
+    opacity: 1;
   }
+  88% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  89%,
   100% {
-    transform: scale(1.5);
+    transform: scale(0.6);
     opacity: 0;
   }
 }
 
 @keyframes stick-follow-base {
   0%,
-  30% {
-    transform: translate(-6px, 0);
+  6% {
+    transform: translate(-10px, -3px) scale(1);
+  }
+  14% {
+    transform: translate(-8px, 4px) scale(0.92);
+  }
+  20% {
+    transform: translate(-8px, 4px) scale(1);
+  }
+  26% {
+    transform: translate(-8px, 4px) scale(1);
     animation-timing-function: linear;
   }
-  50%,
-  80% {
-    transform: translate(6px, 0);
+  70% {
+    transform: translate(8px, 4px) scale(1);
   }
-  95%,
+  74% {
+    transform: translate(8px, 4px) scale(1);
+  }
+  86%,
   100% {
-    transform: translate(-6px, 0);
+    transform: translate(-10px, -3px) scale(1);
+  }
+}
+
+@keyframes stick-follow-tap {
+  0%,
+  6% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  10% {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  42% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  43%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0;
   }
 }
 
 @keyframes stick-follow-thumb {
   0%,
-  15% {
+  12% {
     transform: translate(0, 0);
+    animation-timing-function: linear;
   }
-  30%,
-  80% {
+  26%,
+  74% {
     transform: translate(5px, 0);
   }
-  95%,
+  86%,
   100% {
     transform: translate(0, 0);
   }
@@ -221,28 +203,17 @@
 
 .grab-thumb {
   display: block;
-  width: 40px;
-  height: 30px;
+  width: 44px;
+  height: 32px;
   flex-shrink: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid rgb(255 255 255 / 0.18);
   background: rgb(255 255 255 / 0.05);
   position: relative;
   overflow: hidden;
 }
 
-.grab-thumb--wide::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    rgb(255 255 255 / 0.16) 0 2px,
-    transparent 2px 6px
-  );
-}
-
-.grab-thumb--precise::after {
+.grab-thumb::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -251,7 +222,19 @@
   height: 20px;
   margin: -10px 0 0 -10px;
   border-radius: 9999px;
-  border: 1.5px solid rgb(255 255 255 / 0.65);
+  border: 1.5px solid rgb(255 255 255 / 0.75);
+  background: rgb(255 255 255 / 0.1);
+}
+
+.grab-thumb--wide {
+  background: repeating-linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.16) 0 2px,
+    transparent 2px 6px
+  );
+}
+
+.grab-thumb--precise::after {
   background:
     repeating-linear-gradient(
       135deg,
@@ -264,7 +247,8 @@
 @media (prefers-reduced-motion: reduce) {
   .stick-mini-base,
   .stick-mini-thumb,
-  .stick-mini--floating .stick-mini-base::after {
+  .stick-mini--floating .stick-mini-base::after,
+  .stick-mini--following .stick-mini-base::after {
     animation: none;
   }
 }

@@ -77,17 +77,10 @@ function IslandRoot({
       swipeDirection="right"
     >
       <DrawerContent
-        className="flex flex-col max-w-[32rem] data-[swipe-axis=x]:![--drawer-content-width:55%]"
+        className="flex flex-col max-w-[28rem] data-[swipe-axis=x]:![--drawer-content-width:50%]"
         aria-describedby={undefined}
       >
-        <div
-          ref={scrollRef}
-          className={
-            view === 'gyro'
-              ? `${VIEW_SCROLL_CLASS} space-y-5`
-              : VIEW_SCROLL_CLASS
-          }
-        >
+        <div ref={scrollRef} className={VIEW_SCROLL_CLASS}>
           {view === 'main' && (
             <InlineSettingsPanel
               opts={opts}
