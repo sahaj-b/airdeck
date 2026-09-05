@@ -29,15 +29,16 @@ export function PublishApprovalBanner({ store }: PublishApprovalBannerProps) {
               type="button"
               size="sm"
               disabled={busy === pending.id}
-              onClick={async () => {
+              onClick={() => {
                 setBusy(pending.id);
-                try {
-                  await store.acceptPublishRequest(pending.id);
-                } catch {
-                  // error handled by store
-                } finally {
-                  setBusy(null);
-                }
+                void store
+                  .acceptPublishRequest(pending.id)
+                  .catch(() => {
+                    // error handled by store
+                  })
+                  .finally(() => {
+                    setBusy(null);
+                  });
               }}
             >
               Accept
@@ -47,15 +48,16 @@ export function PublishApprovalBanner({ store }: PublishApprovalBannerProps) {
               variant="outline"
               size="sm"
               disabled={busy === pending.id}
-              onClick={async () => {
+              onClick={() => {
                 setBusy(pending.id);
-                try {
-                  await store.declinePublishRequest(pending.id);
-                } catch {
-                  // error handled by store
-                } finally {
-                  setBusy(null);
-                }
+                void store
+                  .declinePublishRequest(pending.id)
+                  .catch(() => {
+                    // error handled by store
+                  })
+                  .finally(() => {
+                    setBusy(null);
+                  });
               }}
             >
               Decline

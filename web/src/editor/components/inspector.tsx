@@ -1,5 +1,4 @@
 import { Copy, PanelRightClose, Trash2 } from 'lucide-react';
-import { useMemo } from 'react';
 import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -74,29 +73,17 @@ export function Inspector({
   const control = selectedControl?.control ?? null;
   const section = selectedControl?.section ?? selectedSection ?? null;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedControl derived from selectedControlId/document; depend on IDs to avoid object identity churn
-  const fieldErrors = useMemo(() => {
-    const map = new Map<string, string>();
-    let prefix: string | null = null;
-    if (selectedControl) {
-      prefix = `/sections/${selectedControl.section.id}/controls/${selectedControl.control.id}`;
-    } else if (selectedSectionId) {
-      prefix = `/sections/${selectedSectionId}`;
-    }
-    if (!prefix) return map;
-    for (const error of errors) {
-      if (!error.path.startsWith(prefix)) continue;
-      const parts = error.path.split('/');
-      map.set(parts[parts.length - 1], error.message);
-    }
-    return map;
-  }, [errors, selectedControlId, selectedSectionId]);
+  let errorPrefix: string | null = null;
+  if (selectedControl) {
+    errorPrefix = `/sections/${selectedControl.section.id}/controls/${selectedControl.control.id}`;
+  } else if (selectedSectionId) {
+    errorPrefix = `/sections/${selectedSectionId}`;
+  }
+  const fieldErrors = collectFieldErrors(errors, errorPrefix);
 
   // Top-level summary without raw path dump
-  const relevantErrors = useMemo(() => {
-    if (selectedControlId || selectedSectionId) return [];
-    return errors.slice(0, 3);
-  }, [errors, selectedControlId, selectedSectionId]);
+  const relevantErrors =
+    selectedControlId || selectedSectionId ? [] : errors.slice(0, 3);
 
   return (
     <section className="flex min-h-0 w-full flex-col gap-3 bg-transparent p-2 overflow-y-auto overscroll-contain">
@@ -226,6 +213,20 @@ export function Inspector({
       </div>
     </section>
   );
+}
+
+function collectFieldErrors(
+  errors: ValidationError[],
+  prefix: string | null,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!prefix) return map;
+  for (const error of errors) {
+    if (!error.path.startsWith(prefix)) continue;
+    const parts = error.path.split('/');
+    map.set(parts[parts.length - 1], error.message);
+  }
+  return map;
 }
 
 function DocumentMeta({

@@ -77,29 +77,33 @@ export function LayoutHeader(props: LayoutHeaderProps) {
       ? 'This is the default layout. You can edit it, but not delete it.'
       : null;
 
-  const handleRename = async (): Promise<void> => {
+  const handleRename = (): void => {
     const name = renameValue.trim();
     if (!name || name === props.currentName) {
       setRenameOpen(false);
       return;
     }
     setBusy(true);
-    try {
-      await props.onRename(name);
-      setRenameOpen(false);
-    } finally {
-      setBusy(false);
-    }
+    void props
+      .onRename(name)
+      .then(() => {
+        setRenameOpen(false);
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
 
-  const handleDelete = async (): Promise<void> => {
+  const handleDelete = (): void => {
     setBusy(true);
-    try {
-      await props.onDelete();
-      setDeleteOpen(false);
-    } finally {
-      setBusy(false);
-    }
+    void props
+      .onDelete()
+      .then(() => {
+        setDeleteOpen(false);
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
 
   return (

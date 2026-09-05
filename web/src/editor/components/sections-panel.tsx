@@ -1,5 +1,5 @@
 import { Copy, GripVertical, PanelLeftClose, Plus, Trash2 } from 'lucide-react';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -57,37 +57,25 @@ export function SectionsPanel({
   onHoverControl,
   onCollapse,
 }: SectionsPanelProps) {
-  const selectedPeerIds = useMemo(() => {
-    if (!selectedControlId) return new Set<string>();
-    const found = document.sections
-      .flatMap((section) => section.controls)
-      .find((control) => control.id === selectedControlId);
-    if (!found || found.type === 'hitzone') return new Set<string>();
-    const hitzones = getHitzonesOf(document, selectedControlId);
-    return new Set<string>(hitzones);
-  }, [document, selectedControlId]);
+  // Validation forbids hitzones parenting hitzones, so a hitzone id never
+  // has peers and no type lookup is needed. Unknown ids match nothing.
+  const selectedPeerIds = new Set(
+    selectedControlId ? getHitzonesOf(document, selectedControlId) : [],
+  );
+  const hoveredPeerIds = new Set(
+    hoveredControlId ? getHitzonesOf(document, hoveredControlId) : [],
+  );
+  const controlById = buildControlById(document);
 
-  const hoveredPeerIds = useMemo(() => {
-    if (!hoveredControlId) return new Set<string>();
-    const found = document.sections
-      .flatMap((section) => section.controls)
-      .find((control) => control.id === hoveredControlId);
-    if (!found) return new Set<string>();
-    if (found.type === 'hitzone') return new Set<string>();
-    const hitzones = getHitzonesOf(document, hoveredControlId);
-    return new Set<string>(hitzones);
-  }, [document, hoveredControlId]);
-
-  const targetSectionId = useMemo(() => {
-    if (selectedSectionId) return selectedSectionId;
-    if (selectedControlId) {
-      for (const section of document.sections) {
-        if (section.controls.some((c) => c.id === selectedControlId))
-          return section.id;
-      }
-    }
-    return document.sections[0]?.id ?? 'left';
-  }, [document.sections, selectedControlId, selectedSectionId]);
+  const targetSectionId =
+    selectedSectionId ??
+    (selectedControlId
+      ? document.sections.find((section) =>
+          section.controls.some((c) => c.id === selectedControlId),
+        )?.id
+      : undefined) ??
+    document.sections[0]?.id ??
+    'left';
 
   return (
     <div className="flex min-h-0 w-full flex-col gap-4 p-0 overflow-y-auto bg-transparent">
@@ -136,7 +124,7 @@ export function SectionsPanel({
             >
               <SectionBlock
                 section={section}
-                document={document}
+                controlById={controlById}
                 selectedControlId={selectedControlId}
                 selectedSectionId={selectedSectionId ?? null}
                 selectedPeerIds={selectedPeerIds}
@@ -159,9 +147,42 @@ export function SectionsPanel({
   );
 }
 
-const SectionBlock = memo(function SectionBlock({
+function buildControlById(document: LayoutDocument): Map<string, Control> {
+  const byId = new Map<string, Control>();
+  for (const s of document.sections) {
+    for (const c of s.controls) byId.set(c.id, c as Control);
+  }
+  return byId;
+}
+
+function buildParentHintMap(
+  controlById: Map<string, Control>,
+  controls: LayoutDocument['sections'][number]['controls'],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const c of controls) {
+    if (c.type !== 'hitzone' || !c.parentId) continue;
+    const parent = controlById.get(c.parentId);
+    if (!parent) {
+      map.set(c.id, c.parentId);
+      continue;
+    }
+    const binding = parent.binding;
+    const parentIdCap = parent.id.charAt(0).toUpperCase() + parent.id.slice(1);
+    if (!binding) map.set(c.id, parentIdCap);
+    else {
+      const bindingCap = binding.charAt(0).toUpperCase() + binding.slice(1);
+      if (parent.id.toLowerCase() === binding.toLowerCase())
+        map.set(c.id, parentIdCap);
+      else map.set(c.id, `${parentIdCap} (${bindingCap})`);
+    }
+  }
+  return map;
+}
+
+function SectionBlock({
   section,
-  document,
+  controlById,
   selectedControlId,
   selectedSectionId,
   selectedPeerIds,
@@ -177,7 +198,7 @@ const SectionBlock = memo(function SectionBlock({
   onHoverControl,
 }: {
   section: LayoutDocument['sections'][number];
-  document: LayoutDocument;
+  controlById: Map<string, Control>;
   selectedControlId: string | null;
   selectedSectionId: string | null;
   selectedPeerIds: Set<string>;
@@ -200,10 +221,7 @@ const SectionBlock = memo(function SectionBlock({
   const dragStateRef = useRef<DragState | null>(null);
   dragStateRef.current = dragState;
   const listRef = useRef<HTMLUListElement>(null);
-  const displayControls = useMemo(
-    () => [...section.controls].slice().reverse(),
-    [section.controls],
-  );
+  const displayControls = [...section.controls].reverse();
 
   const onReorderRef = useRef(onReorderControl);
   onReorderRef.current = onReorderControl;
@@ -293,33 +311,7 @@ const SectionBlock = memo(function SectionBlock({
   const isBlockedByControls = section.relativeWidth <= controlMin + 0.001;
   const isCenter = section.id === 'center';
 
-  const parentHintMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const byId = new Map<string, Control>();
-    for (const s of document.sections) {
-      for (const c of s.controls) byId.set(c.id, c as Control);
-    }
-    for (const c of section.controls) {
-      if (c.type === 'hitzone' && c.parentId) {
-        const parent = byId.get(c.parentId);
-        if (!parent) {
-          map.set(c.id, c.parentId);
-          continue;
-        }
-        const binding = parent.binding;
-        const parentIdCap =
-          parent.id.charAt(0).toUpperCase() + parent.id.slice(1);
-        if (!binding) map.set(c.id, parentIdCap);
-        else {
-          const bindingCap = binding.charAt(0).toUpperCase() + binding.slice(1);
-          if (parent.id.toLowerCase() === binding.toLowerCase())
-            map.set(c.id, parentIdCap);
-          else map.set(c.id, `${parentIdCap} (${bindingCap})`);
-        }
-      }
-    }
-    return map;
-  }, [document, section.controls]);
+  const parentHintMap = buildParentHintMap(controlById, section.controls);
 
   return (
     <div className="overflow-hidden">
@@ -459,9 +451,9 @@ const SectionBlock = memo(function SectionBlock({
       </div>
     </div>
   );
-});
+}
 
-const ControlRow = memo(function ControlRow({
+function ControlRow({
   control,
   index,
   count,
@@ -617,4 +609,4 @@ const ControlRow = memo(function ControlRow({
       </div>
     </li>
   );
-});
+}

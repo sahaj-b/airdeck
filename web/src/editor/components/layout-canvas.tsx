@@ -19,6 +19,7 @@ import {
   renderLayout,
 } from '@/controller/layout-renderer';
 import {
+  findControlVisual,
   type ResolvedLayout,
   resolveLayout,
 } from '@/controller/layout-resolver';
@@ -113,7 +114,7 @@ export function LayoutCanvas({
   const liveRafRef = useRef<number | null>(null);
   const pendingLiveRef = useRef<LayoutDocument | null>(null);
 
-  const scheduleLive = useCallback((doc: LayoutDocument) => {
+  const scheduleLive = (doc: LayoutDocument): void => {
     pendingLiveRef.current = doc;
     if (liveRafRef.current === null) {
       liveRafRef.current = requestAnimationFrame(() => {
@@ -123,28 +124,28 @@ export function LayoutCanvas({
         if (pending) onDraftChangeRef.current(pending, false);
       });
     }
-  }, []);
+  };
 
-  const flushLive = useCallback(() => {
+  const flushLive = (): void => {
     if (liveRafRef.current !== null) {
       cancelAnimationFrame(liveRafRef.current);
       liveRafRef.current = null;
     }
     pendingLiveRef.current = null;
-  }, []);
+  };
 
-  const batchedHitDraftChange = useCallback(
-    (doc: LayoutDocument, commit: boolean) => {
-      latestRef.current = doc;
-      if (commit) {
-        flushLive();
-        onDraftChangeRef.current(doc, true);
-      } else {
-        scheduleLive(doc);
-      }
-    },
-    [scheduleLive, flushLive],
-  );
+  const batchedHitDraftChange = (
+    doc: LayoutDocument,
+    commit: boolean,
+  ): void => {
+    latestRef.current = doc;
+    if (commit) {
+      flushLive();
+      onDraftChangeRef.current(doc, true);
+    } else {
+      scheduleLive(doc);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -208,18 +209,14 @@ export function LayoutCanvas({
     }
   }, [available, viewport.width, viewport.height]);
 
-  const resolved: ResolvedLayout | null = useMemo(
-    () =>
-      resolveLayout(
-        document,
-        { width: pixelViewport.width, height: pixelViewport.height },
-        'landscape',
-      ),
-    [document, pixelViewport],
+  const resolved: ResolvedLayout | null = resolveLayout(
+    document,
+    { width: pixelViewport.width, height: pixelViewport.height },
+    'landscape',
   );
 
   const mountedStructureRef = useRef<string | null>(null);
-  const ensureGhostChrome = useCallback(() => {
+  const ensureGhostChrome = useCallback((): void => {
     const mount = mountRef.current;
     if (!mount) return;
     const center = mount.querySelector(
@@ -312,19 +309,16 @@ export function LayoutCanvas({
     [],
   );
 
-  const zoomAtCenter = useCallback(
-    (factor: number): void => {
-      const el = containerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      applyZoom(
-        zoomRef.current * factor,
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-      );
-    },
-    [applyZoom],
-  );
+  const zoomAtCenter = (factor: number): void => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    applyZoom(
+      zoomRef.current * factor,
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+  };
 
   // Wheel = zoom (pointer-anchored); Space+drag = pan (Excalidraw-style).
   useEffect(() => {
@@ -449,60 +443,21 @@ export function LayoutCanvas({
     : null;
 
   // One pass over controls instead of a scan per hitzone lookup per render.
-  const hitzonesByParent = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const section of document.sections) {
-      for (const control of section.controls) {
-        if (control.type !== 'hitzone' || !control.parentId) continue;
-        const ids = map.get(control.parentId);
-        if (ids) ids.push(control.id);
-        else map.set(control.parentId, [control.id]);
-      }
-    }
-    return map;
-  }, [document]);
+  const hitzonesByParent = indexHitzonesByParent(document);
 
-  const selectedPeerIds = useMemo(
-    () =>
-      new Set(
-        selectedControlId ? hitzonesByParent.get(selectedControlId) : undefined,
-      ),
-    [hitzonesByParent, selectedControlId],
+  const selectedPeerIds = new Set(
+    selectedControlId ? hitzonesByParent.get(selectedControlId) : undefined,
   );
 
-  const hoveredPeerIds = useMemo(
-    () =>
-      new Set(
-        hoveredControlId ? hitzonesByParent.get(hoveredControlId) : undefined,
-      ),
-    [hitzonesByParent, hoveredControlId],
+  const hoveredPeerIds = new Set(
+    hoveredControlId ? hitzonesByParent.get(hoveredControlId) : undefined,
   );
 
   const locked = selectedControl
     ? resolveAspectLock(selectedControl, locks)
     : true;
 
-  const { resolvedRect } = useMemo(() => {
-    if (!resolved || !selectedControlId) return { resolvedRect: null };
-    let rect: {
-      left: number;
-      top: number;
-      width: number;
-      height: number;
-    } | null = null;
-    for (const section of resolved.sections) {
-      for (const control of section.controls) {
-        if (control.control.id === selectedControlId) {
-          rect = control.visual;
-          break;
-        }
-      }
-      if (rect) break;
-    }
-    return {
-      resolvedRect: rect,
-    };
-  }, [resolved, selectedControlId]);
+  const resolvedRect = findControlVisual(resolved, selectedControlId);
 
   useInteractGeometry({
     enabled: Boolean(resolvedRect && selectedControlId),
@@ -865,6 +820,21 @@ export function LayoutCanvas({
       </div>
     </section>
   );
+}
+
+function indexHitzonesByParent(
+  document: LayoutDocument,
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const section of document.sections) {
+    for (const control of section.controls) {
+      if (control.type !== 'hitzone' || !control.parentId) continue;
+      const ids = map.get(control.parentId);
+      if (ids) ids.push(control.id);
+      else map.set(control.parentId, [control.id]);
+    }
+  }
+  return map;
 }
 
 function structureSignature(document: LayoutDocument): string {

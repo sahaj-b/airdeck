@@ -112,6 +112,7 @@ export function PhoneEditorBar({
             }
           }}
           placeholder="Layout name"
+          aria-label="Layout name"
         />
         <div className="ml-auto flex items-center gap-2.5">
           <button

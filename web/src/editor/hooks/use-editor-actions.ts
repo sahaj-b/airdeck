@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react';
 import {
   createAdminLayout,
   deleteAdminLayout,
@@ -30,21 +29,17 @@ export function useEditorActions() {
   const config = useEditorStore((s) => s.config);
   const dirty = useEditorStore((s) => s.dirty);
 
-  const errors = useMemo(
-    () => (draft ? validateLayoutDetailed(draft).errors : []),
-    [draft],
-  );
+  const errors = draft ? validateLayoutDetailed(draft).errors : [];
 
-  const currentBuiltin = useMemo(() => {
-    if (!draft) return false;
-    const layout = layouts.find((l) => l.id === draft.id);
-    return layout?.builtin ?? false;
-  }, [draft, layouts]);
+  const currentLayout = draft
+    ? layouts.find((l) => l.id === draft.id)
+    : undefined;
+  const currentBuiltin = currentLayout?.builtin ?? false;
 
   const readOnly = currentBuiltin;
   const currentDefault = draft?.id === config?.defaultLayout;
 
-  const defaultForkName = useCallback((base: string): string => {
+  const defaultForkName = (base: string): string => {
     const layoutsNow = useEditorStore.getState().layouts;
     let name = `${base} copy`;
     let id = slugifyId(name);
@@ -55,9 +50,9 @@ export function useEditorActions() {
       i += 1;
     }
     return name;
-  }, []);
+  };
 
-  const requestFork = useCallback((): void => {
+  const requestFork = (): void => {
     const st = useEditorStore.getState();
     if (!st.draft) return;
     const builtin = st.layouts.find((l) => l.id === st.draft?.id)?.builtin;
@@ -66,43 +61,30 @@ export function useEditorActions() {
     st.setForkName(defaultForkName(baseName));
     st.setForkError(null);
     st.setForkOpen(true);
-  }, [defaultForkName]);
+  };
 
-  const applyCommit = useCallback(
-    (
-      next: LayoutDocument,
-      opts?: { live?: boolean },
-    ): LayoutDocument | null => {
-      const builtin = useEditorStore
-        .getState()
-        .layouts.find(
-          (l) => l.id === useEditorStore.getState().draft?.id,
-        )?.builtin;
-      if (builtin) return null;
-      return useEditorStore.getState().applyCommit(next, opts);
-    },
-    [],
-  );
+  const applyCommit = (
+    next: LayoutDocument,
+    opts?: { live?: boolean },
+  ): LayoutDocument | null => {
+    const st = useEditorStore.getState();
+    if (st.layouts.find((l) => l.id === st.draft?.id)?.builtin) return null;
+    return st.applyCommit(next, opts);
+  };
 
-  const mutate = useCallback(
-    (
-      transform: (doc: LayoutDocument) => LayoutDocument,
-    ): LayoutDocument | null => {
-      const cur = useEditorStore.getState().draft;
-      if (!cur) return null;
-      return applyCommit(transform(cur));
-    },
-    [applyCommit],
-  );
+  const mutate = (
+    transform: (doc: LayoutDocument) => LayoutDocument,
+  ): LayoutDocument | null => {
+    const cur = useEditorStore.getState().draft;
+    if (!cur) return null;
+    return applyCommit(transform(cur));
+  };
 
-  const handleDraftChange = useCallback(
-    (next: LayoutDocument, commit: boolean): void => {
-      applyCommit(next, { live: !commit });
-    },
-    [applyCommit],
-  );
+  const handleDraftChange = (next: LayoutDocument, commit: boolean): void => {
+    applyCommit(next, { live: !commit });
+  };
 
-  const switchToLayout = useCallback(async (id: string): Promise<void> => {
+  const switchToLayout = async (id: string): Promise<void> => {
     try {
       const doc = await getAdminLayout(id);
       const cloned = cloneDocument(doc as LayoutDocument);
@@ -114,55 +96,48 @@ export function useEditorActions() {
     } catch {
       useEditorStore.getState().setError('Failed to load layout.');
     }
-  }, []);
+  };
 
-  const handleSelectLayout = useCallback(
-    async (id: string): Promise<void> => {
-      if (id === useEditorStore.getState().draft?.id) return;
-      if (useEditorStore.getState().dirty) {
-        useEditorStore.getState().setPendingLayoutId(id);
-        useEditorStore.getState().setLayoutSwitchOpen(true);
-        return;
-      }
-      await switchToLayout(id);
-    },
-    [switchToLayout],
-  );
+  const handleSelectLayout = async (id: string): Promise<void> => {
+    if (id === useEditorStore.getState().draft?.id) return;
+    if (useEditorStore.getState().dirty) {
+      useEditorStore.getState().setPendingLayoutId(id);
+      useEditorStore.getState().setLayoutSwitchOpen(true);
+      return;
+    }
+    await switchToLayout(id);
+  };
 
-  const confirmLayoutSwitch = useCallback(async (): Promise<void> => {
+  const confirmLayoutSwitch = async (): Promise<void> => {
     const id = useEditorStore.getState().pendingLayoutId;
     useEditorStore.getState().setLayoutSwitchOpen(false);
     useEditorStore.getState().setPendingLayoutId(null);
     if (!id) return;
     await switchToLayout(id);
-  }, [switchToLayout]);
+  };
 
-  const cancelLayoutSwitch = useCallback((): void => {
+  const cancelLayoutSwitch = (): void => {
     useEditorStore.getState().setLayoutSwitchOpen(false);
     useEditorStore.getState().setPendingLayoutId(null);
-  }, []);
+  };
 
-  const handleOpenPicked = useCallback(
-    async (id: string): Promise<void> => {
-      useEditorStore.getState().setPickerOpen(false);
-      await handleSelectLayout(id);
-    },
-    [handleSelectLayout],
-  );
-
-  const handlePickerCancel = useCallback((): void => {
+  const handleOpenPicked = async (id: string): Promise<void> => {
     useEditorStore.getState().setPickerOpen(false);
-  }, []);
+    await handleSelectLayout(id);
+  };
 
-  const handleNewLayout = useCallback((): void => {
+  const handlePickerCancel = (): void => {
+    useEditorStore.getState().setPickerOpen(false);
+  };
+
+  const handleNewLayout = (): void => {
     useEditorStore.getState().setNewLayoutDialogOpen(true);
-  }, []);
+  };
 
-  const handleRename = useCallback(async (name: string): Promise<void> => {
-    const cur = useEditorStore.getState().draft;
-    const builtin = useEditorStore
-      .getState()
-      .layouts.find((l) => l.id === cur?.id)?.builtin;
+  const handleRename = async (name: string): Promise<void> => {
+    const st = useEditorStore.getState();
+    const cur = st.draft;
+    const builtin = st.layouts.find((l) => l.id === cur?.id)?.builtin;
     if (!cur || builtin) return;
     const next = cloneDocument(cur);
     next.name = name;
@@ -173,13 +148,12 @@ export function useEditorActions() {
     useEditorStore.getState().setDirty(false);
     const state = await getAdminState();
     useEditorStore.getState().setLayouts(state.layouts);
-  }, []);
+  };
 
-  const handleDelete = useCallback(async (): Promise<void> => {
-    const cur = useEditorStore.getState().draft;
-    const builtin = useEditorStore
-      .getState()
-      .layouts.find((l) => l.id === cur?.id)?.builtin;
+  const handleDelete = async (): Promise<void> => {
+    const st = useEditorStore.getState();
+    const cur = st.draft;
+    const builtin = st.layouts.find((l) => l.id === cur?.id)?.builtin;
     if (!cur || builtin) return;
     await deleteAdminLayout(cur.id);
     const state = await getAdminState();
@@ -191,9 +165,9 @@ export function useEditorActions() {
         ? cfg.defaultLayout
         : state.layouts[0]?.id;
     if (fallbackId) await switchToLayout(fallbackId);
-  }, [switchToLayout]);
+  };
 
-  const handleSave = useCallback(async (): Promise<void> => {
+  const handleSave = async (): Promise<void> => {
     const st = useEditorStore.getState();
     const builtin = st.layouts.find((l) => l.id === st.draft?.id)?.builtin;
     if (!st.draft || !st.persisted || builtin) return;
@@ -216,9 +190,9 @@ export function useEditorActions() {
       const message = err instanceof Error ? err.message : 'Save failed.';
       useEditorStore.getState().setError(message);
     }
-  }, []);
+  };
 
-  const handleDiscard = useCallback((): void => {
+  const handleDiscard = (): void => {
     const st = useEditorStore.getState();
     if (!st.persisted) return;
     if (st.dirty) {
@@ -226,124 +200,115 @@ export function useEditorActions() {
       return;
     }
     useEditorStore.getState().resetDocument(cloneDocument(st.persisted));
-  }, []);
+  };
 
-  const confirmDiscard = useCallback((): void => {
+  const confirmDiscard = (): void => {
     const st = useEditorStore.getState();
     if (!st.persisted) return;
     useEditorStore.getState().resetDocument(cloneDocument(st.persisted));
     useEditorStore.getState().setDiscardOpen(false);
-  }, []);
+  };
 
-  const handleUndo = useCallback((): void => {
+  const handleUndo = (): void => {
     useEditorStore.getState().historyUndo();
-  }, []);
+  };
 
-  const handleRedo = useCallback((): void => {
+  const handleRedo = (): void => {
     useEditorStore.getState().historyRedo();
-  }, []);
+  };
 
-  const handleBack = useCallback((): void => {
+  const handleBack = (): void => {
     if (useEditorStore.getState().dirty) {
       useEditorStore.getState().setBackOpen(true);
       return;
     }
     window.location.href = '/dashboard';
-  }, []);
+  };
 
-  const confirmBack = useCallback((): void => {
+  const confirmBack = (): void => {
     suppressNextBeforeUnload();
     window.location.href = '/dashboard';
-  }, []);
+  };
 
-  const handleDuplicateControl = useCallback(
-    (controlId: string): void => {
-      const next = mutate((doc) => duplicateControl(doc, controlId));
-      if (!next) return;
-      const found = findControl(next, controlId);
-      const section = found?.section;
-      const idx = section?.controls.findIndex((c) => c.id === controlId) ?? -1;
-      const newControl = section?.controls[idx + 1];
-      if (newControl) {
-        useEditorStore.getState().setSelectedControlId(newControl.id);
-        useEditorStore.getState().setSelectedSectionId(null);
-      }
-    },
-    [mutate],
-  );
-
-  const handleDeleteControl = useCallback(
-    (controlId: string): void => {
-      const st = useEditorStore.getState();
-      const next = mutate((doc) => deleteControl(doc, controlId));
-      if (!next) return;
-      if (st.selectedControlId === controlId)
-        useEditorStore.getState().setSelectedControlId(null);
-      const stillExists = next.sections.some((s) =>
-        s.controls.some((c) => c.id === st.selectedControlId),
-      );
-      if (!stillExists) useEditorStore.getState().setSelectedControlId(null);
-    },
-    [mutate],
-  );
-
-  const handleAddHitzone = useCallback(
-    (parentId: string): void => {
-      const next = mutate((doc) => addHitzone(doc, parentId) ?? doc);
-      if (!next) return;
-      const found = findControl(next, parentId);
-      const section = found?.section;
-      const idx = section?.controls.findIndex((c) => c.id === parentId) ?? -1;
-      const newControl = section?.controls[idx + 1];
-      if (newControl) {
-        useEditorStore.getState().setSelectedControlId(newControl.id);
-        useEditorStore.getState().setSelectedSectionId(null);
-      }
-    },
-    [mutate],
-  );
-
-  const handleMoveControl = useCallback(
-    (controlId: string, direction: 'up' | 'down'): void => {
-      mutate((doc) => {
-        const found = findControl(doc, controlId);
-        if (!found) return doc;
-        const fromIndex = found.section.controls.findIndex(
-          (c) => c.id === controlId,
-        );
-        const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
-        if (toIndex < 0 || toIndex >= found.section.controls.length) return doc;
-        return moveControl(doc, found.section.id, fromIndex, toIndex);
-      });
-    },
-    [mutate],
-  );
-
-  const handleReorderControl = useCallback(
-    (sectionId: string, fromIndex: number, toIndex: number): void => {
-      mutate((doc) => moveControl(doc, sectionId, fromIndex, toIndex));
-    },
-    [mutate],
-  );
-
-  const handleAddControl = useCallback(
-    (result: AddControlResult): void => {
-      const next = mutate((doc) => {
-        const cloned = cloneDocument(doc);
-        const section = cloned.sections.find((s) => s.id === result.sectionId);
-        if (!section) return cloned;
-        section.controls.push(result.control);
-        return cloned;
-      });
-      if (!next) return;
-      useEditorStore.getState().setSelectedControlId(result.control.id);
+  const handleDuplicateControl = (controlId: string): void => {
+    const next = mutate((doc) => duplicateControl(doc, controlId));
+    if (!next) return;
+    const found = findControl(next, controlId);
+    const section = found?.section;
+    const idx = section?.controls.findIndex((c) => c.id === controlId) ?? -1;
+    const newControl = section?.controls[idx + 1];
+    if (newControl) {
+      useEditorStore.getState().setSelectedControlId(newControl.id);
       useEditorStore.getState().setSelectedSectionId(null);
-      useEditorStore.getState().setAddDialogSection(null);
-    },
-    [mutate],
-  );
+    }
+  };
 
-  const handleToggleLock = useCallback((id: string): void => {
+  const handleDeleteControl = (controlId: string): void => {
+    const st = useEditorStore.getState();
+    const next = mutate((doc) => deleteControl(doc, controlId));
+    if (!next) return;
+    if (st.selectedControlId === controlId) {
+      useEditorStore.getState().setSelectedControlId(null);
+      return;
+    }
+    const selectedSurvived = next.sections.some((s) =>
+      s.controls.some((c) => c.id === st.selectedControlId),
+    );
+    if (!selectedSurvived) useEditorStore.getState().setSelectedControlId(null);
+  };
+
+  const handleAddHitzone = (parentId: string): void => {
+    const next = mutate((doc) => addHitzone(doc, parentId) ?? doc);
+    if (!next) return;
+    const found = findControl(next, parentId);
+    const section = found?.section;
+    const idx = section?.controls.findIndex((c) => c.id === parentId) ?? -1;
+    const newControl = section?.controls[idx + 1];
+    if (newControl) {
+      useEditorStore.getState().setSelectedControlId(newControl.id);
+      useEditorStore.getState().setSelectedSectionId(null);
+    }
+  };
+
+  const handleMoveControl = (
+    controlId: string,
+    direction: 'up' | 'down',
+  ): void => {
+    mutate((doc) => {
+      const found = findControl(doc, controlId);
+      if (!found) return doc;
+      const fromIndex = found.section.controls.findIndex(
+        (c) => c.id === controlId,
+      );
+      const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+      if (toIndex < 0 || toIndex >= found.section.controls.length) return doc;
+      return moveControl(doc, found.section.id, fromIndex, toIndex);
+    });
+  };
+
+  const handleReorderControl = (
+    sectionId: string,
+    fromIndex: number,
+    toIndex: number,
+  ): void => {
+    mutate((doc) => moveControl(doc, sectionId, fromIndex, toIndex));
+  };
+
+  const handleAddControl = (result: AddControlResult): void => {
+    const next = mutate((doc) => {
+      const cloned = cloneDocument(doc);
+      const section = cloned.sections.find((s) => s.id === result.sectionId);
+      if (!section) return cloned;
+      section.controls.push(result.control);
+      return cloned;
+    });
+    if (!next) return;
+    useEditorStore.getState().setSelectedControlId(result.control.id);
+    useEditorStore.getState().setSelectedSectionId(null);
+    useEditorStore.getState().setAddDialogSection(null);
+  };
+
+  const handleToggleLock = (id: string): void => {
     const cur = useEditorStore.getState().draft;
     if (!cur) return;
     const entry = findControl(cur, id);
@@ -351,38 +316,38 @@ export function useEditorActions() {
     if (isAspectLockForced(entry.control)) return;
     const fallback = isDefaultLocked(entry.control);
     useEditorStore.getState().toggleLock(id, fallback);
-  }, []);
+  };
 
-  const createAndSelectLayout = useCallback(
-    async (name: string, baseId: string | null): Promise<void> => {
-      const id = slugifyId(name);
-      let doc: LayoutDocument;
-      if (baseId) {
-        const base = await getAdminLayout(baseId);
-        doc = cloneDocument(base as LayoutDocument);
-        doc.id = id;
-        doc.name = name.trim();
-      } else {
-        doc = {
-          id,
-          name: name.trim(),
-          schemaVersion: 1,
-          sections: [
-            { id: 'left', relativeWidth: 0.86, controls: [] },
-            { id: 'center', relativeWidth: 0.5, controls: [] },
-            { id: 'right', relativeWidth: 0.94, controls: [] },
-          ],
-        };
-      }
-      await createAdminLayout(doc);
-      const state = await getAdminState();
-      useEditorStore.getState().setLayouts(state.layouts);
-      await handleSelectLayout(id);
-    },
-    [handleSelectLayout],
-  );
+  const createAndSelectLayout = async (
+    name: string,
+    baseId: string | null,
+  ): Promise<void> => {
+    const id = slugifyId(name);
+    let doc: LayoutDocument;
+    if (baseId) {
+      const base = await getAdminLayout(baseId);
+      doc = cloneDocument(base as LayoutDocument);
+      doc.id = id;
+      doc.name = name.trim();
+    } else {
+      doc = {
+        id,
+        name: name.trim(),
+        schemaVersion: 1,
+        sections: [
+          { id: 'left', relativeWidth: 0.86, controls: [] },
+          { id: 'center', relativeWidth: 0.5, controls: [] },
+          { id: 'right', relativeWidth: 0.94, controls: [] },
+        ],
+      };
+    }
+    await createAdminLayout(doc);
+    const state = await getAdminState();
+    useEditorStore.getState().setLayouts(state.layouts);
+    await handleSelectLayout(id);
+  };
 
-  const handleForkConfirm = useCallback(async (): Promise<void> => {
+  const handleForkConfirm = async (): Promise<void> => {
     const cur = useEditorStore.getState().draft;
     const name = useEditorStore.getState().forkName;
     if (!cur || !name.trim()) return;
@@ -400,28 +365,28 @@ export function useEditorActions() {
     } finally {
       useEditorStore.getState().setForkBusy(false);
     }
-  }, [createAndSelectLayout]);
+  };
 
-  const handleCreateNew = useCallback(
-    async (name: string, baseId: string | null): Promise<void> => {
-      if (!name.trim()) return;
-      useEditorStore.getState().setNewLayoutError(null);
-      try {
-        await createAndSelectLayout(name, baseId);
-        useEditorStore.getState().setNewLayoutDialogOpen(false);
-        useEditorStore.getState().setNewLayoutName('');
-      } catch (err) {
-        useEditorStore
-          .getState()
-          .setNewLayoutError(
-            err instanceof Error ? err.message : 'Creation failed.',
-          );
-      }
-    },
-    [createAndSelectLayout],
-  );
+  const handleCreateNew = async (
+    name: string,
+    baseId: string | null,
+  ): Promise<void> => {
+    if (!name.trim()) return;
+    useEditorStore.getState().setNewLayoutError(null);
+    try {
+      await createAndSelectLayout(name, baseId);
+      useEditorStore.getState().setNewLayoutDialogOpen(false);
+      useEditorStore.getState().setNewLayoutName('');
+    } catch (err) {
+      useEditorStore
+        .getState()
+        .setNewLayoutError(
+          err instanceof Error ? err.message : 'Creation failed.',
+        );
+    }
+  };
 
-  const handleApplyToAll = useCallback(async (): Promise<void> => {
+  const handleApplyToAll = async (): Promise<void> => {
     const st = useEditorStore.getState();
     const cur = st.draft;
     if (!cur) return;
@@ -475,7 +440,7 @@ export function useEditorActions() {
         .getState()
         .setError(err instanceof Error ? err.message : 'Apply to all failed.');
     }
-  }, []);
+  };
 
   return {
     errors,

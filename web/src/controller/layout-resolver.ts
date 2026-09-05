@@ -39,6 +39,19 @@ export interface SectionAllocation {
   widths: number[];
 }
 
+export function findControlVisual(
+  resolved: ResolvedLayout | null,
+  controlId: string | null,
+): PixelRect | null {
+  if (!resolved || !controlId) return null;
+  for (const section of resolved.sections) {
+    for (const control of section.controls) {
+      if (control.control.id === controlId) return control.visual;
+    }
+  }
+  return null;
+}
+
 const EPSILON = 1e-7;
 
 export function resolveLayout(

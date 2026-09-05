@@ -1,6 +1,22 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import './native-slider.css';
+
+type DocHandlers = {
+  move: (e: PointerEvent) => void;
+  up: (e: PointerEvent) => void;
+};
+
+function detachDocHandlers(
+  ref: React.MutableRefObject<DocHandlers | null>,
+): void {
+  const h = ref.current;
+  if (!h) return;
+  document.removeEventListener('pointermove', h.move);
+  document.removeEventListener('pointerup', h.up);
+  document.removeEventListener('pointercancel', h.up);
+  ref.current = null;
+}
 
 interface NativeSliderProps {
   value: number;
@@ -56,129 +72,115 @@ export function NativeSlider({
   const trackRef = useRef<HTMLDivElement>(null);
 
   // Doc listeners are added per-gesture so we store the exact handlers to remove.
-  const docHandlersRef = useRef<{
-    move: (e: PointerEvent) => void;
-    up: (e: PointerEvent) => void;
-  } | null>(null);
+  const docHandlersRef = useRef<DocHandlers | null>(null);
 
-  const removeDocListeners = useCallback(() => {
-    const h = docHandlersRef.current;
-    if (!h) return;
-    document.removeEventListener('pointermove', h.move);
-    document.removeEventListener('pointerup', h.up);
-    document.removeEventListener('pointercancel', h.up);
-    docHandlersRef.current = null;
-  }, []);
+  const removeDocListeners = (): void => {
+    detachDocHandlers(docHandlersRef);
+  };
 
-  useEffect(() => removeDocListeners, [removeDocListeners]);
+  useEffect(() => () => detachDocHandlers(docHandlersRef), []);
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return;
-      const track = trackRef.current;
-      if (!track) return;
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (e.button !== 0) return;
+    const track = trackRef.current;
+    if (!track) return;
 
-      const isMouse = e.pointerType === 'mouse';
-      const rect = track.getBoundingClientRect();
-      const ratio = (value - min) / (max - min);
-      const thumbX = rect.left + ratio * rect.width;
-      // Gesture-local live value; the `value` prop only refreshes between
-      // gestures since handlers are recreated per render.
-      let current = value;
+    const isMouse = e.pointerType === 'mouse';
+    const rect = track.getBoundingClientRect();
+    const ratio = (value - min) / (max - min);
+    const thumbX = rect.left + ratio * rect.width;
+    // Gesture-local live value; the `value` prop only refreshes between
+    // gestures since handlers are recreated per render.
+    let current = value;
 
-      if (!isMouse) {
-        // Thumb-only for touch: ignore track taps, they just scroll.
-        if (Math.abs(e.clientX - thumbX) > THUMB_HIT_SLOP) return;
-      } else {
-        const hitThumb = Math.abs(e.clientX - thumbX) <= THUMB_HIT_SLOP;
-        if (!hitThumb) {
-          const next = valueFromClientX(e.clientX, rect, min, max, step);
-          onChange(next);
-          onCommit?.(next);
+    if (!isMouse) {
+      // Thumb-only for touch: ignore track taps, they just scroll.
+      if (Math.abs(e.clientX - thumbX) > THUMB_HIT_SLOP) return;
+    } else {
+      const hitThumb = Math.abs(e.clientX - thumbX) <= THUMB_HIT_SLOP;
+      if (!hitThumb) {
+        const next = valueFromClientX(e.clientX, rect, min, max, step);
+        onChange(next);
+        onCommit?.(next);
+        return;
+      }
+    }
+
+    // Thumb drag: don't snap yet, wait for direction lock. Don't
+    // preventDefault here or a vertical drag starting on the thumb
+    // would lose its scroll.
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const pointerId = e.pointerId;
+    // Mouse has no scroll-jacking problem — skip direction lock.
+    let locked: 'h' | 'v' | null = isMouse ? 'h' : null;
+    let dragging = false;
+    if (isMouse) {
+      try {
+        track.setPointerCapture?.(pointerId);
+      } catch {}
+    }
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      if (!locked) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
+          return;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          locked = 'v';
+          removeDocListeners();
           return;
         }
-      }
-
-      // Thumb drag: don't snap yet, wait for direction lock. Don't
-      // preventDefault here or a vertical drag starting on the thumb
-      // would lose its scroll.
-
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const pointerId = e.pointerId;
-      // Mouse has no scroll-jacking problem — skip direction lock.
-      let locked: 'h' | 'v' | null = isMouse ? 'h' : null;
-      let dragging = false;
-      if (isMouse) {
+        locked = 'h';
         try {
           track.setPointerCapture?.(pointerId);
         } catch {}
       }
 
-      const onMove = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
+      if (locked !== 'h') return;
+      dragging = true;
+      const r = track.getBoundingClientRect();
+      const next = valueFromClientX(ev.clientX, r, min, max, step);
+      if (next !== current) {
+        current = next;
+        onChange(next);
+      }
+    };
 
-        if (!locked) {
-          if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
-            return;
-          if (Math.abs(dy) > Math.abs(dx)) {
-            locked = 'v';
-            removeDocListeners();
-            return;
-          }
-          locked = 'h';
-          try {
-            track.setPointerCapture?.(pointerId);
-          } catch {}
-        }
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const wasDragging = dragging;
+      const finalValue = current;
+      removeDocListeners();
+      try {
+        track.releasePointerCapture?.(pointerId);
+      } catch {}
+      if (wasDragging) onCommit?.(finalValue);
+    };
 
-        if (locked !== 'h') return;
-        dragging = true;
-        const r = track.getBoundingClientRect();
-        const next = valueFromClientX(ev.clientX, r, min, max, step);
-        if (next !== current) {
-          current = next;
-          onChange(next);
-        }
-      };
+    docHandlersRef.current = { move: onMove, up: onUp };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  };
 
-      const onUp = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        const wasDragging = dragging;
-        const finalValue = current;
-        removeDocListeners();
-        try {
-          track.releasePointerCapture?.(pointerId);
-        } catch {}
-        if (wasDragging) onCommit?.(finalValue);
-      };
-
-      docHandlersRef.current = { move: onMove, up: onUp };
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', onUp);
-      document.addEventListener('pointercancel', onUp);
-    },
-    [max, min, onChange, onCommit, removeDocListeners, step, value],
-  );
-
-  const handleKeyDown = useCallback(
-    (ev: React.KeyboardEvent) => {
-      let next: number | null = null;
-      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') next = value - step;
-      else if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp')
-        next = value + step;
-      else if (ev.key === 'Home') next = min;
-      else if (ev.key === 'End') next = max;
-      if (next == null) return;
-      ev.preventDefault();
-      const clamped = clamp(roundToStep(next, step, min), min, max);
-      onChange(clamped);
-      onCommit?.(clamped);
-    },
-    [max, min, onChange, onCommit, step, value],
-  );
+  const handleKeyDown = (ev: React.KeyboardEvent): void => {
+    let next: number | null = null;
+    if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') next = value - step;
+    else if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp')
+      next = value + step;
+    else if (ev.key === 'Home') next = min;
+    else if (ev.key === 'End') next = max;
+    if (next == null) return;
+    ev.preventDefault();
+    const clamped = clamp(roundToStep(next, step, min), min, max);
+    onChange(clamped);
+    onCommit?.(clamped);
+  };
 
   const fill = ((value - min) / (max - min)) * 100;
 

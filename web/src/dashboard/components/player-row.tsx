@@ -1,5 +1,5 @@
 import { ArrowRightLeft, Unplug } from 'lucide-react';
-import { memo, useState } from 'react';
+import { useState } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import {
@@ -26,7 +26,7 @@ interface PlayerRowProps {
   onLayout: (id: string, layoutId: string) => Promise<void>;
 }
 
-export const PlayerRow = memo(function PlayerRow({
+export function PlayerRow({
   player,
   players,
   layouts,
@@ -40,15 +40,15 @@ export const PlayerRow = memo(function PlayerRow({
     (slot) => slot === player.slot || !players.some((c) => c.slot === slot),
   );
 
-  async function run(action: () => Promise<void>): Promise<void> {
+  function run(action: () => Promise<void>): void {
     setBusy(true);
-    try {
-      await action();
-    } catch {
-      // store surfaces the error banner
-    } finally {
-      setBusy(false);
-    }
+    void action()
+      .catch(() => {
+        // store surfaces the error banner
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
 
   const age = formatAge(player.lastInput, now);
@@ -219,7 +219,7 @@ export const PlayerRow = memo(function PlayerRow({
       </div>
     </div>
   );
-});
+}
 
 function labelForState(state: PlayerSnapshot['state']): string {
   switch (state) {

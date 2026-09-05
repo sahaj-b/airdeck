@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import type { FrameSender } from '@/controller/frame-sender';
 import type { RenderedLayout } from '@/controller/layout-renderer';
-import { resolveLayout } from '@/controller/layout-resolver';
+import { findControlVisual, resolveLayout } from '@/controller/layout-resolver';
 import type { InputStateStore } from '@/controller/state';
 import { useInteractGeometry } from '@/hooks/use-interact-geometry';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
@@ -86,13 +86,28 @@ function PhoneEditorIsland({
   const liveRafRef = useRef<number | null>(null);
   const pendingLiveRef = useRef<LayoutDocument | null>(null);
 
-  const flushLive = useCallback(() => {
+  const flushLive = (): void => {
     if (liveRafRef.current !== null) {
       cancelAnimationFrame(liveRafRef.current);
       liveRafRef.current = null;
     }
     pendingLiveRef.current = null;
-  }, []);
+  };
+
+  // Single rAF-batched path for live (uncommitted) draft updates. Keeps
+  // draftRef in sync for the next delta while coalescing store writes.
+  const queueLive = (next: LayoutDocument): void => {
+    draftRef.current = next;
+    pendingLiveRef.current = next;
+    if (liveRafRef.current === null) {
+      liveRafRef.current = requestAnimationFrame(() => {
+        liveRafRef.current = null;
+        const pending = pendingLiveRef.current;
+        pendingLiveRef.current = null;
+        if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
+      });
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -115,18 +130,7 @@ function PhoneEditorIsland({
     draftRef,
     selectedIdRef,
     locksRef,
-    (next) => {
-      draftRef.current = next;
-      pendingLiveRef.current = next;
-      if (liveRafRef.current === null) {
-        liveRafRef.current = requestAnimationFrame(() => {
-          liveRafRef.current = null;
-          const pending = pendingLiveRef.current;
-          pendingLiveRef.current = null;
-          if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
-        });
-      }
-    },
+    queueLive,
   );
 
   useEffect(() => {
@@ -151,133 +155,80 @@ function PhoneEditorIsland({
     } catch {}
   }, [draft, viewport, renderer]);
 
-  const resolved = useMemo(() => {
-    if (!draft) return null;
-    return resolveLayout(draft, viewport, 'landscape');
-  }, [draft, viewport]);
+  const resolved = draft ? resolveLayout(draft, viewport, 'landscape') : null;
 
   const selectedControl =
     selectedId && draft
       ? (findControl(draft, selectedId)?.control ?? null)
       : null;
 
-  const selectedPeerIds = useMemo(() => {
-    if (!selectedId || !draft) return new Set<string>();
-    const found = findControl(draft, selectedId);
-    if (!found || found.control.type === 'hitzone') return new Set<string>();
-    return new Set<string>(getHitzonesOf(draft, selectedId));
-  }, [draft, selectedId]);
+  // Validation forbids hitzones parenting hitzones, so a hitzone id never
+  // has peers and no type lookup is needed.
+  const selectedPeerIds = new Set(
+    selectedId ? getHitzonesOf(draft, selectedId) : [],
+  );
 
   const locked = selectedControl
     ? resolveAspectLock(selectedControl, locks)
     : true;
 
-  const selectedRect = useMemo(() => {
-    if (!selectedId || !resolved) return null;
-    for (const section of resolved.sections) {
-      for (const rc of section.controls) {
-        if (rc.control.id === selectedId) return rc.visual;
-      }
-    }
-    return null;
-  }, [resolved, selectedId]);
+  const selectedRect = findControlVisual(resolved, selectedId);
 
-  const handleDraftLive = useCallback((next: LayoutDocument) => {
+  const handleCommit = (next: LayoutDocument): void => {
+    flushLive();
     draftRef.current = next;
-    pendingLiveRef.current = next;
-    if (liveRafRef.current === null) {
-      liveRafRef.current = requestAnimationFrame(() => {
-        liveRafRef.current = null;
-        const pending = pendingLiveRef.current;
-        pendingLiveRef.current = null;
-        if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
-      });
-    }
-  }, []);
+    usePhoneEditorStore.getState().commitDraft(next);
+  };
 
-  const handleCommit = useCallback(
-    (next: LayoutDocument) => {
-      flushLive();
-      draftRef.current = next;
-      usePhoneEditorStore.getState().commitDraft(next);
-    },
-    [flushLive],
-  );
-
-  const handleDrag = useCallback(
-    (deltaX: number, deltaY: number) => {
-      if (!selectedId) return;
-      if (isMultiTouchRef.current || isPinchingRef.current) return;
-      const cur = draftRef.current as LayoutDocument;
-      if (!cur) return;
-      const hasHitzones = getHitzonesOf(cur, selectedId).length > 0;
-      let next: LayoutDocument;
-      if (hasHitzones) {
-        next = moveParentWithHitzonesAcross(
-          cur,
-          selectedId,
-          deltaX,
-          deltaY,
-          viewport,
-        );
-      } else {
-        next = moveControlAcross(cur, selectedId, deltaX, deltaY, viewport);
-      }
-      // keep draftRef in sync for next delta, batch store update via rAF
-      draftRef.current = next;
-      pendingLiveRef.current = next;
-      if (liveRafRef.current === null) {
-        liveRafRef.current = requestAnimationFrame(() => {
-          liveRafRef.current = null;
-          const pending = pendingLiveRef.current;
-          pendingLiveRef.current = null;
-          if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
-        });
-      }
-    },
-    [selectedId, viewport],
-  );
-
-  const handleResize = useCallback(
-    (
-      deltaWidth: number,
-      deltaHeight: number,
-      deltaLeft: number,
-      deltaTop: number,
-      lockedArg: boolean,
-    ) => {
-      if (!selectedId) return;
-      if (isMultiTouchRef.current || isPinchingRef.current) return;
-      const cur = draftRef.current as LayoutDocument;
-      const effectiveLocked = lockedArg ?? locked;
-      const next = resizeControl(
+  const handleDrag = (deltaX: number, deltaY: number): void => {
+    if (!selectedId) return;
+    if (isMultiTouchRef.current || isPinchingRef.current) return;
+    const cur = draftRef.current as LayoutDocument;
+    if (!cur) return;
+    const hasHitzones = getHitzonesOf(cur, selectedId).length > 0;
+    let next: LayoutDocument;
+    if (hasHitzones) {
+      next = moveParentWithHitzonesAcross(
         cur,
         selectedId,
-        deltaWidth,
-        deltaHeight,
-        effectiveLocked,
-        deltaLeft,
-        deltaTop,
+        deltaX,
+        deltaY,
+        viewport,
       );
-      draftRef.current = next;
-      pendingLiveRef.current = next;
-      if (liveRafRef.current === null) {
-        liveRafRef.current = requestAnimationFrame(() => {
-          liveRafRef.current = null;
-          const pending = pendingLiveRef.current;
-          pendingLiveRef.current = null;
-          if (pending) usePhoneEditorStore.getState().setDraftLive(pending);
-        });
-      }
-    },
-    [selectedId, locked],
-  );
+    } else {
+      next = moveControlAcross(cur, selectedId, deltaX, deltaY, viewport);
+    }
+    queueLive(next);
+  };
 
-  const commit = useCallback(() => {
+  const handleResize = (
+    deltaWidth: number,
+    deltaHeight: number,
+    deltaLeft: number,
+    deltaTop: number,
+    lockedArg: boolean,
+  ): void => {
+    if (!selectedId) return;
+    if (isMultiTouchRef.current || isPinchingRef.current) return;
+    const cur = draftRef.current as LayoutDocument;
+    const effectiveLocked = lockedArg ?? locked;
+    const next = resizeControl(
+      cur,
+      selectedId,
+      deltaWidth,
+      deltaHeight,
+      effectiveLocked,
+      deltaLeft,
+      deltaTop,
+    );
+    queueLive(next);
+  };
+
+  const commit = (): void => {
     if (isPinchingRef.current || isMultiTouchRef.current) return;
     flushLive();
     handleCommit(draftRef.current as LayoutDocument);
-  }, [handleCommit, flushLive]);
+  };
 
   useInteractGeometry({
     enabled: Boolean(selectedRect && selectedId),
@@ -298,17 +249,17 @@ function PhoneEditorIsland({
     onResizeEnd: commit,
   });
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = (): void => {
     const cur = draftRef.current;
     const sid = selectedIdRef.current;
     if (!cur || !sid) return;
     const next = deleteControl(cur, sid);
-    handleDraftLive(next);
+    queueLive(next);
     handleCommit(next);
     setSelectedId(null);
-  }, [handleDraftLive, handleCommit, setSelectedId]);
+  };
 
-  const handleDuplicate = useCallback(() => {
+  const handleDuplicate = (): void => {
     const cur = draftRef.current;
     const sid = selectedIdRef.current;
     if (!cur || !sid) return;
@@ -318,12 +269,12 @@ function PhoneEditorIsland({
     const section = next.sections.find((s) => s.id === found.section.id);
     const idx = section?.controls.findIndex((cc) => cc.id === sid) ?? -1;
     const newCtrl = section?.controls[idx + 1];
-    handleDraftLive(next);
+    queueLive(next);
     handleCommit(next);
     if (newCtrl) setSelectedId(newCtrl.id);
-  }, [handleDraftLive, handleCommit, setSelectedId]);
+  };
 
-  const handleAddHitzone = useCallback(() => {
+  const handleAddHitzone = (): void => {
     const cur = draftRef.current;
     const sid = selectedIdRef.current;
     if (!cur || !sid) return;
@@ -334,12 +285,12 @@ function PhoneEditorIsland({
     const section = next.sections.find((s) => s.id === found.section.id);
     const idx = section?.controls.findIndex((cc) => cc.id === sid) ?? -1;
     const newCtrl = section?.controls[idx + 1];
-    handleDraftLive(next);
+    queueLive(next);
     handleCommit(next);
     if (newCtrl) setSelectedId(newCtrl.id);
-  }, [handleDraftLive, handleCommit, setSelectedId]);
+  };
 
-  const handleToggleShape = useCallback(() => {
+  const handleToggleShape = (): void => {
     const cur = draftRef.current;
     const sid = selectedIdRef.current;
     if (!cur || !sid) return;
@@ -354,11 +305,11 @@ function PhoneEditorIsland({
     if (target.shape === 'round') target.shape = 'rect';
     else target.shape = 'round';
     delete (target as unknown as Record<string, unknown>).hitShape;
-    handleDraftLive(next);
+    queueLive(next);
     handleCommit(next);
-  }, [handleDraftLive, handleCommit]);
+  };
 
-  const handleRotate = useCallback(() => {
+  const handleRotate = (): void => {
     const cur = draftRef.current;
     const sid = selectedIdRef.current;
     if (!cur || !sid) return;
@@ -369,9 +320,9 @@ function PhoneEditorIsland({
       sid,
       rotationOf(found.control) + 15,
     );
-    handleDraftLive(next);
+    queueLive(next);
     handleCommit(next);
-  }, [handleDraftLive, handleCommit]);
+  };
 
   const handleSave = () => {
     const trimmed = name.trim();
@@ -429,12 +380,12 @@ function PhoneEditorIsland({
 
   const handleUndo = () => {
     const prev = usePhoneEditorStore.getState().historyUndo();
-    if (prev) handleDraftLive(prev);
+    if (prev) queueLive(prev);
   };
 
   const handleRedo = () => {
     const next = usePhoneEditorStore.getState().historyRedo();
-    if (next) handleDraftLive(next);
+    if (next) queueLive(next);
   };
 
   const handleToggleLock = () => {
@@ -526,7 +477,7 @@ function PhoneEditorIsland({
                 draftRef={draftRef}
                 selectedId={selectedId}
                 onSelect={(id) => setSelectedId(id)}
-                onDraftLive={handleDraftLive}
+                onDraftLive={queueLive}
                 onCommit={handleCommit}
                 selectedRef={selectedRef}
                 locked={locked}

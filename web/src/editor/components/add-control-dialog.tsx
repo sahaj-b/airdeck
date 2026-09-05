@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
 import {
@@ -64,7 +64,7 @@ export function AddControlDialog({
   const [label, setLabel] = useState('Button');
   const [shape, setShape] = useState<'round' | 'rect'>('round');
 
-  const allowed = useMemo(() => getAllowedBindings(type), [type]);
+  const allowed = getAllowedBindings(type);
 
   const createControl = (): Control | null => {
     if (!section) return null;

@@ -1,5 +1,5 @@
 import interact from 'interactjs';
-import { memo, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type {
   Control,
   Document as LayoutDocument,
@@ -36,7 +36,7 @@ interface PhoneHitProps {
   isPinchingRef: React.MutableRefObject<boolean>;
 }
 
-export const PhoneHit = memo(function PhoneHit({
+export function PhoneHit({
   control,
   left,
   top,
@@ -140,6 +140,7 @@ export const PhoneHit = memo(function PhoneHit({
       type="button"
       ref={hitRef}
       data-phone-hit
+      aria-label={`Edit ${control.label || control.id}`}
       className={
         'phone-editor-hit absolute rounded touch-none cursor-grab select-none border pointer-events-auto ' +
         (isSelected
@@ -208,4 +209,4 @@ export const PhoneHit = memo(function PhoneHit({
       )}
     </button>
   );
-});
+}

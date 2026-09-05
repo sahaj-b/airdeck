@@ -1,5 +1,5 @@
 import interact from 'interactjs';
-import { memo, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type {
   Control,
@@ -14,7 +14,7 @@ import {
 } from '@/shared/layout-editor';
 import { ControlOverlay } from './control-overlay';
 
-export const ControlHit = memo(function ControlHit({
+export function ControlHit({
   control,
   rect,
   isSelected,
@@ -190,7 +190,7 @@ export const ControlHit = memo(function ControlHit({
       )}
     </button>
   );
-});
+}
 
 function RotateHandle({
   hitRef,

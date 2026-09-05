@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
 import { PublishApprovalBanner } from '@/editor/components/publish-approval-banner';
@@ -27,37 +27,28 @@ function Dashboard() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const run = useCallback((action: () => Promise<void>): void => {
+  const run = (action: () => Promise<void>): void => {
     void action().catch(() => undefined);
-  }, []);
-  const onJoinsChange = useCallback(
-    (value: boolean) => run(() => store.setAcceptingJoins(value)),
-    [run],
-  );
-  const onNewSession = useCallback(
-    () => run(() => store.startNewSession()),
-    [run],
-  );
-  const onSaveSettings = useCallback(
-    (update: SettingsUpdate) => run(() => store.saveSettings(update)),
-    [run],
-  );
-  const onKick = useCallback((id: string) => store.kick(id), []);
-  const onMove = useCallback(
-    (id: string, slot: number) => store.move(id, slot),
-    [],
-  );
-  const onLayout = useCallback(
-    (id: string, layoutId: string) => store.setLayout(id, layoutId),
-    [],
-  );
-  const onApplyLayoutToAll = useCallback((layoutId: string) => {
+  };
+  const onJoinsChange = (value: boolean): void => {
+    run(() => store.setAcceptingJoins(value));
+  };
+  const onNewSession = (): void => {
+    run(() => store.startNewSession());
+  };
+  const onSaveSettings = (update: SettingsUpdate): void => {
+    run(() => store.saveSettings(update));
+  };
+  const onKick = (id: string) => store.kick(id);
+  const onMove = (id: string, slot: number) => store.move(id, slot);
+  const onLayout = (id: string, layoutId: string) =>
+    store.setLayout(id, layoutId);
+  const onApplyLayoutToAll = (layoutId: string) => {
     void store.setAllLayouts(layoutId).catch(() => undefined);
-  }, []);
-  const onReloadLayouts = useCallback(
-    () => run(() => store.reloadLayouts()),
-    [run],
-  );
+  };
+  const onReloadLayouts = (): void => {
+    run(() => store.reloadLayouts());
+  };
 
   if (snapshot.loading && !snapshot.state) return <LoadingScreen />;
   if (!snapshot.state)

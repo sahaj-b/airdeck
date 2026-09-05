@@ -15,7 +15,7 @@ const viteDevProxy = process.env.AIRDECK_DEV
   : undefined;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react({ compiler: true }), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(root, 'src'),
