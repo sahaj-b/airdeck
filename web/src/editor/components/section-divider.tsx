@@ -121,7 +121,7 @@ export function SectionDivider({
     const name = limiting[0]?.label || limiting[0]?.id || 'control';
     tooltipText = `Can't shrink, ${name} is in the way`;
   } else {
-    tooltipText = 'Drag to resize';
+    tooltipText = `Drag to resize ${side === 'left' ? 'Left' : 'Right'} section`;
   }
 
   return (

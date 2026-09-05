@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,6 +14,35 @@ import (
 	"github.com/sahaj-b/airdeck/internal/layout"
 	"github.com/sahaj-b/airdeck/internal/protocol"
 )
+
+func TestPendingStoreClaimSerializesDecisions(t *testing.T) {
+	store := newPendingStore(nil)
+	entry, err := store.Create("phone", "Player", layout.Document{ID: "layout"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := store.Claim(entry.ID)
+	if err != nil || claimed != entry {
+		t.Fatalf("claim = %p, %v; want %p", claimed, err, entry)
+	}
+	if _, err := store.Claim(entry.ID); !errors.Is(err, errPendingBusy) {
+		t.Fatalf("second claim error = %v, want busy", err)
+	}
+	if _, err := store.Remove(entry.ID); !errors.Is(err, errPendingBusy) {
+		t.Fatalf("remove during claim error = %v, want busy", err)
+	}
+	store.expire(&pendingEntry{ID: entry.ID})
+	if _, err := store.Claim(entry.ID); !errors.Is(err, errPendingBusy) {
+		t.Fatalf("stale expiry removed claim error = %v, want busy", err)
+	}
+
+	store.Release(entry.ID, entry)
+	removed, err := store.Remove(entry.ID)
+	if err != nil || removed != entry {
+		t.Fatalf("remove after release = %p, %v; want %p", removed, err, entry)
+	}
+}
 
 func TestLayoutCRUDLoopback(t *testing.T) {
 	server, _, sess := newTestHTTPServerWithUserDir(t, "127.0.0.1", t.TempDir())

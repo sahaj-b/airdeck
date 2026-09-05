@@ -11,10 +11,15 @@ import {
   getBlockingControls,
   getHitzonesOf,
   getSectionControlMin,
+  historyCanRedo,
+  historyCanUndo,
+  historyInit,
+  historyPush,
+  historyRedo,
+  historyUndo,
   isAspectLockForced,
   isDefaultLocked,
-  LayoutHistory,
-  moveParentWithHitzones,
+  moveParentWithHitzonesAcross,
   pixelsToHeightUnits,
   resolveAspectLock,
   soloStick,
@@ -25,8 +30,7 @@ const base = xboxDefault as unknown as LayoutDocument;
 
 describe('layout-editor helpers', () => {
   it('groups hitzone with its parent as one history entry and moves both', () => {
-    const history = new LayoutHistory(50);
-    history.reset(base);
+    let history = historyInit(base);
     const hitzones = getHitzonesOf(base, 'south');
     expect(hitzones).toContain('xyab-hitzone-s');
     expect(hitzones.length).toBe(1);
@@ -37,10 +41,10 @@ describe('layout-editor helpers', () => {
       (c) => c.id === 'xyab-hitzone-s',
     );
     if (!fillerBefore) throw new Error('filler missing');
-    const moved = moveParentWithHitzones(base, 'south', 0.02, 0.02);
-    history.push(moved);
-    expect(history.size).toBe(2);
-    expect(history.canUndo).toBe(true);
+    const moved = moveParentWithHitzonesAcross(base, 'south', 0.02, 0.02);
+    history = historyPush(history, moved);
+    expect(history.stack.length).toBe(2);
+    expect(historyCanUndo(history)).toBe(true);
 
     const southAfter = moved.sections[2].controls.find((c) => c.id === 'south');
     if (!southAfter) throw new Error('south missing');
@@ -59,10 +63,13 @@ describe('layout-editor helpers', () => {
       fillerAfter.geometry.position.x - fillerBefore.geometry.position.x,
     ).toBeCloseTo(0.02, 5);
 
-    const undone = history.undo();
-    expect(undone?.id).toBe(base.id);
-    expect(history.canRedo).toBe(true);
-    const redone = history.redo();
+    const undone = historyUndo(history);
+    expect(undone?.doc.id).toBe(base.id);
+    history = undone?.state ?? history;
+    const redoneState = historyRedo(history);
+    expect(redoneState).not.toBeNull();
+    history = redoneState?.state ?? history;
+    const redone = redoneState?.doc;
     expect(
       redone?.sections[2].controls.find((c) => c.id === 'south')?.geometry
         .position.x,
@@ -98,21 +105,23 @@ describe('layout-editor helpers', () => {
   });
 
   it('caps history at 50 entries and treats parent+hitzones move as one', () => {
-    const history = new LayoutHistory(5);
-    history.reset(base);
+    let capped = historyInit(base, 5);
     for (let index = 0; index < 10; index += 1) {
-      const next = moveParentWithHitzones(
-        history.current() as LayoutDocument,
+      const next = moveParentWithHitzonesAcross(
+        capped.stack[capped.index] as LayoutDocument,
         'south',
         0.01,
         0,
       );
-      history.push(next);
+      capped = historyPush(capped, next);
     }
-    expect(history.size).toBe(5);
+    expect(capped.stack.length).toBe(5);
+    expect(historyCanRedo(capped)).toBe(false);
     let steps = 0;
-    while (history.canUndo) {
-      history.undo();
+    while (historyCanUndo(capped)) {
+      const result = historyUndo(capped);
+      if (!result) break;
+      capped = result.state;
       steps += 1;
     }
     expect(steps).toBe(4);

@@ -22,7 +22,6 @@ func NewHandler(s *session.Session) *Handler {
 }
 
 func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) error {
-	received := time.Now()
 	accepted, err := h.session.AcceptSequence(id, generation, frame.Seq)
 	if err != nil {
 		log.Printf("input rejected player %s seq %d: %v", id, frame.Seq, err)
@@ -36,27 +35,28 @@ func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) err
 		log.Printf("input apply rejected player %s seq %d: %v", id, frame.Seq, err)
 		return err
 	}
-	h.resetWatchdog(id, generation, received)
+	h.resetWatchdog(id, generation)
 	return nil
 }
 
 type watchdogEntry struct {
 	timer      *time.Timer
 	generation uint64
-	received   time.Time
+	deadline   time.Time
 }
 
-func (h *Handler) resetWatchdog(id string, generation uint64, received time.Time) {
+func (h *Handler) resetWatchdog(id string, generation uint64) {
 	h.mu.Lock()
+	now := time.Now()
 	entry, exists := h.timers[id]
 	if exists {
 		entry.generation = generation
-		entry.received = received
+		entry.deadline = now.Add(WatchdogTimeout)
 		entry.timer.Reset(WatchdogTimeout)
 		h.mu.Unlock()
 		return
 	}
-	entry = &watchdogEntry{generation: generation, received: received}
+	entry = &watchdogEntry{generation: generation, deadline: now.Add(WatchdogTimeout)}
 	entry.timer = time.AfterFunc(WatchdogTimeout, func() {
 		h.mu.Lock()
 		current := h.timers[id]
@@ -64,10 +64,15 @@ func (h *Handler) resetWatchdog(id string, generation uint64, received time.Time
 			h.mu.Unlock()
 			return
 		}
+		if time.Now().Before(entry.deadline) {
+			entry.timer.Reset(time.Until(entry.deadline))
+			h.mu.Unlock()
+			return
+		}
 		delete(h.timers, id)
 		gen := entry.generation
 		h.mu.Unlock()
-		_ = h.session.MarkStale(id, gen)
+		_ = h.session.MarkStaleIfIdle(id, gen, WatchdogTimeout)
 	})
 	h.timers[id] = entry
 	h.mu.Unlock()

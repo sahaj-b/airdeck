@@ -1,12 +1,15 @@
-import type {
-  Capabilities,
-  ErrorMessage,
-  LayoutMessage,
-  PublishResult,
-  Rumble,
-  ServerMessage,
-  SlotUpdate,
-  Welcome,
+import {
+  type Capabilities,
+  type ErrorMessage,
+  FRAME_SIZE,
+  type LayoutMessage,
+  MAX_PLAYERS,
+  PROTOCOL_VERSION,
+  type PublishResult,
+  type Rumble,
+  type ServerMessage,
+  type SlotUpdate,
+  type Welcome,
 } from '../shared/contracts';
 import { type LayoutDocument, parseLayoutDocument } from '../shared/layout';
 
@@ -224,7 +227,7 @@ export class ControllerSocket {
         if (
           Number.isInteger(message.slot) &&
           message.slot >= 0 &&
-          message.slot <= 15 &&
+          message.slot < MAX_PLAYERS &&
           typeof message.accent === 'string'
         ) {
           this.options.onSlotUpdate?.(message);
@@ -298,13 +301,13 @@ export class ControllerSocket {
 
   private handleWelcome(message: Welcome): void {
     if (
-      message.protocolVersion !== 1 ||
-      message.frameSize !== 20 ||
+      message.protocolVersion !== PROTOCOL_VERSION ||
+      message.frameSize !== FRAME_SIZE ||
       typeof message.reconnectId !== 'string' ||
       typeof message.playerId !== 'string' ||
       !Number.isInteger(message.slot) ||
       message.slot < 0 ||
-      message.slot > 15 ||
+      message.slot >= MAX_PLAYERS ||
       !Number.isInteger(message.targetInputRate) ||
       message.targetInputRate < 1 ||
       typeof message.selectedLayout !== 'string' ||

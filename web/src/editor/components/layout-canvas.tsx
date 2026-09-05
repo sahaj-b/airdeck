@@ -24,6 +24,8 @@ import {
   resolveLayout,
 } from '@/controller/layout-resolver';
 import { InputStateStore } from '@/controller/state';
+import { isEditableTarget } from '@/hooks/dom';
+import { useInteractGeometry } from '@/hooks/use-interact-geometry';
 import { cn } from '@/lib/utils';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import {
@@ -33,7 +35,6 @@ import {
   resizeControl,
   resolveAspectLock,
 } from '@/shared/layout-editor';
-import { useInteractGeometry } from '../use-interact-geometry';
 import { ControlHit } from './control-hit';
 import { SectionDivider } from './section-divider';
 import {
@@ -150,6 +151,8 @@ export function LayoutCanvas({
   useEffect(() => {
     return () => {
       if (liveRafRef.current !== null) cancelAnimationFrame(liveRafRef.current);
+      liveRafRef.current = null;
+      pendingLiveRef.current = null;
     };
   }, []);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
@@ -209,13 +212,16 @@ export function LayoutCanvas({
     }
   }, [available, viewport.width, viewport.height]);
 
-  const resolved: ResolvedLayout | null = resolveLayout(
-    document,
-    { width: pixelViewport.width, height: pixelViewport.height },
-    'landscape',
+  const resolved: ResolvedLayout | null = useMemo(
+    () =>
+      resolveLayout(
+        document,
+        { width: pixelViewport.width, height: pixelViewport.height },
+        'landscape',
+      ),
+    [document, pixelViewport],
   );
 
-  const mountedStructureRef = useRef<string | null>(null);
   const ensureGhostChrome = useCallback((): void => {
     const mount = mountRef.current;
     if (!mount) return;
@@ -250,20 +256,13 @@ export function LayoutCanvas({
   }, []);
 
   useEffect(() => {
-    const key = structureSignature(document);
-    if (key !== mountedStructureRef.current) {
-      rendererRef.current?.destroy();
-      ghostRef.current?.remove();
-      ghostRef.current = null;
-      const el = mountRef.current;
-      if (el) {
-        rendererRef.current = renderLayout(el, document, {
-          state: emptyStore,
-          orientation: 'landscape',
-          interactive: false,
-        });
-      }
-      mountedStructureRef.current = key;
+    const mount = mountRef.current;
+    if (!rendererRef.current && mount) {
+      rendererRef.current = renderLayout(mount, document, {
+        state: emptyStore,
+        orientation: 'landscape',
+        interactive: false,
+      });
     }
     rendererRef.current?.update(document, pixelViewport);
     rendererRef.current?.setOrientation('landscape', pixelViewport);
@@ -380,20 +379,9 @@ export function LayoutCanvas({
 
   // Hold Space to enter grab mode (ignore while typing in inputs).
   useEffect(() => {
-    const isEditable = (target: EventTarget | null): boolean => {
-      if (!(target instanceof HTMLElement)) return false;
-      if (target.isContentEditable) return true;
-      const tag = target.tagName;
-      return (
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        Boolean(target.closest('[contenteditable="true"]'))
-      );
-    };
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.code !== 'Space') return;
-      if (isEditable(event.target)) {
+      if (isEditableTarget(event.target)) {
         setSpaceHeld(false);
         return;
       }
@@ -438,19 +426,33 @@ export function LayoutCanvas({
       pending.clientY;
   }, [zoom]);
 
-  const selectedControl = selectedControlId
-    ? findControl(document, selectedControlId)?.control
-    : null;
-
-  // One pass over controls instead of a scan per hitzone lookup per render.
-  const hitzonesByParent = indexHitzonesByParent(document);
-
-  const selectedPeerIds = new Set(
-    selectedControlId ? hitzonesByParent.get(selectedControlId) : undefined,
+  const selectedControl = useMemo(
+    () =>
+      selectedControlId
+        ? (findControl(document, selectedControlId)?.control ?? null)
+        : null,
+    [document, selectedControlId],
   );
 
-  const hoveredPeerIds = new Set(
-    hoveredControlId ? hitzonesByParent.get(hoveredControlId) : undefined,
+  const hitzonesByParent = useMemo(
+    () => indexHitzonesByParent(document),
+    [document],
+  );
+
+  const selectedPeerIds = useMemo(
+    () =>
+      new Set(
+        selectedControlId ? hitzonesByParent.get(selectedControlId) : undefined,
+      ),
+    [hitzonesByParent, selectedControlId],
+  );
+
+  const hoveredPeerIds = useMemo(
+    () =>
+      new Set(
+        hoveredControlId ? hitzonesByParent.get(hoveredControlId) : undefined,
+      ),
+    [hitzonesByParent, hoveredControlId],
   );
 
   const locked = selectedControl
@@ -835,17 +837,4 @@ function indexHitzonesByParent(
     }
   }
   return map;
-}
-
-function structureSignature(document: LayoutDocument): string {
-  // lightweight signature without JSON.stringify allocation per control
-  let sig = '';
-  for (const section of document.sections) {
-    sig += `${section.id}|`;
-    for (const c of section.controls) {
-      sig += `${c.id},${c.type},${c.parentId ?? ''},${c.shape ?? ''},${c.binding ?? ''},${c.label};`;
-    }
-    sig += '||';
-  }
-  return sig;
 }

@@ -1,17 +1,18 @@
 import { create } from 'zustand';
 import type { AdminLayoutSummary } from '@/shared/contracts';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
+import type { LayoutSectionId as SectionId } from '@/shared/layout';
 import {
   cloneDocument,
+  type HistoryState,
+  historyCanRedo,
+  historyCanUndo,
+  historyInit,
+  historyPush,
+  historyRedo,
+  historyUndo,
   isDirty as isDirtyHelper,
-  type SectionId,
 } from '@/shared/layout-editor';
-
-interface HistoryState {
-  stack: LayoutDocument[];
-  index: number;
-  cap: number;
-}
 
 export interface EditorStoreState {
   layouts: AdminLayoutSummary[];
@@ -129,10 +130,6 @@ function writeCollapsed(key: string, value: boolean): void {
   } catch {}
 }
 
-function cloneHistoryDoc(doc: LayoutDocument): LayoutDocument {
-  return cloneDocument(doc);
-}
-
 export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   layouts: [],
   config: null,
@@ -226,61 +223,37 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
     if (persisted) set({ dirty: true });
   },
 
-  historyReset: (doc) =>
-    set({
-      history: { stack: [cloneHistoryDoc(doc)], index: 0, cap: 50 },
-    }),
+  historyReset: (doc) => set({ history: historyInit(doc) }),
 
   historyPush: (doc) =>
-    set((state) => {
-      const cloned = cloneHistoryDoc(doc);
-      const current = state.history.stack[state.history.index];
-      if (current && JSON.stringify(current) === JSON.stringify(cloned)) {
-        return state;
-      }
-      const nextStack = state.history.stack.slice(0, state.history.index + 1);
-      nextStack.push(cloned);
-      if (nextStack.length > state.history.cap) nextStack.shift();
-      return {
-        history: {
-          stack: nextStack,
-          index: nextStack.length - 1,
-          cap: state.history.cap,
-        },
-      };
-    }),
+    set((state) => ({ history: historyPush(state.history, doc) })),
 
   historyUndo: () => {
-    const { history } = get();
-    if (history.index <= 0) return null;
-    const nextIndex = history.index - 1;
-    const prev = cloneHistoryDoc(history.stack[nextIndex]);
-    set({ history: { ...history, index: nextIndex } });
-    // also update draft/dirty synchronously
+    const result = historyUndo(get().history);
+    if (!result) return null;
+    set({ history: result.state });
     const { persisted } = get();
     set({
-      draft: prev,
-      dirty: persisted ? isDirtyHelper(prev, persisted) : false,
+      draft: result.doc,
+      dirty: persisted ? isDirtyHelper(result.doc, persisted) : false,
     });
-    return prev;
+    return result.doc;
   },
 
   historyRedo: () => {
-    const { history } = get();
-    if (history.index >= history.stack.length - 1) return null;
-    const nextIndex = history.index + 1;
-    const next = cloneHistoryDoc(history.stack[nextIndex]);
-    set({ history: { ...history, index: nextIndex } });
+    const result = historyRedo(get().history);
+    if (!result) return null;
+    set({ history: result.state });
     const { persisted } = get();
     set({
-      draft: next,
-      dirty: persisted ? isDirtyHelper(next, persisted) : false,
+      draft: result.doc,
+      dirty: persisted ? isDirtyHelper(result.doc, persisted) : false,
     });
-    return next;
+    return result.doc;
   },
 
-  canUndo: () => get().history.index > 0,
-  canRedo: () => get().history.index < get().history.stack.length - 1,
+  canUndo: () => historyCanUndo(get().history),
+  canRedo: () => historyCanRedo(get().history),
 
   applyCommit: (next, opts) => {
     const { draft, persisted, history } = get();
@@ -288,23 +261,12 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
     // caller should check builtin flag; we still require draft exists
     if (!draft) return null;
     if (opts?.live) {
-      set({ draft: cloneHistoryDoc(next), dirty: !!persisted });
+      set({ draft: cloneDocument(next), dirty: !!persisted });
       return next;
     }
     // commit: push to history and recompute dirty
-    const cloned = cloneHistoryDoc(next);
-    const current = history.stack[history.index];
-    let nextHistory = history;
-    if (!current || JSON.stringify(current) !== JSON.stringify(cloned)) {
-      const nextStack = history.stack.slice(0, history.index + 1);
-      nextStack.push(cloned);
-      if (nextStack.length > history.cap) nextStack.shift();
-      nextHistory = {
-        stack: nextStack,
-        index: nextStack.length - 1,
-        cap: history.cap,
-      };
-    }
+    const cloned = cloneDocument(next);
+    const nextHistory = historyPush(history, cloned);
     set({
       draft: cloned,
       history: nextHistory,
@@ -314,13 +276,11 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   },
 
   resetDocument: (doc) => {
-    const cloned = cloneHistoryDoc(doc);
-    const persistedClone = cloneHistoryDoc(doc);
     set({
-      draft: cloned,
-      persisted: persistedClone,
+      draft: cloneDocument(doc),
+      persisted: cloneDocument(doc),
       dirty: false,
-      history: { stack: [cloneHistoryDoc(doc)], index: 0, cap: 50 },
+      history: historyInit(doc),
       selectedControlId: null,
       selectedSectionId: null,
       locks: {},
@@ -330,21 +290,3 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
     });
   },
 }));
-
-// Selectors for derived state - keep outside store to avoid recompute in store
-export function useEditorCanUndo(): boolean {
-  return useEditorStore((s) => s.history.index > 0);
-}
-export function useEditorCanRedo(): boolean {
-  return useEditorStore((s) => s.history.index < s.history.stack.length - 1);
-}
-export function useEditorIsDirty(): boolean {
-  return useEditorStore((s) => s.dirty);
-}
-export function useEditorReadOnly(): boolean {
-  return useEditorStore((s) => {
-    if (!s.draft) return false;
-    const layout = s.layouts.find((l) => l.id === s.draft?.id);
-    return layout?.builtin ?? false;
-  });
-}

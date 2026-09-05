@@ -1,9 +1,14 @@
 import { create } from 'zustand';
 import type { Document as LayoutDocument } from '@/shared/generated/layout';
+import type { HistoryState } from '@/shared/layout-editor';
 import {
   cloneDocument,
-  findControl,
-  isDefaultLocked,
+  historyCanRedo,
+  historyCanUndo,
+  historyInit,
+  historyPush,
+  historyRedo,
+  historyUndo,
 } from '@/shared/layout-editor';
 
 const ONBOARDING_KEY = 'airdeck.phoneEditorOnboarded';
@@ -20,16 +25,6 @@ function writeOnboarded(): void {
   try {
     localStorage.setItem(ONBOARDING_KEY, '1');
   } catch {}
-}
-
-function cloneHistoryDoc(doc: LayoutDocument): LayoutDocument {
-  return cloneDocument(doc);
-}
-
-interface HistoryState {
-  stack: LayoutDocument[];
-  index: number;
-  cap: number;
 }
 
 export interface PhoneEditorStoreState {
@@ -97,134 +92,60 @@ export const usePhoneEditorStore = create<PhoneEditorStoreState>()(
       set({ showOnboarding: false });
     },
 
-    historyReset: (doc) =>
-      set({
-        history: { stack: [cloneHistoryDoc(doc)], index: 0, cap: 50 },
-      }),
+    historyReset: (doc) => set({ history: historyInit(doc) }),
 
     historyPush: (doc) =>
-      set((state) => {
-        const cloned = cloneHistoryDoc(doc);
-        const current = state.history.stack[state.history.index];
-        if (current && JSON.stringify(current) === JSON.stringify(cloned)) {
-          return state;
-        }
-        const nextStack = state.history.stack.slice(0, state.history.index + 1);
-        nextStack.push(cloned);
-        if (nextStack.length > state.history.cap) nextStack.shift();
-        return {
-          history: {
-            stack: nextStack,
-            index: nextStack.length - 1,
-            cap: state.history.cap,
-          },
-        };
-      }),
+      set((state) => ({ history: historyPush(state.history, doc) })),
 
     historyUndo: () => {
-      const { history } = get();
-      if (history.index <= 0) return null;
-      const nextIndex = history.index - 1;
-      const prev = cloneHistoryDoc(history.stack[nextIndex]);
-      set({ history: { ...history, index: nextIndex }, draft: prev });
-      return prev;
+      const result = historyUndo(get().history);
+      if (!result) return null;
+      set({ history: result.state, draft: result.doc });
+      return result.doc;
     },
 
     historyRedo: () => {
-      const { history } = get();
-      if (history.index >= history.stack.length - 1) return null;
-      const nextIndex = history.index + 1;
-      const next = cloneHistoryDoc(history.stack[nextIndex]);
-      set({ history: { ...history, index: nextIndex }, draft: next });
-      return next;
+      const result = historyRedo(get().history);
+      if (!result) return null;
+      set({ history: result.state, draft: result.doc });
+      return result.doc;
     },
 
-    canUndo: () => get().history.index > 0,
-    canRedo: () => get().history.index < get().history.stack.length - 1,
+    canUndo: () => historyCanUndo(get().history),
+    canRedo: () => historyCanRedo(get().history),
 
     applyCommit: (next, opts) => {
       const { draft, history } = get();
       if (!draft) return null;
       if (opts?.live) {
-        set({ draft: cloneHistoryDoc(next) });
+        set({ draft: cloneDocument(next) });
         return next;
       }
-      const cloned = cloneHistoryDoc(next);
-      const current = history.stack[history.index];
-      let nextHistory = history;
-      if (!current || JSON.stringify(current) !== JSON.stringify(cloned)) {
-        const nextStack = history.stack.slice(0, history.index + 1);
-        nextStack.push(cloned);
-        if (nextStack.length > history.cap) nextStack.shift();
-        nextHistory = {
-          stack: nextStack,
-          index: nextStack.length - 1,
-          cap: history.cap,
-        };
-      }
-      set({ draft: cloned, history: nextHistory });
+      const cloned = cloneDocument(next);
+      set({ draft: cloned, history: historyPush(history, cloned) });
       return cloned;
     },
 
     resetDocument: (doc) => {
-      const cloned = cloneHistoryDoc(doc);
       set({
-        draft: cloned,
+        draft: cloneDocument(doc),
         originalId: doc.id,
         name: doc.name,
         nameError: null,
         selectedId: null,
         locks: {},
-        history: { stack: [cloneHistoryDoc(doc)], index: 0, cap: 50 },
+        history: historyInit(doc),
         showOnboarding: readShowOnboarding(),
       });
     },
 
     setDraftLive: (doc) => {
-      set({ draft: cloneHistoryDoc(doc) });
+      set({ draft: cloneDocument(doc) });
     },
 
     commitDraft: (doc) => {
-      const cloned = cloneHistoryDoc(doc);
-      const { history } = get();
-      const current = history.stack[history.index];
-      if (current && JSON.stringify(current) === JSON.stringify(cloned)) {
-        set({ draft: cloned });
-        return;
-      }
-      const nextStack = history.stack.slice(0, history.index + 1);
-      nextStack.push(cloned);
-      if (nextStack.length > history.cap) nextStack.shift();
-      set({
-        draft: cloned,
-        history: {
-          stack: nextStack,
-          index: nextStack.length - 1,
-          cap: history.cap,
-        },
-      });
+      const cloned = cloneDocument(doc);
+      set({ draft: cloned, history: historyPush(get().history, cloned) });
     },
   }),
 );
-
-export function usePhoneCanUndo(): boolean {
-  return usePhoneEditorStore((s) => s.history.index > 0);
-}
-
-export function usePhoneCanRedo(): boolean {
-  return usePhoneEditorStore(
-    (s) => s.history.index < s.history.stack.length - 1,
-  );
-}
-
-export function getLockForControl(
-  locks: Record<string, boolean>,
-  controlId: string,
-  doc: LayoutDocument | null,
-): boolean {
-  if (controlId in locks) return locks[controlId];
-  if (!doc) return true;
-  const found = findControl(doc, controlId);
-  if (!found) return true;
-  return isDefaultLocked(found.control as never);
-}

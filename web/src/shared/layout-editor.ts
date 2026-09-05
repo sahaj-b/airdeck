@@ -5,9 +5,7 @@ import type {
   Section,
 } from './generated/layout';
 import type { Command } from './generated/protocol';
-
-export const SECTION_IDS = ['left', 'center', 'right'] as const;
-export type SectionId = (typeof SECTION_IDS)[number];
+import { allocateSections } from './layout-geometry';
 
 interface BindingLabel {
   command: Command;
@@ -233,15 +231,6 @@ export function cloneDocument(document: LayoutDocument): LayoutDocument {
   return structuredClone(document);
 }
 
-export function getSection(
-  document: LayoutDocument,
-  id: SectionId,
-): Section | undefined {
-  return document.sections.find((section) => section.id === id) as
-    | Section
-    | undefined;
-}
-
 export function findControl(
   document: LayoutDocument,
   controlId: string,
@@ -376,19 +365,6 @@ export function getSectionControlMin(section: Section): number {
   return Math.max(BASE_MIN, controlMin + epsilon);
 }
 
-export function getSectionConfiguredMin(section: Section): number {
-  if (section.id !== 'center') return 0;
-  return section.relativeMinWidth ?? 0;
-}
-
-export function getSectionMinWidth(section: Section): number {
-  if (section.id !== 'center') return getSectionControlMin(section);
-  return Math.max(
-    getSectionControlMin(section),
-    getSectionConfiguredMin(section),
-  );
-}
-
 export function getBlockingControls(
   section: Section,
   width: number,
@@ -442,17 +418,6 @@ export function clampSectionDivider(
   }
 
   return Math.min(Math.max(clamped, hardMin), MAX);
-}
-
-export function updateSectionWidth(
-  document: LayoutDocument,
-  sectionId: 'left' | 'right',
-  nextWidth: number,
-): LayoutDocument {
-  const next = cloneDocument(document);
-  const section = next.sections.find((candidate) => candidate.id === sectionId);
-  if (section) section.relativeWidth = nextWidth;
-  return next;
 }
 
 export function updateControlGeometry(
@@ -514,54 +479,12 @@ export function findSectionForGlobalX(
   return document.sections[document.sections.length - 1];
 }
 
-// Viewport-aware helpers that preserve actual pixel position.
-// Authored relativeWidth defines the valid clamp range, but the visual
-// rects at a given viewport may be narrower (center shrinks, sides scale)
-// via allocateSections. Using allocated widths for the global -> local
-// conversion keeps the control under the finger without a jump.
-function getAllocatedWidths(
-  document: LayoutDocument,
-  viewport: { width: number; height: number },
-): number[] {
-  const reference = Math.max(0, viewport.height);
-  const available = reference > 0 ? Math.max(0, viewport.width / reference) : 0;
-  if (document.sections.length !== 3) return document.sections.map(() => 0);
-  const leftW = document.sections[0].relativeWidth;
-  const rightW = document.sections[2].relativeWidth;
-  const centerMin = document.sections[1].relativeMinWidth ?? 0;
-  const EPSILON = 1e-7;
-  const idealCenter = available - leftW - rightW;
-  if (idealCenter >= centerMin - EPSILON) {
-    return [leftW, idealCenter, rightW];
-  }
-  const sideAvailable = available - centerMin;
-  const totalSide = leftW + rightW;
-  if (sideAvailable >= -EPSILON) {
-    if (totalSide <= EPSILON) return [0, centerMin, 0];
-    const t = sideAvailable / totalSide;
-    return [leftW * t, centerMin, rightW * t];
-  }
-  const totalMin = centerMin;
-  if (totalMin <= EPSILON) {
-    if (available <= EPSILON) return [0, 0, 0];
-    const totalAuthored = leftW + rightW + Math.max(centerMin, idealCenter);
-    const factor = totalAuthored > 0 ? available / totalAuthored : 0;
-    return [
-      leftW * factor,
-      Math.max(0, available - leftW * factor - rightW * factor),
-      rightW * factor,
-    ];
-  }
-  const factor = available / totalMin;
-  return [0 * factor, centerMin * factor, 0 * factor];
-}
-
 export function getAllocatedSectionOffset(
   document: LayoutDocument,
   sectionId: string,
   viewport: { width: number; height: number },
 ): number {
-  const widths = getAllocatedWidths(document, viewport);
+  const widths = allocateSections(document, viewport).widths;
   let offset = 0;
   for (let i = 0; i < document.sections.length; i += 1) {
     if (document.sections[i].id === sectionId) break;
@@ -575,7 +498,7 @@ export function getAllocatedSectionWidth(
   sectionId: string,
   viewport: { width: number; height: number },
 ): number {
-  const widths = getAllocatedWidths(document, viewport);
+  const widths = allocateSections(document, viewport).widths;
   const idx = document.sections.findIndex((s) => s.id === sectionId);
   return idx >= 0 ? widths[idx] : 0;
 }
@@ -585,7 +508,7 @@ export function findAllocatedSectionForGlobalX(
   globalX: number,
   viewport: { width: number; height: number },
 ): Section {
-  const widths = getAllocatedWidths(document, viewport);
+  const widths = allocateSections(document, viewport).widths;
   let start = 0;
   for (let i = 0; i < document.sections.length; i += 1) {
     const end = start + widths[i];
@@ -781,22 +704,6 @@ export function moveParentWithHitzonesAcross(
   return next;
 }
 
-export function moveParentWithHitzones(
-  document: LayoutDocument,
-  parentId: string,
-  deltaX: number,
-  deltaY: number,
-  viewport?: { width: number; height: number },
-): LayoutDocument {
-  return moveParentWithHitzonesAcross(
-    document,
-    parentId,
-    deltaX,
-    deltaY,
-    viewport,
-  );
-}
-
 export function resizeControl(
   document: LayoutDocument,
   controlId: string,
@@ -835,62 +742,63 @@ export function pixelsToHeightUnits(
   return deltaPx / viewportHeight;
 }
 
-export class LayoutHistory {
-  private cap: number;
-  private stack: LayoutDocument[] = [];
-  private index = -1;
+export interface HistoryState {
+  stack: LayoutDocument[];
+  index: number;
+  cap: number;
+}
 
-  constructor(cap = 50) {
-    this.cap = cap;
-  }
+function sameDocument(a: LayoutDocument, b: LayoutDocument): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
-  get size(): number {
-    return this.stack.length;
-  }
+export function historyInit(document: LayoutDocument, cap = 50): HistoryState {
+  return { stack: [cloneDocument(document)], index: 0, cap };
+}
 
-  get canUndo(): boolean {
-    return this.index > 0;
-  }
+export function historyPush(
+  state: HistoryState,
+  document: LayoutDocument,
+): HistoryState {
+  const cloned = cloneDocument(document);
+  const current = state.stack[state.index];
+  if (current && sameDocument(current, cloned)) return state;
+  const stack = state.stack.slice(0, state.index + 1);
+  stack.push(cloned);
+  if (stack.length > state.cap) stack.shift();
+  return { stack, index: stack.length - 1, cap: state.cap };
+}
 
-  get canRedo(): boolean {
-    return this.index < this.stack.length - 1;
-  }
+export function historyCanUndo(state: HistoryState): boolean {
+  return state.index > 0;
+}
 
-  current(): LayoutDocument | undefined {
-    return this.stack[this.index];
-  }
+export function historyCanRedo(state: HistoryState): boolean {
+  return state.index < state.stack.length - 1;
+}
 
-  reset(initial: LayoutDocument): void {
-    this.stack = [cloneDocument(initial)];
-    this.index = 0;
-  }
+export function historyUndo(state: HistoryState): {
+  state: HistoryState;
+  doc: LayoutDocument;
+} | null {
+  if (!historyCanUndo(state)) return null;
+  const index = state.index - 1;
+  return {
+    state: { ...state, index },
+    doc: cloneDocument(state.stack[index]),
+  };
+}
 
-  push(document: LayoutDocument): void {
-    const cloned = cloneDocument(document);
-    const current = this.current();
-    if (current && JSON.stringify(current) === JSON.stringify(cloned)) return;
-    this.stack = this.stack.slice(0, this.index + 1);
-    this.stack.push(cloned);
-    if (this.stack.length > this.cap) this.stack.shift();
-    this.index = this.stack.length - 1;
-  }
-
-  undo(): LayoutDocument | undefined {
-    if (!this.canUndo) return undefined;
-    this.index -= 1;
-    return cloneDocument(this.stack[this.index]);
-  }
-
-  redo(): LayoutDocument | undefined {
-    if (!this.canRedo) return undefined;
-    this.index += 1;
-    return cloneDocument(this.stack[this.index]);
-  }
-
-  clear(): void {
-    this.stack = [];
-    this.index = -1;
-  }
+export function historyRedo(state: HistoryState): {
+  state: HistoryState;
+  doc: LayoutDocument;
+} | null {
+  if (!historyCanRedo(state)) return null;
+  const index = state.index + 1;
+  return {
+    state: { ...state, index },
+    doc: cloneDocument(state.stack[index]),
+  };
 }
 
 export function duplicateControl(
@@ -956,21 +864,20 @@ export function deleteControl(
   document: LayoutDocument,
   controlId: string,
 ): LayoutDocument {
+  const found = findControl(document, controlId);
+  if (!found) return document;
+
   const next = cloneDocument(document);
-  let deletedIsParent = false;
   for (const section of next.sections) {
     const index = section.controls.findIndex(
       (candidate) => candidate.id === controlId,
     );
     if (index >= 0) {
-      const removed = section.controls[index];
-      deletedIsParent = removed.type !== 'hitzone';
       section.controls.splice(index, 1);
       break;
     }
   }
-  // cascade: if the deleted control was a parent, remove its hitzones
-  if (deletedIsParent) {
+  if (found.control.type !== 'hitzone') {
     for (const section of next.sections) {
       section.controls = section.controls.filter(
         (candidate) => candidate.parentId !== controlId,

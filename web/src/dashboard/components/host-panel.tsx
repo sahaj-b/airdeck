@@ -54,6 +54,7 @@ export function HostPanel({
   const [advertisedPort, setAdvertisedPort] = useState(
     String(state.config.advertisedPort),
   );
+  const [networkError, setNetworkError] = useState<string | null>(null);
   const [defaultLayout, setDefaultLayout] = useState(
     state.config.defaultLayout,
   );
@@ -104,11 +105,18 @@ export function HostPanel({
 
   function save(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
+    const listenPort = parsePort(port);
+    const publicPort = parsePort(advertisedPort);
+    if (listenPort === null || publicPort === null) {
+      setNetworkError('Ports must be whole numbers from 0 to 65535.');
+      return;
+    }
+    setNetworkError(null);
     onSave({
       bind: bind.trim(),
-      port: numberValue(port),
+      port: listenPort,
       advertisedHost: advertisedHostRef.current.trim(),
-      advertisedPort: numberValue(advertisedPort),
+      advertisedPort: publicPort,
       gracePeriodSeconds,
     });
   }
@@ -157,8 +165,15 @@ export function HostPanel({
             advertisedPort={advertisedPort}
             advertisedCandidates={state.advertisedCandidates}
             autoLabel={autoLabel}
-            onBindChange={setBind}
-            onPortChange={setPort}
+            error={networkError}
+            onBindChange={(value) => {
+              setBind(value);
+              setNetworkError(null);
+            }}
+            onPortChange={(value) => {
+              setPort(value);
+              setNetworkError(null);
+            }}
             onHostSelectChange={(value) => {
               if (value === null) return;
               setAdvertisedHostSelect(value);
@@ -174,7 +189,10 @@ export function HostPanel({
               setCustomHost(v);
               advertisedHostRef.current = v.trim();
             }}
-            onAdvertisedPortChange={setAdvertisedPort}
+            onAdvertisedPortChange={(value) => {
+              setAdvertisedPort(value);
+              setNetworkError(null);
+            }}
             onSave={save}
           />
         </CardContent>
@@ -356,6 +374,7 @@ function NetworkSection({
   advertisedPort,
   advertisedCandidates,
   autoLabel,
+  error,
   onBindChange,
   onPortChange,
   onHostSelectChange,
@@ -370,6 +389,7 @@ function NetworkSection({
   advertisedPort: string;
   advertisedCandidates: string[];
   autoLabel: string;
+  error: string | null;
   onBindChange: (v: string) => void;
   onPortChange: (v: string) => void;
   onHostSelectChange: (v: string | null) => void;
@@ -406,6 +426,7 @@ function NetworkSection({
             type="number"
             min={0}
             max={65535}
+            step={1}
             value={port}
             onChange={(event) => onPortChange(event.target.value)}
             className="ml-auto w-[200px]"
@@ -469,6 +490,7 @@ function NetworkSection({
               type="number"
               min={0}
               max={65535}
+              step={1}
               value={advertisedPort}
               onChange={(event) => onAdvertisedPortChange(event.target.value)}
               className="ml-auto w-[200px]"
@@ -477,6 +499,14 @@ function NetworkSection({
           <p className="text-xs leading-relaxed text-muted-foreground">
             0 = use listening port.
           </p>
+          {error && (
+            <p
+              className="text-xs leading-relaxed text-destructive"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
         </div>
 
         <div className="pt-2">
@@ -489,9 +519,11 @@ function NetworkSection({
   );
 }
 
-function numberValue(value: string): number {
+function parsePort(value: string): number | null {
+  if (value.trim() === '') return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) return null;
+  return parsed;
 }
 
 function deriveHostSelect(host: string, candidates: string[]): string {

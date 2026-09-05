@@ -66,6 +66,7 @@ type Summary struct {
 
 type Library struct {
 	mu        sync.RWMutex
+	writeMu   sync.Mutex
 	docs      map[string]Document
 	defaultID string
 	builtins  map[string]struct{}
@@ -93,12 +94,6 @@ func (l *Library) Default() Document {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return l.docs[l.defaultID]
-}
-
-func (l *Library) DefaultID() string {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.defaultID
 }
 
 func (l *Library) UserDir() string {

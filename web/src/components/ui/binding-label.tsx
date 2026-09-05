@@ -123,20 +123,3 @@ export function BindingLabel({
     </span>
   );
 }
-
-// For places that need just the PlayStation icon alone
-export function PsIconForCommand({
-  command,
-  size = 13,
-}: {
-  command: Command;
-  size?: number;
-}) {
-  const raw = getBindingLabel(command);
-  const match = raw.match(/ \((.*) \| (.*)\)$/);
-  if (!match) return null;
-  const ps = match[2].replace(')', '').trim();
-  const Icon = PS_ICON_MAP[ps];
-  if (!Icon) return <span className="text-muted-foreground">{ps}</span>;
-  return <Icon size={size} />;
-}

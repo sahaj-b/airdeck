@@ -88,7 +88,9 @@ export class AdminStore {
     }
     this.socket?.close();
     this.socket = undefined;
-    this.setSnapshot({ connected: false });
+    for (const timer of this.publishTimers.values()) clearTimeout(timer);
+    this.publishTimers.clear();
+    this.setSnapshot({ connected: false, pendingPublishes: [] });
   }
 
   async startNewSession(): Promise<void> {

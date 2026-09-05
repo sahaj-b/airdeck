@@ -5,12 +5,10 @@ import "time"
 type PlayerState string
 
 const (
-	StateJoining           PlayerState = "joining"
 	StateActive            PlayerState = "active"
 	StateStale             PlayerState = "stale"
 	StateDisconnectedGrace PlayerState = "disconnected-grace"
 	StateDeviceError       PlayerState = "device-error"
-	StateClosed            PlayerState = "closed"
 )
 
 type Player struct {
@@ -23,9 +21,9 @@ type Player struct {
 	Generation    uint64
 	ReconnectID   string
 	LastInput     time.Time
+	lastFrame     time.Time
 	LastPong      time.Time
 	RTT           time.Duration
-	DeviceStatus  string
 	DeviceReason  string
 	Send          func(any) error
 	Close         func()
@@ -46,7 +44,6 @@ type PlayerSnapshot struct {
 	LastInput     time.Time   `json:"lastInput"`
 	LastPong      time.Time   `json:"lastPong"`
 	RTT           int64       `json:"rttNanos"`
-	DeviceStatus  string      `json:"deviceStatus"`
 	DeviceReason  string      `json:"deviceReason,omitempty"`
 	GraceDeadline time.Time   `json:"graceDeadline,omitempty"`
 }
@@ -56,7 +53,7 @@ func (p *Player) Snapshot() PlayerSnapshot {
 		ID: p.ID, Slot: p.Slot, Name: p.Name, Accent: p.Accent,
 		State: p.State, LayoutID: p.LayoutID, Generation: p.Generation, ReconnectID: p.ReconnectID,
 		LastInput: p.LastInput,
-		LastPong:  p.LastPong, RTT: p.RTT.Nanoseconds(), DeviceStatus: p.DeviceStatus,
+		LastPong:  p.LastPong, RTT: p.RTT.Nanoseconds(),
 		DeviceReason: p.DeviceReason, GraceDeadline: p.GraceDeadline,
 	}
 }

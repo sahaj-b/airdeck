@@ -14,9 +14,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useIsShiftHeld } from '@/hooks/use-interact-geometry';
 import type { Control } from '@/shared/generated/layout';
 import { isAspectLockForced } from '@/shared/layout-editor';
-import { useIsShiftHeld } from '../hooks/use-is-shift-held';
 import { useEditorStore } from '../store/editor-store';
 import { formatNumber, NumberField } from './number-field';
 

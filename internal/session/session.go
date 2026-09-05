@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +49,7 @@ type Session struct {
 	codeRequired   bool
 	acceptingJoins bool
 	players        map[string]*Player
-	slots          [maxPlayers]*Player
+	slots          [MaxPlayers]*Player
 	layouts        *layout.Library
 	defaultLayout  string
 	devices        *device.Manager
@@ -71,17 +72,11 @@ func New(layouts *layout.Library, devices *device.Manager, gracePeriod time.Dura
 }
 
 func newCode() (string, error) {
-	for {
-		var bytes [2]byte
-		if _, err := rand.Read(bytes[:]); err != nil {
-			return "", fmt.Errorf("generate session code: %w", err)
-		}
-		value := uint16(bytes[0])<<8 | uint16(bytes[1])
-		if value >= 60000 {
-			continue
-		}
-		return fmt.Sprintf("%04d", value%10000), nil
+	n, err := rand.Int(rand.Reader, big.NewInt(10000))
+	if err != nil {
+		return "", fmt.Errorf("generate session code: %w", err)
 	}
+	return fmt.Sprintf("%04d", n.Int64()), nil
 }
 
 func newID() (string, error) {
@@ -128,8 +123,6 @@ func (s *Session) Subscribe(listener func(Event)) func() {
 		s.mu.Lock()
 		if index < len(s.listeners) {
 			s.listeners[index] = nil
-			// Compact trailing nils so the slice does not grow without bound
-			// across many dashboard reconnects.
 			for len(s.listeners) > 0 && s.listeners[len(s.listeners)-1] == nil {
 				s.listeners = s.listeners[:len(s.listeners)-1]
 			}
@@ -138,6 +131,9 @@ func (s *Session) Subscribe(listener func(Event)) func() {
 	}
 }
 
+// Admit holds lifecycleMu for the whole call so two concurrent admits cannot
+// pick the same slot, but only holds s.mu for short sections. Device creation
+// does kernel I/O, so snapshot readers stay available while lifecycle work waits.
 func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout string, send func(any) error, close func()) (Admission, error) {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
@@ -165,7 +161,9 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 			snapshot := matched.Snapshot()
 			slot := matched.Slot
 			s.mu.Unlock()
-			_ = s.devices.Neutralize(slot)
+			if err := s.devices.Neutralize(slot); err != nil {
+				log.Printf("player %s slot %d failed to neutralize on reconnect: %v", matched.ID, slot, err)
+			}
 			log.Printf("player %s slot %d reconnected", matched.ID, slot)
 			s.emit(Event{Type: "player.reconnected", Player: &snapshot})
 			return Admission{Player: snapshot, Reconnected: true}, nil
@@ -208,17 +206,13 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	if name == "" {
 		name = fmt.Sprintf("Player %d", slot+1)
 	}
-	player := &Player{ID: id, Slot: slot, Name: name, Accent: slotAccents[slot], State: StateJoining, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, DeviceStatus: "creating", Send: send, Close: close}
+	player := &Player{ID: id, Slot: slot, Name: name, Accent: slotAccents[slot], State: StateActive, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, Send: send, Close: close}
 	playerID := player.ID
+	s.mu.Unlock()
 	if err := s.devices.Create(slot, func(strong, weak uint16) { s.dispatchRumble(playerID, strong, weak) }); err != nil {
-		s.mu.Unlock()
-		// The seat stays free: the join is rejected with a machine-readable
-		// device_error message and no roster entry, so a failed creation
-		// cannot burn a seat.
 		return Admission{}, fmt.Errorf("create virtual device for slot %d: %w", slot, err)
 	}
-	player.State = StateActive
-	player.DeviceStatus = "ready"
+	s.mu.Lock()
 	s.players[player.ID] = player
 	s.slots[slot] = player
 	snapshot := player.Snapshot()
@@ -280,7 +274,7 @@ func (s *Session) AcceptSequence(id string, generation uint64, sequence uint32) 
 	if player == nil {
 		return false, ErrPlayerNotFound
 	}
-	if player.Generation != generation || player.State == StateClosed {
+	if player.Generation != generation {
 		return false, ErrGeneration
 	}
 	if player.HasSequence && !protocol.IsNewerSequence(sequence, player.LastSequence) {
@@ -300,7 +294,7 @@ func (s *Session) ApplyInput(id string, generation uint64, frame protocol.Frame)
 		s.mu.Unlock()
 		return ErrPlayerNotFound
 	}
-	if player.Generation != generation || player.State == StateClosed {
+	if player.Generation != generation {
 		s.mu.Unlock()
 		return ErrGeneration
 	}
@@ -309,19 +303,44 @@ func (s *Session) ApplyInput(id string, generation uint64, frame protocol.Frame)
 		return errors.New("player device is unavailable")
 	}
 	wasStale := player.State == StateStale
-	player.State = StateActive
-	if !frame.IsNeutral() {
-		player.LastInput = time.Now()
-	}
 	slot := player.Slot
+	s.mu.Unlock()
+	if err := s.devices.Apply(slot, uinput.State{Buttons: frame.Buttons, LX: frame.LX, LY: frame.LY, RX: frame.RX, RY: frame.RY, LT: frame.LT, RT: frame.RT}); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	player = s.players[id]
+	if player == nil {
+		s.mu.Unlock()
+		return ErrPlayerNotFound
+	}
+	if player.Generation != generation {
+		s.mu.Unlock()
+		return ErrGeneration
+	}
+	player.State = StateActive
+	now := time.Now()
+	player.lastFrame = now
+	if !frame.IsNeutral() {
+		player.LastInput = now
+	}
 	s.mu.Unlock()
 	if wasStale {
 		log.Printf("player %s slot %d recovered from stale", id, slot)
 	}
-	return s.devices.Apply(slot, uinput.State{Buttons: frame.Buttons, LX: frame.LX, LY: frame.LY, RX: frame.RX, RY: frame.RY, LT: frame.LT, RT: frame.RT})
+	return nil
 }
 
 func (s *Session) MarkStale(id string, generation uint64) error {
+	return s.markStale(id, generation, 0)
+}
+
+func (s *Session) MarkStaleIfIdle(id string, generation uint64, idle time.Duration) error {
+	return s.markStale(id, generation, idle)
+}
+
+func (s *Session) markStale(id string, generation uint64, idle time.Duration) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
@@ -333,6 +352,10 @@ func (s *Session) MarkStale(id string, generation uint64) error {
 	if player.Generation != generation {
 		s.mu.Unlock()
 		return ErrGeneration
+	}
+	if idle > 0 && !player.lastFrame.IsZero() && time.Since(player.lastFrame) < idle {
+		s.mu.Unlock()
+		return nil
 	}
 	wasActive := player.State == StateActive
 	if wasActive {
@@ -359,22 +382,25 @@ func (s *Session) Disconnect(id string, generation uint64) error {
 		s.mu.Unlock()
 		return ErrPlayerNotFound
 	}
-	if player.Generation != generation || player.State == StateClosed {
+	if player.Generation != generation {
 		s.mu.Unlock()
 		return ErrGeneration
 	}
 	player.Generation++
 	generation = player.Generation
+	grace := s.gracePeriod
 	player.State = StateDisconnectedGrace
-	player.GraceDeadline = time.Now().Add(s.gracePeriod)
+	player.GraceDeadline = time.Now().Add(grace)
 	player.Send = nil
 	player.Close = nil
 	slot := player.Slot
 	s.mu.Unlock()
-	_ = s.devices.Neutralize(slot)
-	log.Printf("player %s slot %d disconnected grace=%s", id, slot, s.gracePeriod)
+	if err := s.devices.Neutralize(slot); err != nil {
+		log.Printf("player %s slot %d failed to neutralize on disconnect: %v", id, slot, err)
+	}
+	log.Printf("player %s slot %d disconnected grace=%s", id, slot, grace)
 	s.emit(Event{Type: "player.disconnected", Player: s.snapshotByID(id)})
-	time.AfterFunc(s.gracePeriod, func() { s.expireGrace(id, generation) })
+	time.AfterFunc(grace, func() { s.expireGrace(id, generation) })
 	return nil
 }
 
@@ -388,11 +414,12 @@ func (s *Session) expireGrace(id string, generation uint64) {
 		return
 	}
 	slot := player.Slot
-	player.State = StateClosed
 	delete(s.players, id)
 	s.slots[slot] = nil
 	s.mu.Unlock()
-	_ = s.devices.Destroy(slot)
+	if err := s.devices.Destroy(slot); err != nil {
+		log.Printf("player %s slot %d failed to destroy expired device: %v", id, slot, err)
+	}
 	log.Printf("player %s slot %d expired", id, slot)
 	s.emit(Event{Type: "player.expired", Message: id})
 }
@@ -404,30 +431,31 @@ func (s *Session) Leave(id string, generation uint64) error {
 // Kick frees the slot immediately even if the socket close races ahead and
 // puts the player into reconnect grace first, hence generation 0 (any).
 func (s *Session) Kick(id string) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	s.mu.RLock()
 	player := s.players[id]
-	if player == nil {
-		s.mu.RUnlock()
-		return ErrPlayerNotFound
+	var send func(any) error
+	if player != nil {
+		send = player.Send
 	}
-	send, close := player.Send, player.Close
 	s.mu.RUnlock()
+	if player == nil {
+		return nil
+	}
 	if send != nil {
 		_ = send(protocol.CloseMessage{Type: protocol.MessageClose, Reason: "kicked"})
 	}
-	if close != nil {
-		close()
-	}
-	if err := s.closePlayer(id, 0, "kick"); errors.Is(err, ErrPlayerNotFound) {
-		return nil
-	} else {
-		return err
-	}
+	return s.closePlayerLocked(id, 0, "kick")
 }
 
 func (s *Session) closePlayer(id string, generation uint64, reason string) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
+	return s.closePlayerLocked(id, generation, reason)
+}
+
+func (s *Session) closePlayerLocked(id string, generation uint64, reason string) error {
 	s.mu.Lock()
 	player := s.players[id]
 	if player == nil {
@@ -439,7 +467,6 @@ func (s *Session) closePlayer(id string, generation uint64, reason string) error
 		return ErrGeneration
 	}
 	slot := player.Slot
-	player.State = StateClosed
 	close := player.Close
 	delete(s.players, id)
 	s.slots[slot] = nil
@@ -456,8 +483,8 @@ func (s *Session) closePlayer(id string, generation uint64, reason string) error
 }
 
 func (s *Session) Move(id string, target int) error {
-	if target < 0 || target >= maxPlayers {
-		return fmt.Errorf("target slot must be between 0 and %d", maxPlayers-1)
+	if target < 0 || target >= MaxPlayers {
+		return fmt.Errorf("target slot must be between 0 and %d", MaxPlayers-1)
 	}
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
@@ -477,6 +504,15 @@ func (s *Session) Move(id string, target int) error {
 	s.mu.Unlock()
 	// Destroy already neutralizes; Manager.Destroy is the single teardown path.
 	if err := s.devices.Destroy(old); err != nil {
+		if recreateErr := s.devices.Create(old, rumble); recreateErr != nil {
+			s.mu.Lock()
+			if current := s.players[id]; current != nil {
+				current.State = StateDeviceError
+				current.DeviceReason = err.Error()
+			}
+			s.mu.Unlock()
+			return fmt.Errorf("move failed: %w; rollback failed: %v", err, recreateErr)
+		}
 		return err
 	}
 	if err := s.devices.Create(target, rumble); err != nil {
@@ -484,7 +520,6 @@ func (s *Session) Move(id string, target int) error {
 			s.mu.Lock()
 			if current := s.players[id]; current != nil {
 				current.State = StateDeviceError
-				current.DeviceStatus = "error"
 				current.DeviceReason = err.Error()
 			}
 			s.mu.Unlock()
@@ -504,13 +539,10 @@ func (s *Session) Move(id string, target int) error {
 	accent := slotAccents[target]
 	current.Slot = target
 	current.Accent = accent
-	current.DeviceStatus = "ready"
 	current.State = StateActive
 	send := current.Send
 	s.mu.Unlock()
 	log.Printf("player %s moved %d -> %d", id, old, target)
-	// Tell the phone its slot changed; its socket stays connected and input
-	// keeps routing by player ID, so only the chrome label needs this push.
 	if send != nil {
 		_ = send(protocol.SlotUpdate{Type: protocol.MessageSlotUpdate, Slot: target, Accent: accent})
 	}
@@ -519,6 +551,8 @@ func (s *Session) Move(id string, target int) error {
 }
 
 func (s *Session) SetLayout(id, layoutID string) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	document, ok := s.layouts.Get(layoutID)
 	if !ok {
 		return fmt.Errorf("layout %q is not available", layoutID)
@@ -540,6 +574,8 @@ func (s *Session) SetLayout(id, layoutID string) error {
 }
 
 func (s *Session) SetDefaultLayout(layoutID string) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if _, ok := s.layouts.Get(layoutID); !ok {
 		return fmt.Errorf("layout %q is not available", layoutID)
 	}
@@ -574,20 +610,22 @@ func (s *Session) ReconcileLayouts() {
 		defaultID = defaultDoc.ID
 	}
 	s.mu.Lock()
-	var affected []*Player
+	affected := 0
+	var sends []func(any) error
 	for _, player := range s.players {
 		if _, ok := s.layouts.Get(player.LayoutID); !ok {
+			affected++
 			player.LayoutID = defaultID
-			affected = append(affected, player)
+			if player.Send != nil {
+				sends = append(sends, player.Send)
+			}
 		}
 	}
 	s.mu.Unlock()
-	for _, player := range affected {
-		if player.Send != nil {
-			_ = player.Send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: defaultDoc.ID, Layout: defaultDoc})
-		}
+	for _, send := range sends {
+		_ = send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: defaultDoc.ID, Layout: defaultDoc})
 	}
-	if len(affected) > 0 {
+	if affected > 0 {
 		s.emit(Event{Type: "player.layout"})
 	}
 }
@@ -646,12 +684,9 @@ func (s *Session) NewSession() error {
 	s.code = code
 	s.acceptingJoins = true
 	s.players = make(map[string]*Player)
-	s.slots = [maxPlayers]*Player{}
+	s.slots = [MaxPlayers]*Player{}
 	s.mu.Unlock()
 	log.Printf("new session code %s", code)
-	// Notify connected clients before their close callbacks run. The transport
-	// can flush the reset message and then close each socket without leaving
-	// phones stuck on the previous session.
 	s.emit(Event{Type: "session.reset"})
 	for _, player := range players {
 		if player.Close != nil {
@@ -673,7 +708,7 @@ func (s *Session) Close() error {
 		players = append(players, player)
 	}
 	s.players = make(map[string]*Player)
-	s.slots = [maxPlayers]*Player{}
+	s.slots = [MaxPlayers]*Player{}
 	s.mu.Unlock()
 	for _, player := range players {
 		if player.Close != nil {

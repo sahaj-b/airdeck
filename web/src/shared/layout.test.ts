@@ -124,6 +124,31 @@ describe('subLabel', () => {
     ).toEqual([]);
   });
 
+  it('matches control validation for labels, bindings, and zero rotation', () => {
+    const longLabel = getControlErrors(
+      { ...button, label: 'x'.repeat(41) },
+      section,
+    );
+    expect(longLabel.some((error) => error.path === 'label')).toBe(true);
+
+    const invalidBindings = getControlErrors(
+      {
+        ...button,
+        bindings: {
+          up: 'south',
+          down: 'dpadDown',
+          left: 'dpadLeft',
+          right: 'dpadRight',
+        },
+      } as unknown as import('./layout').Control,
+      section,
+    );
+    expect(invalidBindings.some((error) => error.path === 'bindings')).toBe(
+      true,
+    );
+    expect(getControlErrors({ ...button, rotation: 0 }, section)).toEqual([]);
+  });
+
   it('rejects overlong hints and hints on label or hitzone controls', () => {
     const long = getControlErrors(
       { ...button, subLabel: '🔥'.repeat(21) },

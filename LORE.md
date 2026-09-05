@@ -238,9 +238,9 @@ The editor is split by capability, not framework: the dashboard has the full edi
 
 Phone personal edits are full `LayoutDocument` clones in `localStorage` (`airdeck.personalLayouts`), shown as a separate `My edits` group in the layout picker. Publishing to the host is `POST /api/layouts/publish` returning 202 with a pending store; the dashboard approves via `POST /api/admin/layouts/publish/:id/accept` and writes the file. We chose 202 + admin WebSocket notify + controller WebSocket push over a blocking POST because approval time is unbounded (host may be AFK) and blocking would hit browser/proxy timeouts and hold server handlers.
 
-## Lazy-loaded controller skins
+## Static controller skins
 
-Phone controller themes are named skins that overlay `data-skin` CSS without changing the layout or input contract. Each skin lives as a standalone `web/src/skins/*.css` file. The join client loads only the active skin via a dynamic `import('./<skin>.css?raw')` which Vite splits into a separate chunk. `web/src/skins/loader.ts` caches the fetched text in memory, injects it into a single `<style id="airdeck-skin">` element, and toggles `document.documentElement[data-skin]`. `web/src/skins/index.ts` exposes the skin registry and `loadSkinCSS` with a per-ID loader map. The active choice persists in `localStorage` under `airdeck.skin` with `airdeck` as the default. Previously all nine skins were statically imported and bundled into the join entry. Lazy loading keeps the initial join payload small and makes skin switches instant after the first fetch.
+Phone controller themes are named skins that overlay `data-skin` CSS without changing the layout or input contract. Each skin lives as a standalone `web/src/skins/*.css` file. All skins are statically imported by `web/src/skins/loader.ts` and bundled into the join entry; switching is just the `document.documentElement[data-skin]` attribute. Static bundling is deliberate: the skin picker renders nested `[data-skin]` previews that need every skin's variables present with no async fetch, and nine small stylesheets cost less than a lazy chunk graph. `web/src/skins/index.ts` exposes the skin registry. The active choice persists in `localStorage` under `airdeck.skin` with `airdeck` as the default.
 
 ## Go-canonical typed contracts with tygo codegen
 

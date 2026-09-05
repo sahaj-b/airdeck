@@ -15,6 +15,7 @@ import {
   BitStart,
   BitWest,
   FrameSize as GeneratedFrameSize,
+  MaxPlayers as GeneratedMaxPlayers,
   Version as GeneratedVersion,
 } from './generated/protocol';
 import type { LayoutDocument } from './layout';
@@ -22,6 +23,7 @@ import type { LayoutDocument } from './layout';
 // Protocol SSOT: Go internal/protocol is canonical, tygo generates ./generated/protocol.ts
 export const PROTOCOL_VERSION = GeneratedVersion;
 export const FRAME_SIZE = GeneratedFrameSize;
+export const MAX_PLAYERS = GeneratedMaxPlayers;
 
 export const ButtonBits = {
   south: BitSouth,
@@ -92,12 +94,10 @@ export type ServerMessage =
   | { type: 'session.reset' };
 
 export type PlayerState =
-  | 'joining'
   | 'active'
   | 'stale'
   | 'disconnected-grace'
-  | 'device-error'
-  | 'closed';
+  | 'device-error';
 export interface PlayerSnapshot {
   id: string;
   slot: number;
@@ -109,7 +109,6 @@ export interface PlayerSnapshot {
   lastInput: string;
   lastPong: string;
   rttNanos: number;
-  deviceStatus: string;
   deviceReason?: string;
   graceDeadline?: string;
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import xboxDefault from '../layouts/xbox-default.json';
 import type { LayoutDocument } from '../shared/layout';
-import { allocateSections, resolveLayout } from './layout-resolver';
+import { allocateSections } from '../shared/layout-geometry';
+import { resolveLayout } from './layout-resolver';
 
 const layout = xboxDefault as LayoutDocument;
 

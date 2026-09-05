@@ -31,17 +31,19 @@ type Options struct {
 }
 
 type Server struct {
-	mu         sync.Mutex
-	options    Options
-	static     fs.FS
-	public     *http.Server
-	admin      *http.Server
-	publicLn   net.Listener
-	adminLn    net.Listener
-	publicPort int
-	adminPort  int
-	adminWS    map[*websocket.Conn]chan any
-	pending    *PendingStore
+	mu          sync.Mutex
+	lifecycleMu sync.Mutex
+	options     Options
+	static      fs.FS
+	public      *http.Server
+	admin       *http.Server
+	publicLn    net.Listener
+	adminLn     net.Listener
+	publicPort  int
+	adminPort   int
+	adminWS     map[*websocket.Conn]chan any
+	closed      bool
+	pending     *PendingStore
 }
 
 type listenerSet struct {
@@ -104,6 +106,9 @@ func serveListenerSet(set listenerSet) {
 }
 
 func shutdownListenerSet(ctx context.Context, set listenerSet) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// Close the listeners synchronously so new connections stop being
 	// accepted. The servers then drain in the background: a rebind can be
 	// triggered from a settings handler on the very server being replaced,
@@ -126,6 +131,8 @@ func shutdownListenerSet(ctx context.Context, set listenerSet) error {
 }
 
 func (s *Server) Start() error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
 	if s.publicLn != nil {
 		s.mu.Unlock()
@@ -138,6 +145,7 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.installListenerSet(cfg, set)
+	s.closed = false
 	s.mu.Unlock()
 	serveListenerSet(set)
 	return nil
@@ -302,6 +310,12 @@ func advertisedURL(host string, port int, code string) string {
 func (s *Server) UpdateConfig(cfg config.Config) { s.mu.Lock(); s.options.Config = cfg; s.mu.Unlock() }
 
 func (s *Server) CloseConnections() {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.closeConnections()
+}
+
+func (s *Server) closeConnections() {
 	s.mu.Lock()
 	connections := make([]*websocket.Conn, 0, len(s.adminWS))
 	for conn := range s.adminWS {
@@ -330,16 +344,21 @@ func (s *Server) broadcastAdminState() {
 }
 
 func (s *Server) Close(ctx context.Context) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
 	set := listenerSet{public: s.public, admin: s.admin, publicLn: s.publicLn, adminLn: s.adminLn}
 	s.public, s.admin, s.publicLn, s.adminLn = nil, nil, nil, nil
+	s.closed = true
 	s.mu.Unlock()
 	shutdownErr := shutdownListenerSet(ctx, set)
-	s.CloseConnections()
+	s.closeConnections()
 	return shutdownErr
 }
 
 func (s *Server) Rebind(ctx context.Context, cfg config.Config) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	// Build every replacement listener before touching the current one. A
 	// failed bind therefore leaves the existing session and dashboard alive.
 	s.mu.Lock()

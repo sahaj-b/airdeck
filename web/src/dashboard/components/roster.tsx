@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Badge } from '../../components/ui/badge';
 import {
   Card,
@@ -7,13 +7,16 @@ import {
   CardTitle,
 } from '../../components/ui/card';
 import { TooltipProvider } from '../../components/ui/tooltip';
-import type { LayoutSummary, PlayerSnapshot } from '../../shared/contracts';
+import {
+  type LayoutSummary,
+  MAX_PLAYERS,
+  type PlayerSnapshot,
+} from '../../shared/contracts';
 import { PlayerRow } from './player-row';
 
 interface RosterProps {
   players: PlayerSnapshot[];
   layouts: LayoutSummary[];
-  now: number;
   onKick: (id: string) => Promise<void>;
   onMove: (id: string, slot: number) => Promise<void>;
   onLayout: (id: string, layoutId: string) => Promise<void>;
@@ -22,11 +25,17 @@ interface RosterProps {
 export function Roster({
   players,
   layouts,
-  now,
   onKick,
   onMove,
   onLayout,
 }: RosterProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -40,7 +49,7 @@ export function Roster({
               {players.length}
             </span>
             <span className="text-[11px] font-medium leading-none text-muted-foreground/60">
-              / 16
+              / {MAX_PLAYERS}
             </span>
           </Badge>
         </div>

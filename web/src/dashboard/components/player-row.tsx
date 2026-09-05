@@ -14,7 +14,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '../../components/ui/tooltip';
-import type { LayoutSummary, PlayerSnapshot } from '../../shared/contracts';
+import {
+  type LayoutSummary,
+  MAX_PLAYERS,
+  type PlayerSnapshot,
+} from '../../shared/contracts';
 
 interface PlayerRowProps {
   player: PlayerSnapshot;
@@ -36,7 +40,10 @@ export function PlayerRow({
   onLayout,
 }: PlayerRowProps) {
   const [busy, setBusy] = useState(false);
-  const freeSlots = Array.from({ length: 16 }, (_, slot) => slot).filter(
+  const freeSlots = Array.from(
+    { length: MAX_PLAYERS },
+    (_, slot) => slot,
+  ).filter(
     (slot) => slot === player.slot || !players.some((c) => c.slot === slot),
   );
 
@@ -54,12 +61,11 @@ export function PlayerRow({
   const age = formatAge(player.lastInput, now);
   const rtt = formatRTT(player.rttNanos);
   const hasRTT = Number.isFinite(player.rttNanos) && player.rttNanos > 0;
-  const isClosed = player.state === 'closed';
   const accent = player.accent || 'oklch(0.65 0.12 260)';
 
   return (
     <div
-      className={`group flex flex-col gap-3 bg-transparent px-3 py-3 transition-colors sm:px-4 ${busy ? 'opacity-60' : ''} ${isClosed ? 'opacity-50' : ''}`}
+      className={`group flex flex-col gap-3 bg-transparent px-3 py-3 transition-colors sm:px-4 ${busy ? 'opacity-60' : ''}`}
     >
       <div className="flex flex-wrap items-start gap-3 sm:gap-3.5">
         <div
@@ -115,11 +121,9 @@ export function PlayerRow({
               </TooltipTrigger>
               <TooltipContent side="top">Last input</TooltipContent>
             </Tooltip>
-            {player.deviceStatus !== 'ready' && (
-              <span
-                className={`hidden font-medium sm:inline ${deviceColor(player.deviceStatus)}`}
-              >
-                {player.deviceStatus || 'unknown'}
+            {player.state === 'device-error' && (
+              <span className="hidden font-medium sm:inline text-destructive">
+                error
               </span>
             )}
           </div>
@@ -130,13 +134,9 @@ export function PlayerRow({
             </div>
           )}
 
-          {player.deviceStatus !== 'ready' && (
+          {player.state === 'device-error' && (
             <div className="mt-1 text-xs leading-none sm:hidden">
-              <span
-                className={`font-medium ${deviceColor(player.deviceStatus)}`}
-              >
-                {player.deviceStatus || 'unknown'}
-              </span>
+              <span className="font-medium text-destructive">error</span>
             </div>
           )}
         </div>
@@ -145,7 +145,7 @@ export function PlayerRow({
         <div className="flex w-full items-center gap-2 pl-[52px] sm:pl-[56px] lg:ml-auto lg:w-auto lg:pl-0">
           <Select
             value={player.layoutId}
-            disabled={busy || isClosed}
+            disabled={busy}
             onValueChange={(value) => {
               if (value == null) return;
               void run(() => onLayout(player.id, value));
@@ -168,7 +168,7 @@ export function PlayerRow({
 
           <Select
             value=""
-            disabled={busy || isClosed}
+            disabled={busy}
             onValueChange={(value) => {
               if (value == null) return;
               const target = Number(value);
@@ -231,8 +231,6 @@ function labelForState(state: PlayerSnapshot['state']): string {
       return 'device error';
     case 'disconnected-grace':
       return 'reconnecting';
-    case 'closed':
-      return 'closed';
     default:
       return state;
   }
@@ -251,12 +249,6 @@ function stateClass(state: PlayerSnapshot['state']): string {
     default:
       return 'border-border bg-muted text-muted-foreground';
   }
-}
-
-function deviceColor(status: string): string {
-  if (status === 'ready') return 'text-emerald-600 dark:text-emerald-400';
-  if (status === 'error') return 'text-destructive';
-  return 'text-muted-foreground';
 }
 
 function formatAge(value: string, now: number): string {

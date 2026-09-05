@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { useEditorStore } from '@/editor/store/editor-store';
+import { isEditableTarget } from '@/hooks/dom';
 import { deleteControl } from '@/shared/layout-editor';
 
 export function useEditorKeyboard(): void {
   useEffect(() => {
     const handle = (event: KeyboardEvent): void => {
+      if (isEditableTarget(event.target)) return;
       const isMod = event.ctrlKey || event.metaKey;
       if (isMod && event.key.toLowerCase() === 'z') {
         event.preventDefault();
@@ -31,12 +33,7 @@ export function useEditorKeyboard(): void {
         const next = deleteControl(store.draft, selectedId);
         if (next !== store.draft) {
           store.applyCommit(next);
-          if (store.selectedControlId === selectedId)
-            store.setSelectedControlId(null);
-          const stillExists = next.sections.some((s) =>
-            s.controls.some((c) => c.id === store.selectedControlId),
-          );
-          if (!stillExists) store.setSelectedControlId(null);
+          store.setSelectedControlId(null);
         }
       }
       if (event.key === 'Escape') {

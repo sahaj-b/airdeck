@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"syscall"
@@ -82,6 +83,7 @@ type Controller struct {
 	effects map[int16]ffRumbleEffect
 
 	mu        sync.Mutex
+	writeMu   sync.Mutex
 	last      State
 	started   bool
 	destroyed bool
@@ -101,9 +103,7 @@ func NewController(cfg Config) (*Controller, error) {
 		name = "Xbox 360 Controller"
 	}
 
-	// O_RDWR|O_NONBLOCK: writes never block, and the rumble loop polls so
-	// Destroy can shut it down deterministically instead of relying on
-	// close() unblocking a stuck read.
+	// Non-blocking so Destroy can interrupt the rumble read loop.
 	f, err := os.OpenFile(path, os.O_RDWR|syscall.O_NONBLOCK, 0o660)
 	if err != nil {
 		return nil, fmt.Errorf("uinput: open %s: %w", path, err)
@@ -164,7 +164,7 @@ func (c *Controller) setup(name string) error {
 	if err := binary.Write(&buf, binary.LittleEndian, dev); err != nil {
 		return fmt.Errorf("uinput: encode device setup: %w", err)
 	}
-	if _, err := c.file.Write(buf.Bytes()); err != nil {
+	if err := c.writeBytes(buf.Bytes()); err != nil {
 		return fmt.Errorf("uinput: write device setup: %w", err)
 	}
 	if err := ioctl(c.file, uiDevCreate, 0); err != nil {
@@ -197,21 +197,35 @@ func (c *Controller) Syspath() (string, error) {
 // snapshot to s, followed by one SYN report. After Destroy it is a no-op, so
 // watchdog neutralization can safely race slot teardown.
 func (c *Controller) Apply(s State) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
 	c.mu.Lock()
 	if c.destroyed {
 		c.mu.Unlock()
 		return nil
 	}
-	prev, started := c.last, c.started
-	events := diffState(prev, s, started)
-	c.last, c.started = s, true
+	events := diffState(c.last, s, c.started)
 	c.mu.Unlock()
 
+	deadline := time.Now().Add(writeTimeout)
 	for _, ev := range events {
-		if err := c.writeEvent(ev.typ, ev.code, ev.value); err != nil {
+		if err := c.writeEvent(ev.typ, ev.code, ev.value, deadline); err != nil {
 			return fmt.Errorf("uinput: write event: %w", err)
 		}
 	}
+	if len(events) > 0 {
+		if err := c.writeSyn(deadline); err != nil {
+			return fmt.Errorf("uinput: write syn: %w", err)
+		}
+	}
+
+	c.mu.Lock()
+	if !c.destroyed {
+		c.last = s
+		c.started = true
+	}
+	c.mu.Unlock()
 	return nil
 }
 
@@ -292,28 +306,62 @@ func diffState(prev, next State, started bool) []rawEvent {
 	return events
 }
 
-func (c *Controller) writeEvent(typ, code uint16, value int32) error {
-	ev := inputEvent{Type: typ, Code: code, Value: value}
-	var buf bytes.Buffer
-	if err := binary.Write(&buf, binary.LittleEndian, ev); err != nil {
-		return err
+func (c *Controller) writeEvent(typ, code uint16, value int32, deadline time.Time) error {
+	var buf [inputEventSize]byte
+	binary.LittleEndian.PutUint16(buf[16:18], typ)
+	binary.LittleEndian.PutUint16(buf[18:20], code)
+	binary.LittleEndian.PutUint32(buf[20:24], uint32(value))
+	return c.writeBytesUntil(buf[:], deadline)
+}
+
+func (c *Controller) writeSyn(deadline time.Time) error {
+	var buf [inputEventSize]byte
+	binary.LittleEndian.PutUint16(buf[16:18], evSyn)
+	binary.LittleEndian.PutUint16(buf[18:20], synReport)
+	return c.writeBytesUntil(buf[:], deadline)
+}
+
+func (c *Controller) writeBytes(data []byte) error {
+	return c.writeBytesUntil(data, time.Now().Add(writeTimeout))
+}
+
+func (c *Controller) writeBytesUntil(data []byte, deadline time.Time) error {
+	for len(data) > 0 {
+		n, err := c.file.Write(data)
+		if n > 0 {
+			data = data[n:]
+		}
+		if len(data) == 0 {
+			return nil
+		}
+		if err == nil {
+			if n == 0 {
+				return io.ErrShortWrite
+			}
+			continue
+		}
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if !errors.Is(err, syscall.EAGAIN) {
+			return err
+		}
+		if err := waitWritable(c.file, deadline); err != nil {
+			return err
+		}
 	}
-	if _, err := c.file.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	syn := inputEvent{Type: evSyn, Code: synReport}
-	buf.Reset()
-	if err := binary.Write(&buf, binary.LittleEndian, syn); err != nil {
-		return err
-	}
-	_, err := c.file.Write(buf.Bytes())
-	return err
+	return nil
 }
 
 // pollTimeoutMs bounds each ppoll cycle so the loop notices destruction.
 const (
+	writeTimeout  = 500 * time.Millisecond
 	pollTimeoutMs = 200
 	pollIn        = 0x0001
+	pollOut       = 0x0004
+	pollErr       = 0x0008
+	pollHup       = 0x0010
+	pollNval      = 0x0020
 )
 
 // pollFd mirrors struct pollfd; the Go stdlib no longer exposes poll(2).
@@ -325,12 +373,46 @@ type pollFd struct {
 
 func ppoll(fds []pollFd, timeoutMs int) error {
 	ts := syscall.NsecToTimespec(int64(timeoutMs) * int64(time.Millisecond))
-	_, _, errno := syscall.Syscall(syscall.SYS_PPOLL,
-		uintptr(unsafe.Pointer(&fds[0])), uintptr(len(fds)), uintptr(unsafe.Pointer(&ts)))
+	_, _, errno := syscall.Syscall6(
+		syscall.SYS_PPOLL,
+		uintptr(unsafe.Pointer(&fds[0])),
+		uintptr(len(fds)),
+		uintptr(unsafe.Pointer(&ts)),
+		0,
+		0,
+		0,
+	)
 	if errno != 0 {
 		return errno
 	}
 	return nil
+}
+
+func waitWritable(file *os.File, deadline time.Time) error {
+	fds := []pollFd{{Fd: int32(file.Fd()), Events: pollOut}}
+	for {
+		fds[0].Revents = 0
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return errors.New("uinput: write timed out")
+		}
+		timeoutMs := int(remaining / time.Millisecond)
+		if timeoutMs < 1 {
+			timeoutMs = 1
+		}
+		if err := ppoll(fds, timeoutMs); err != nil {
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			return err
+		}
+		if fds[0].Revents&pollOut != 0 {
+			return nil
+		}
+		if fds[0].Revents&(pollErr|pollHup|pollNval) != 0 {
+			return errors.New("uinput: device is not writable")
+		}
+	}
 }
 
 func (c *Controller) readLoop() {
@@ -422,12 +504,22 @@ func (c *Controller) Destroy() error {
 		c.mu.Lock()
 		c.destroyed = true
 		c.mu.Unlock()
+
+		// Keep device writes serialized with uiDevDestroy. Apply checks
+		// destroyed before writing, so this also lets an in-flight write finish
+		// without racing the kernel device teardown.
+		c.writeMu.Lock()
 		err = ioctl(c.file, uiDevDestroy, 0)
+		c.writeMu.Unlock()
+
+		// readLoop calls File.Fd before each poll. Keep the file open until
+		// that goroutine observes destroyed and exits, otherwise Close races
+		// with Fd under the race detector.
+		<-c.loopDone
 		cerr := c.file.Close()
 		if err == nil {
 			err = cerr
 		}
-		<-c.loopDone
 	})
 	return err
 }

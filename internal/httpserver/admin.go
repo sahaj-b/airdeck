@@ -436,14 +436,22 @@ func (s *Server) playerAPI(w http.ResponseWriter, r *http.Request, value string)
 
 func (s *Server) adminWebSocket(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	s.lifecycleMu.Lock()
+	if s.closed {
+		s.lifecycleMu.Unlock()
+		http.Error(w, "HTTP server is closed", http.StatusServiceUnavailable)
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		s.lifecycleMu.Unlock()
 		return
 	}
 	out := make(chan any, 32)
 	s.mu.Lock()
 	s.adminWS[conn] = out
 	s.mu.Unlock()
+	s.lifecycleMu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		delete(s.adminWS, conn)

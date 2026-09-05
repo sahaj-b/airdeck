@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
 import { PublishApprovalBanner } from '@/editor/components/publish-approval-banner';
@@ -14,17 +14,10 @@ const store = new AdminStore();
 
 function Dashboard() {
   const snapshot = useAdminSnapshot(store);
-  const [now, setNow] = useState(() => Date.now());
-
   useEffect(() => {
     void store.load();
     store.connect();
     return () => store.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
   }, []);
 
   const run = (action: () => Promise<void>): void => {
@@ -103,7 +96,6 @@ function Dashboard() {
             <Roster
               players={state.players}
               layouts={state.layouts}
-              now={now}
               onKick={onKick}
               onMove={onMove}
               onLayout={onLayout}

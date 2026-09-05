@@ -173,8 +173,8 @@ func TestNewSessionEmitsResetBeforeClosingPlayers(t *testing.T) {
 func TestAdmissionCeilingAndSlotReuse(t *testing.T) {
 	session, _ := newTestSession(t)
 	defer session.Close()
-	players := make([]Admission, 0, maxPlayers)
-	for i := 0; i < maxPlayers; i++ {
+	players := make([]Admission, 0, MaxPlayers)
+	for i := 0; i < MaxPlayers; i++ {
 		admission, err := session.Admit(session.Code(), "", "", "", nil, nil)
 		if err != nil {
 			t.Fatalf("admit player %d: %v", i, err)
@@ -228,6 +228,28 @@ func TestReconnectInvalidatesOldGeneration(t *testing.T) {
 	factory.mu.Unlock()
 	if len(devices) != 1 {
 		t.Fatalf("reconnect created %d devices, want 1", len(devices))
+	}
+}
+
+func TestMarkStaleIfIdleIgnoresRecentFrame(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	admission, err := session.Admit(session.Code(), "Player", "", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.ApplyInput(admission.Player.ID, admission.Player.Generation, protocol.Frame{Seq: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.MarkStaleIfIdle(admission.Player.ID, admission.Player.Generation, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	player, ok := session.Player(admission.Player.ID)
+	if !ok {
+		t.Fatal("player not found")
+	}
+	if player.State != StateActive {
+		t.Fatalf("player state = %v, want active", player.State)
 	}
 }
 
@@ -325,17 +347,19 @@ func TestCustomGracePeriodFreesSlotAfterExpiry(t *testing.T) {
 	if err := sess.Disconnect(admission.Player.ID, admission.Player.Generation); err != nil {
 		t.Fatal(err)
 	}
-	slot := admission.Player.Slot
-	if sess.slots[slot] == nil {
+	if _, ok := sess.Player(admission.Player.ID); !ok {
 		t.Fatal("slot should be reserved during grace")
 	}
 	time.Sleep(50 * time.Millisecond)
-	if sess.slots[slot] != nil {
+	if _, ok := sess.Player(admission.Player.ID); ok {
 		t.Fatal("slot should be free after grace expiry")
 	}
 	factory.mu.Lock()
-	destroyed := factory.devices[0].destroyed
+	device := factory.devices[0]
 	factory.mu.Unlock()
+	device.mu.Lock()
+	destroyed := device.destroyed
+	device.mu.Unlock()
 	if destroyed == 0 {
 		t.Fatal("device should be destroyed after grace expiry")
 	}

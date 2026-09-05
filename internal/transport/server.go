@@ -79,19 +79,21 @@ func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *
 	}
 	hello, err := protocol.DecodeHello(data)
 	if err != nil || hello.ClientVersion == "" {
-		// The writer goroutine is not running yet, so this synchronous write
-		// cannot race it; gorilla/websocket forbids concurrent writes.
-		s.sendErrorNow(client, "invalid_hello", "the first message must be a valid hello")
+		// Queue the final error through the single writer before closing.
+		s.sendError(client, "invalid_hello", "the first message must be a valid hello", true)
 		return
 	}
 	admission, err := s.Session.Admit(hello.SessionCode, hello.DisplayName, hello.ReconnectID, hello.SelectedLayout, client.Send, client.Close)
 	if err != nil {
 		code, message := admissionError(err)
-		s.sendErrorNow(client, code, message)
+		s.sendError(client, code, message, true)
 		return
 	}
 	player := admission.Player
 	generation := player.Generation
+	defer func() {
+		_ = s.Input.Disconnect(player.ID, generation)
+	}()
 	s.mu.Lock()
 	s.clientsByID[player.ID] = client
 	if playerIDForCleanup != nil {
@@ -121,7 +123,6 @@ func (s *Server) readClient(client *Client, playerID string, generation uint64) 
 	for {
 		messageType, data, err := client.conn.ReadMessage()
 		if err != nil {
-			_ = s.Input.Disconnect(playerID, generation)
 			return
 		}
 		switch messageType {
@@ -197,14 +198,13 @@ func (s *Server) heartbeat(client *Client, playerID string) {
 	}()
 }
 
-func (s *Server) sendError(client *Client, code, message string) {
-	_ = client.Send(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
-}
-
-// sendErrorNow queues the error before closing the connection so the writer
-// can flush it without concurrent WebSocket writes.
-func (s *Server) sendErrorNow(client *Client, code, message string) {
-	_ = client.sendAndClose(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
+func (s *Server) sendError(client *Client, code, message string, closeAfter ...bool) {
+	errMsg := protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message}
+	if len(closeAfter) > 0 && closeAfter[0] {
+		_ = client.sendAndClose(errMsg)
+		return
+	}
+	_ = client.Send(errMsg)
 }
 
 func admissionError(err error) (string, string) {
@@ -214,7 +214,7 @@ func admissionError(err error) (string, string) {
 	case errors.Is(err, session.ErrJoinsClosed):
 		return "joins_closed", "This session is not accepting new joins."
 	case errors.Is(err, session.ErrSessionFull):
-		return "session_full", "This session already has 16 players."
+		return "session_full", fmt.Sprintf("This session already has %d players.", session.MaxPlayers)
 	case errors.Is(err, session.ErrInvalidReconnect):
 		return "invalid_reconnect", "The reconnect window has expired. Join as a new player."
 	default:

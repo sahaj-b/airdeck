@@ -461,6 +461,7 @@ function showController(options: {
 
   let availableLayouts: { id: string; name: string }[] = [];
   let currentLayoutId = '';
+  let skipInitialHostLayout = false;
   let playerId = '';
   let currentPlayerDisplayName = options.displayName || '';
   let connectionText = CONNECTION_LABELS.connecting;
@@ -558,6 +559,7 @@ function showController(options: {
       }
       return;
     }
+    skipInitialHostLayout = false;
     if (socket.selectLayout(id)) updateStatus('Loading layout...');
   };
 
@@ -884,10 +886,12 @@ function showController(options: {
       playerId = welcome.playerId;
       currentPlayerDisplayName =
         welcome.displayName || currentPlayerDisplayName;
+      skipInitialHostLayout = false;
       const stored = readStorage(SELECTED_LAYOUT_KEY);
       if (stored && isPersonalLayout(stored)) {
         const personalDoc = loadPersonalLayouts()[stored];
         if (personalDoc && validateLayout(personalDoc)) {
+          skipInitialHostLayout = true;
           currentLayoutId = stored;
           renderLocalLayout(personalDoc);
           if (island && !island.isDestroyed())
@@ -908,6 +912,11 @@ function showController(options: {
         });
     },
     onLayout: (layout, diagnostic) => {
+      if (skipInitialHostLayout) {
+        skipInitialHostLayout = false;
+        updateStatus(diagnostic ?? 'Controller ready.');
+        return;
+      }
       activeRenderer?.destroy();
       activeRenderer = renderLayout(host, layout, {
         state,

@@ -1,10 +1,8 @@
 import type { Orientation } from '../shared/contracts';
 import type { Control, LayoutDocument, Section } from '../shared/layout';
+import { allocateSections, type Viewport } from '../shared/layout-geometry';
 
-export interface Viewport {
-  width: number;
-  height: number;
-}
+export type { Viewport } from '../shared/layout-geometry';
 
 export interface PixelRect {
   left: number;
@@ -35,10 +33,6 @@ export interface ResolvedLayout {
   portraitFallback: boolean;
 }
 
-export interface SectionAllocation {
-  widths: number[];
-}
-
 export function findControlVisual(
   resolved: ResolvedLayout | null,
   controlId: string | null,
@@ -51,8 +45,6 @@ export function findControlVisual(
   }
   return null;
 }
-
-const EPSILON = 1e-7;
 
 export function resolveLayout(
   document: LayoutDocument,
@@ -92,62 +84,6 @@ export function resolveLayout(
     viewport: safeViewport,
     sections,
     portraitFallback: orientation === 'portrait',
-  };
-}
-
-export function allocateSections(
-  document: LayoutDocument,
-  viewport: Viewport,
-): SectionAllocation {
-  const reference = Math.max(0, viewport.height);
-  const available = reference > 0 ? Math.max(0, viewport.width / reference) : 0;
-  if (document.sections.length !== 3) {
-    return { widths: document.sections.map(() => 0) };
-  }
-
-  const leftW = document.sections[0].relativeWidth;
-  const rightW = document.sections[2].relativeWidth;
-  const leftMin = 0;
-  const rightMin = 0;
-  const centerMin = document.sections[1].relativeMinWidth ?? 0;
-
-  const idealCenter = available - leftW - rightW;
-  if (idealCenter >= centerMin - EPSILON) {
-    // Phase 1: center has room, sides stay at authored
-    return { widths: [leftW, idealCenter, rightW] };
-  }
-
-  // Phase 2: center at min, sides shrink proportionally toward 0
-  const sideAvailable = available - centerMin;
-  const totalSide = leftW + rightW;
-
-  if (sideAvailable >= -EPSILON) {
-    if (totalSide <= EPSILON) {
-      return { widths: [0, centerMin, 0] };
-    }
-    const t = sideAvailable / totalSide;
-    const leftScaled = leftW * t;
-    const rightScaled = rightW * t;
-    return { widths: [leftScaled, centerMin, rightScaled] };
-  }
-
-  // Phase 3: available < centerMin, center and sides below zero impossible, center shrinks
-  const totalMin = centerMin;
-  if (totalMin <= EPSILON) {
-    if (available <= EPSILON) return { widths: [0, 0, 0] };
-    const totalAuthored = leftW + rightW + Math.max(centerMin, idealCenter);
-    const factor = totalAuthored > 0 ? available / totalAuthored : 0;
-    return {
-      widths: [
-        leftW * factor,
-        Math.max(0, available - leftW * factor - rightW * factor),
-        rightW * factor,
-      ],
-    };
-  }
-  const factor = available / totalMin;
-  return {
-    widths: [leftMin * factor, centerMin * factor, rightMin * factor],
   };
 }
 

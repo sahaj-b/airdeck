@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -138,6 +139,44 @@ func TestLibraryReloadRetainsOldOnFailure(t *testing.T) {
 	// Cleanup duplicate for other tests.
 	_ = os.Remove(filepath.Join(dir, "xbox-default.json"))
 	_ = lib.Reload()
+}
+
+func TestLibraryConcurrentCreateReturnsOneConflict(t *testing.T) {
+	dir := t.TempDir()
+	lib, err := LoadDefault(dir, "xbox-default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := baseDoc()
+	doc.ID = "concurrent"
+	doc.Name = "Concurrent"
+
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for range 2 {
+		go func() {
+			defer wg.Done()
+			errs <- lib.Create(doc)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	var created, conflicts int
+	for err := range errs {
+		switch {
+		case err == nil:
+			created++
+		case errors.Is(err, ErrLayoutExists):
+			conflicts++
+		default:
+			t.Fatalf("concurrent create error = %v", err)
+		}
+	}
+	if created != 1 || conflicts != 1 {
+		t.Fatalf("concurrent creates returned %d successes and %d conflicts, want one each", created, conflicts)
+	}
 }
 
 func TestLibraryCreateConflict(t *testing.T) {

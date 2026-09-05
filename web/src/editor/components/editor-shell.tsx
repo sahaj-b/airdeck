@@ -6,7 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { SectionId } from '@/shared/layout-editor';
+import type { LayoutSectionId } from '@/shared/layout';
 import { useEditorActions } from '../hooks/use-editor-actions';
 import { useEditorStore } from '../store/editor-store';
 import { AddControlDialog } from './add-control-dialog';
@@ -263,18 +263,20 @@ export function EditorShell() {
                 useEditorStore.getState().setSelectedControlId(id)
               }
               onSelectSection={(id) => {
-                useEditorStore.getState().setSelectedSectionId(id as SectionId);
+                useEditorStore
+                  .getState()
+                  .setSelectedSectionId(id as LayoutSectionId);
                 useEditorStore.getState().setSelectedControlId(null);
               }}
               onHoverSection={(id) =>
                 useEditorStore
                   .getState()
-                  .setHoveredSectionId(id as SectionId | null)
+                  .setHoveredSectionId(id as LayoutSectionId | null)
               }
               onAddControl={(sectionId) =>
                 useEditorStore
                   .getState()
-                  .setAddDialogSection(sectionId as SectionId | null)
+                  .setAddDialogSection(sectionId as LayoutSectionId | null)
               }
               onMoveControl={handleMoveControl}
               onDuplicateControl={handleDuplicateControl}
@@ -303,12 +305,12 @@ export function EditorShell() {
             onSelectSection={(id) =>
               useEditorStore
                 .getState()
-                .setSelectedSectionId(id as SectionId | null)
+                .setSelectedSectionId(id as LayoutSectionId | null)
             }
             onHoverSection={(id) =>
               useEditorStore
                 .getState()
-                .setHoveredSectionId(id as SectionId | null)
+                .setHoveredSectionId(id as LayoutSectionId | null)
             }
             onDraftChange={handleDraftChange}
             locks={locks}

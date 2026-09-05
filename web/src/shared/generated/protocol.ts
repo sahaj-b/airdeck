@@ -6,6 +6,7 @@
 export const Version: number /* uint8 */ = 1;
 export const FrameSize = 20;
 export const FrameFlags = 0;
+export const MaxPlayers = 16;
 export const BitSouth: number /* uint32 */ = 1 << 0;
 export const BitEast: number /* uint32 */ = 1 << 1;
 export const BitWest: number /* uint32 */ = 1 << 2;

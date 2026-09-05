@@ -1,8 +1,26 @@
 package uinput
 
 import (
+	"os"
 	"testing"
 )
+
+func TestPPollTimeout(t *testing.T) {
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readEnd.Close()
+	defer writeEnd.Close()
+
+	fds := []pollFd{{Fd: int32(readEnd.Fd()), Events: pollIn}}
+	if err := ppoll(fds, 1); err != nil {
+		t.Fatalf("ppoll returned an error: %v", err)
+	}
+	if fds[0].Revents != 0 {
+		t.Fatalf("ppoll reported unexpected events %#x", fds[0].Revents)
+	}
+}
 
 func TestHatFrom(t *testing.T) {
 	cases := []struct {

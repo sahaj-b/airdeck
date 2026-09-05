@@ -64,6 +64,25 @@ func TestValidateRejectsUnsafeAndDuplicateDocuments(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsInvalidIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*Document)
+	}{
+		{"document path", func(doc *Document) { doc.ID = "../escape" }},
+		{"control path", func(doc *Document) { doc.Sections[0].Controls[0].ID = "bad/id" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			doc := baseDocument()
+			test.edit(&doc)
+			if err := ValidateDocument(doc); err == nil {
+				t.Fatal("invalid id was accepted")
+			}
+		})
+	}
+}
+
 func TestValidateRejectsIncompleteDPad(t *testing.T) {
 	doc := baseDocument()
 	doc.Sections[0].Controls = []Control{{
@@ -80,6 +99,20 @@ func TestValidateRejectsIncompleteDPad(t *testing.T) {
 	}
 	if _, err := ValidateJSON(data); err == nil {
 		t.Fatal("schema accepted incomplete d-pad")
+	}
+}
+
+func TestValidateRejectsNonFixedDPadBindings(t *testing.T) {
+	doc := baseDocument()
+	doc.Sections[0].Controls = []Control{{
+		ID: "dpad", Type: "dpad", Geometry: Geometry{
+			Position: Point{}, Size: Size{Width: 0.5, Height: 0.5},
+		}, Label: "D-pad", Bindings: &DPadBindings{
+			Up: "dpadDown", Down: "dpadUp", Left: "dpadLeft", Right: "dpadRight",
+		},
+	}}
+	if err := ValidateDocument(doc); err == nil {
+		t.Fatal("non-fixed d-pad bindings were accepted")
 	}
 }
 

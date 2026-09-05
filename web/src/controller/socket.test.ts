@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import xboxDefault from '../layouts/xbox-default.json';
+import { MAX_PLAYERS } from '../shared/contracts';
 import { ControllerSocket, type SocketConnection } from './socket';
 
 class FakeSocket implements SocketConnection {
@@ -166,7 +167,7 @@ describe('ControllerSocket', () => {
       JSON.stringify({
         type: 'error',
         code: 'session_full',
-        message: 'This session already has 16 players.',
+        message: `This session already has ${MAX_PLAYERS} players.`,
       }),
     );
     expect(socket.state).toBe('rejected');

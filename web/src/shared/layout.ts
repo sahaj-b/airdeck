@@ -77,10 +77,9 @@ export interface LayoutParseResult {
 export function validateLayout(value: unknown): value is LayoutDocument {
   if (!validateSchema(value)) return false;
   const document = value as LayoutDocument;
-  if (document.sections.length !== 3) return false;
-  const expected: string[] = ['left', 'center', 'right'];
-  for (let i = 0; i < 3; i += 1) {
-    if (document.sections[i].id !== expected[i]) return false;
+  if (document.sections.length !== LAYOUT_SECTION_IDS.length) return false;
+  for (let i = 0; i < LAYOUT_SECTION_IDS.length; i += 1) {
+    if (document.sections[i].id !== LAYOUT_SECTION_IDS[i]) return false;
   }
   const ids = new Set<string>();
   const add = (id: string) => {
@@ -129,17 +128,17 @@ export function getValidationErrors(value: unknown): ValidationError[] {
     return errors;
   }
   const document = value as LayoutDocument;
-  if (document.sections.length !== 3)
+  if (document.sections.length !== LAYOUT_SECTION_IDS.length)
     errors.push({
       path: '/sections',
-      message: 'layout must contain exactly 3 sections',
+      message: `layout must contain exactly ${LAYOUT_SECTION_IDS.length} sections`,
     });
-  const expected: string[] = ['left', 'center', 'right'];
-  for (let i = 0; i < 3; i += 1) {
-    if (document.sections[i]?.id !== expected[i])
+  for (let i = 0; i < LAYOUT_SECTION_IDS.length; i += 1) {
+    const expected = LAYOUT_SECTION_IDS[i];
+    if (document.sections[i]?.id !== expected)
       errors.push({
         path: `/sections/${i}/id`,
-        message: `section ${i} must be ${expected[i]}`,
+        message: `section ${i} must be ${expected}`,
       });
   }
   const seen = new Map<string, string>();
@@ -321,7 +320,7 @@ export function getControlErrors(
         message: 'only hitzone controls may have parentId',
       });
     }
-    if (control.rotation !== undefined) {
+    if (control.rotation !== undefined && control.rotation !== 0) {
       errors.push({
         path: 'rotation',
         message: 'only hitzone controls may have rotation',
@@ -338,6 +337,12 @@ export function getControlErrors(
         path: 'hitShape',
         message: `unsupported hitShape ${hitShape}`,
       });
+  }
+  if ([...control.label].length > 40) {
+    errors.push({
+      path: 'label',
+      message: 'label must be at most 40 characters',
+    });
   }
   if (control.subLabel !== undefined && control.subLabel !== null) {
     if (typeof control.subLabel !== 'string') {
@@ -380,17 +385,22 @@ export function getControlErrors(
       message: `unsupported control type ${control.type}`,
     });
   }
-  if (control.type === 'dpad') {
-    if (
-      control.bindings?.up !== 'dpadUp' ||
+  if (
+    control.bindings &&
+    (control.bindings.up !== 'dpadUp' ||
       control.bindings.down !== 'dpadDown' ||
       control.bindings.left !== 'dpadLeft' ||
-      control.bindings.right !== 'dpadRight'
-    )
-      errors.push({
-        path: 'bindings',
-        message: 'd-pad requires fixed four bindings',
-      });
+      control.bindings.right !== 'dpadRight')
+  )
+    errors.push({
+      path: 'bindings',
+      message: 'bindings must contain the fixed four d-pad commands',
+    });
+  if (control.type === 'dpad' && !control.bindings) {
+    errors.push({
+      path: 'bindings',
+      message: 'd-pad controls require four bindings',
+    });
   }
   if (
     control.type === 'joystick' &&

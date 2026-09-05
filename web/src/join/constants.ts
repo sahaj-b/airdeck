@@ -1,4 +1,5 @@
 import type { ConnectionState } from '../controller/socket';
+import { MAX_PLAYERS } from '../shared/contracts';
 
 export const DISPLAY_NAME_KEY = 'airdeck.displayName';
 export const WAKE_LOCK_KEY = 'airdeck.wakeLock';
@@ -34,7 +35,7 @@ export const SHORT_STATUS: Record<string, string> = {
   'Loading layout...': 'Loading layout',
   'The session code is invalid.': 'Invalid code',
   'This session is not accepting new joins.': 'Joins closed',
-  'This session already has 16 players.': 'Session full',
+  [`This session already has ${MAX_PLAYERS} players.`]: 'Session full',
   'The reconnect window has expired. Join as a new player.':
     'Reconnect expired',
   'The host could not create your virtual controller.': 'Device error',

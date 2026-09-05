@@ -18,6 +18,12 @@ var (
 // Reload atomically replaces the library's document map with the current
 // built-in and user documents. A failure keeps the existing map unchanged.
 func (l *Library) Reload() error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+	return l.reload()
+}
+
+func (l *Library) reload() error {
 	userDir := l.UserDir()
 	builtins, err := LoadBuiltins()
 	if err != nil {
@@ -58,6 +64,8 @@ func (l *Library) Reload() error {
 // Create validates and persists a new user layout. It returns 403 for builtin
 // collisions, 409 for existing ids, and 400 for validation failures.
 func (l *Library) Create(doc Document) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 	if err := ValidateDocument(doc); err != nil {
 		return err
 	}
@@ -70,7 +78,7 @@ func (l *Library) Create(doc Document) error {
 	if err := writeDocument(l.UserDir(), doc); err != nil {
 		return err
 	}
-	if err := l.Reload(); err != nil {
+	if err := l.reload(); err != nil {
 		return err
 	}
 	return nil
@@ -78,6 +86,8 @@ func (l *Library) Create(doc Document) error {
 
 // Update validates and persists an existing user layout.
 func (l *Library) Update(doc Document) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 	if err := ValidateDocument(doc); err != nil {
 		return err
 	}
@@ -90,7 +100,7 @@ func (l *Library) Update(doc Document) error {
 	if err := writeDocument(l.UserDir(), doc); err != nil {
 		return err
 	}
-	if err := l.Reload(); err != nil {
+	if err := l.reload(); err != nil {
 		return err
 	}
 	return nil
@@ -98,6 +108,8 @@ func (l *Library) Update(doc Document) error {
 
 // Delete removes a user layout file and reloads the library.
 func (l *Library) Delete(id string) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 	if l.IsBuiltin(id) {
 		return ErrBuiltinProtected
 	}
@@ -121,7 +133,7 @@ func (l *Library) Delete(id string) error {
 		}
 		return fmt.Errorf("remove layout: %w", err)
 	}
-	if err := l.Reload(); err != nil {
+	if err := l.reload(); err != nil {
 		return err
 	}
 	return nil

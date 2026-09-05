@@ -4,6 +4,7 @@ const (
 	Version    uint8 = 1
 	FrameSize        = 20
 	FrameFlags       = 0
+	MaxPlayers       = 16
 )
 
 const (

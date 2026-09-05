@@ -53,7 +53,7 @@ func ValidateJSON(data []byte) (Document, error) {
 	return document, nil
 }
 
-var parentIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
 // joystickSquareEpsilon bounds authored width/height drift (height units).
 const joystickSquareEpsilon = 0.001
@@ -62,8 +62,8 @@ func ValidateDocument(document Document) error {
 	if document.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported layout schema version %d", document.SchemaVersion)
 	}
-	if document.ID == "" || document.Name == "" {
-		return errors.New("layout id and name are required")
+	if !utf8.ValidString(document.Name) || document.Name == "" || utf8.RuneCountInString(document.Name) > 80 {
+		return errors.New("layout name must be between 1 and 80 characters")
 	}
 	if len(document.Sections) != 3 {
 		return errors.New("layout must contain exactly 3 sections")
@@ -77,8 +77,8 @@ func ValidateDocument(document Document) error {
 
 	ids := make(map[string]string)
 	checkID := func(id, kind string) error {
-		if id == "" {
-			return fmt.Errorf("%s id is required", kind)
+		if !idPattern.MatchString(id) {
+			return fmt.Errorf("%s id is invalid", kind)
 		}
 		if previous, ok := ids[id]; ok {
 			return fmt.Errorf("duplicate id %q used by %s and %s", id, previous, kind)
@@ -175,7 +175,7 @@ func validateControl(control Control, section Section) error {
 		if control.ParentID == "" {
 			return errors.New("hitzone requires parentId")
 		}
-		if !parentIDPattern.MatchString(control.ParentID) {
+		if !idPattern.MatchString(control.ParentID) {
 			return fmt.Errorf("invalid parentId %q", control.ParentID)
 		}
 		if control.Binding != "" {
@@ -208,7 +208,10 @@ func validateControl(control Control, section Section) error {
 	if err := validateGeometry(control.Geometry, section, "geometry"); err != nil {
 		return err
 	}
-	if utf8.RuneCountInString(control.SubLabel) > 20 {
+	if !utf8.ValidString(control.Label) || utf8.RuneCountInString(control.Label) > 40 {
+		return errors.New("label must be at most 40 characters")
+	}
+	if !utf8.ValidString(control.SubLabel) || utf8.RuneCountInString(control.SubLabel) > 20 {
 		return errors.New("subLabel must be at most 20 characters")
 	}
 	if control.SubLabel != "" && (control.Type == "label" || control.Type == "hitzone") {
@@ -223,22 +226,15 @@ func validateControl(control Control, section Section) error {
 		}
 	}
 	if control.Bindings != nil {
-		for _, binding := range []string{control.Bindings.Up, control.Bindings.Down, control.Bindings.Left, control.Bindings.Right} {
-			if binding == "" {
-				continue
-			}
-			if binding != string(protocol.CommandDPadUp) && binding != string(protocol.CommandDPadDown) && binding != string(protocol.CommandDPadLeft) && binding != string(protocol.CommandDPadRight) {
-				return fmt.Errorf("invalid d-pad command %q", binding)
-			}
+		if control.Bindings.Up != string(protocol.CommandDPadUp) ||
+			control.Bindings.Down != string(protocol.CommandDPadDown) ||
+			control.Bindings.Left != string(protocol.CommandDPadLeft) ||
+			control.Bindings.Right != string(protocol.CommandDPadRight) {
+			return errors.New("bindings must contain the fixed four d-pad commands")
 		}
 	}
-	if control.Type == "dpad" {
-		if control.Bindings == nil {
-			return errors.New("d-pad controls require four bindings")
-		}
-		if control.Bindings.Up == "" || control.Bindings.Down == "" || control.Bindings.Left == "" || control.Bindings.Right == "" {
-			return errors.New("d-pad controls require four bindings")
-		}
+	if control.Type == "dpad" && control.Bindings == nil {
+		return errors.New("d-pad controls require four bindings")
 	}
 	if control.Type == "joystick" && control.Binding != protocol.CommandLeftStick && control.Binding != protocol.CommandRightStick {
 		return errors.New("joystick controls require a stick binding")

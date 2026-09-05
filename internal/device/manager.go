@@ -5,17 +5,19 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/sahaj-b/airdeck/internal/protocol"
 	"github.com/sahaj-b/airdeck/internal/uinput"
 )
 
-const MaxSlots = 16
+const MaxSlots = protocol.MaxPlayers
 
 var ErrSlotOccupied = errors.New("slot already has a device")
 
 type Manager struct {
-	mu      sync.RWMutex
-	factory Factory
-	devices map[int]Device
+	mu          sync.RWMutex
+	lifecycleMu sync.Mutex
+	factory     Factory
+	devices     map[int]Device
 }
 
 func NewManager(factory Factory) *Manager {
@@ -26,20 +28,27 @@ func (m *Manager) Create(slot int, rumble RumbleFunc) error {
 	if slot < 0 || slot >= MaxSlots {
 		return fmt.Errorf("slot %d is outside 0..%d", slot, MaxSlots-1)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, exists := m.devices[slot]; exists {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
+	m.mu.RLock()
+	_, exists := m.devices[slot]
+	m.mu.RUnlock()
+	if exists {
 		return ErrSlotOccupied
 	}
 	device, err := m.factory.Create(rumble)
 	if err != nil {
 		return err
 	}
+	m.mu.Lock()
 	m.devices[slot] = device
+	m.mu.Unlock()
 	return nil
 }
 
 func (m *Manager) Apply(slot int, state uinput.State) error {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
 	m.mu.RLock()
 	device := m.devices[slot]
 	m.mu.RUnlock()
@@ -50,6 +59,8 @@ func (m *Manager) Apply(slot int, state uinput.State) error {
 }
 
 func (m *Manager) Neutralize(slot int) error {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
 	m.mu.RLock()
 	device := m.devices[slot]
 	m.mu.RUnlock()
@@ -60,6 +71,8 @@ func (m *Manager) Neutralize(slot int) error {
 }
 
 func (m *Manager) Destroy(slot int) error {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
 	m.mu.Lock()
 	device := m.devices[slot]
 	delete(m.devices, slot)
@@ -67,14 +80,14 @@ func (m *Manager) Destroy(slot int) error {
 	if device == nil {
 		return nil
 	}
-	if err := device.Neutralize(); err != nil {
-		_ = device.Destroy()
-		return err
-	}
-	return device.Destroy()
+	neutralizeErr := device.Neutralize()
+	destroyErr := device.Destroy()
+	return errors.Join(neutralizeErr, destroyErr)
 }
 
 func (m *Manager) DestroyAll() error {
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
 	m.mu.Lock()
 	devices := make(map[int]Device, len(m.devices))
 	for slot, device := range m.devices {
@@ -82,14 +95,14 @@ func (m *Manager) DestroyAll() error {
 	}
 	m.devices = make(map[int]Device)
 	m.mu.Unlock()
-	var first error
+	var errs []error
 	for _, device := range devices {
-		if err := device.Neutralize(); err != nil && first == nil {
-			first = err
+		if err := device.Neutralize(); err != nil {
+			errs = append(errs, err)
 		}
-		if err := device.Destroy(); err != nil && first == nil {
-			first = err
+		if err := device.Destroy(); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return first
+	return errors.Join(errs...)
 }

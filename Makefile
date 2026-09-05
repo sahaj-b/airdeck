@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-GO_FILES := cmd/main.go tools/lanbench/main.go $(shell find internal -type f -name '*.go' ! -path 'internal/uinput/*' | sort)
+GO_FILES := cmd/main.go tools/lanbench/main.go $(shell find internal -type f -name '*.go' | sort)
 
 .PHONY: sync-contracts web-build build dev test lint fmt bench
 
