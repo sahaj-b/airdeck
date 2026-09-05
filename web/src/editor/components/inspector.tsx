@@ -670,12 +670,24 @@ function ControlFields({
               }}
             >
               <SelectTrigger className="flex-1 h-8 capitalize">
-                <SelectValue placeholder="Select binding" />
+                <SelectValue placeholder="Select binding">
+                  {(value: string | null) =>
+                    value ? (
+                      <BindingLabel
+                        command={value as NonNullable<Control['binding']>}
+                        controlType={control.type}
+                      />
+                    ) : null
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="min-w-[240px]">
                 {allowed.map((command) => (
                   <SelectItem key={command} value={command}>
-                    <BindingLabel command={command} />
+                    <BindingLabel
+                      command={command}
+                      controlType={control.type}
+                    />
                   </SelectItem>
                 ))}
               </SelectContent>

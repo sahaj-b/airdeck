@@ -5,6 +5,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { Control } from '@/shared/generated/layout';
 import type { Command } from '@/shared/generated/protocol';
 import { getBindingLabel } from '@/shared/layout-editor';
 import { PsCircle, PsCross, PsSquare, PsTriangle } from './playstation-icons';
@@ -40,21 +41,23 @@ const NO_BRACKET = new Set([
   'Guide',
   'Start',
   'Back',
-  'leftStick',
-  'rightStick',
-  'LeftStick',
-  'RightStick',
 ]);
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function BindingLabel({ command }: { command: Command }) {
+export function BindingLabel({
+  command,
+  controlType,
+}: {
+  command: Command;
+  controlType?: Control['type'];
+}) {
   if (NO_BRACKET.has(command)) {
     return <span>{capitalize(command)}</span>;
   }
-  const raw = getBindingLabel(command);
+  const raw = getBindingLabel(command, controlType);
   // raw is like "South (A | Cross)" or "DpadUp (D-pad Up)" etc
   // D-pad: use chevron inside bracket instead of text
   const dpadMatch = raw.match(/^(.*) \((D-pad.*)\)$/);
@@ -78,6 +81,16 @@ export function BindingLabel({ command }: { command: Command }) {
   // For the 4 face buttons, replace PlayStation name with SVG
   const match = raw.match(/^(.*) \((.*) \| (.*)\)$/);
   if (!match) {
+    const single = raw.match(/^(.*) \((.*)\)$/);
+    if (single) {
+      const [, singleCmd, inside] = single;
+      return (
+        <span>
+          <span>{capitalize(singleCmd)}</span>
+          <span className="text-muted-foreground/60"> ({inside})</span>
+        </span>
+      );
+    }
     return <span>{raw}</span>;
   }
   const [, cmd, xbox, ps] = match;

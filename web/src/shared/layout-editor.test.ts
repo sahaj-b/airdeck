@@ -193,6 +193,16 @@ describe('layout-editor helpers', () => {
     expect(getBindingLabel('leftTrigger' as never)).toBe(
       'LeftTrigger (LT | L2)',
     );
+    expect(getBindingLabel('leftStick' as never)).toBe('LeftStick (LS | L3)');
+    expect(getBindingLabel('leftStick' as never, 'button')).toBe(
+      'LeftStick Click (LS | L3)',
+    );
+    expect(getBindingLabel('rightStick' as never, 'button')).toBe(
+      'RightStick Click (RS | R3)',
+    );
+    expect(getBindingLabel('leftStick' as never, 'joystick')).toBe(
+      'LeftStick (LS)',
+    );
     expect(pixelsToHeightUnits(100, 500)).toBe(0.2);
     expect(pixelsToHeightUnits(10, 0)).toBe(0);
   });

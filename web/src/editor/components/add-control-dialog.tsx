@@ -156,12 +156,21 @@ export function AddControlDialog({
                 }}
               >
                 <SelectTrigger id="add-binding" className="capitalize">
-                  <SelectValue />
+                  <SelectValue>
+                    {(value: string | null) =>
+                      value ? (
+                        <BindingLabel
+                          command={value as NonNullable<Control['binding']>}
+                          controlType={type}
+                        />
+                      ) : null
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="min-w-[240px]">
                   {allowed.map((command) => (
                     <SelectItem key={command} value={command}>
-                      <BindingLabel command={command} />
+                      <BindingLabel command={command} controlType={type} />
                     </SelectItem>
                   ))}
                 </SelectContent>

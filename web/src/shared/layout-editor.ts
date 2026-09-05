@@ -121,7 +121,17 @@ const BINDING_LABELS: Record<string, BindingLabel> = {
   },
 };
 
-export function getBindingLabel(command: Command): string {
+export function getBindingLabel(
+  command: Command,
+  controlType?: Control['type'],
+): string {
+  if (command === 'leftStick' || command === 'rightStick') {
+    const base = command === 'leftStick' ? 'LeftStick' : 'RightStick';
+    const xbox = command === 'leftStick' ? 'LS' : 'RS';
+    const ps = command === 'leftStick' ? 'L3' : 'R3';
+    if (controlType === 'button') return `${base} Click (${xbox} | ${ps})`;
+    if (controlType === 'joystick') return `${base} (${xbox})`;
+  }
   const label = BINDING_LABELS[command]?.dual ?? command;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
