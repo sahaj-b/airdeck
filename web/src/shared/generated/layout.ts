@@ -33,6 +33,7 @@ export interface Control {
   binding?: Command;
   bindings?: DPadBindings;
   parentId?: string;
+  rotation?: number /* float64 */;
 }
 export interface Section {
   id: string;

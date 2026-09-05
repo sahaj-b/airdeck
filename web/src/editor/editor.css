@@ -289,6 +289,43 @@
   cursor: nwse-resize;
 }
 
+.editor-rotate-handle {
+  position: absolute;
+  left: 50%;
+  top: -20px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--editor-accent);
+  border: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  z-index: 2;
+}
+
+.editor-rotate-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 8px;
+  transform: translateX(-50%);
+  background: var(--editor-accent);
+  opacity: 0.8;
+}
+
+.editor-rotate-handle:hover {
+  background: var(--editor-accent-hover);
+}
+
+.editor-rotate-handle:active {
+  cursor: grabbing;
+}
+
 /* Section dividers between the three fixed sections */
 .editor-section-divider {
   position: absolute;

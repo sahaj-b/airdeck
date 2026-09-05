@@ -302,11 +302,29 @@ export function getControlErrors(
         message: 'hitzone must not have bindings',
       });
     }
+    if (
+      control.rotation !== undefined &&
+      (typeof control.rotation !== 'number' ||
+        !Number.isFinite(control.rotation) ||
+        control.rotation < 0 ||
+        control.rotation >= 360)
+    ) {
+      errors.push({
+        path: 'rotation',
+        message: 'hitzone rotation must be in [0, 360)',
+      });
+    }
   } else {
     if (control.parentId) {
       errors.push({
         path: 'parentId',
         message: 'only hitzone controls may have parentId',
+      });
+    }
+    if (control.rotation !== undefined) {
+      errors.push({
+        path: 'rotation',
+        message: 'only hitzone controls may have rotation',
       });
     }
     if (control.shape && control.shape !== 'round' && control.shape !== 'rect')

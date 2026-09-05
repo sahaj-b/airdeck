@@ -184,6 +184,9 @@ func validateControl(control Control, section Section) error {
 		if control.Bindings != nil {
 			return errors.New("hitzone must not have bindings")
 		}
+		if !finite(control.Rotation) || control.Rotation < 0 || control.Rotation >= 360 {
+			return errors.New("hitzone rotation must be in [0, 360)")
+		}
 	} else {
 		switch control.Shape {
 		case "", "round", "rect":
@@ -197,6 +200,9 @@ func validateControl(control Control, section Section) error {
 		}
 		if control.ParentID != "" {
 			return errors.New("only hitzone controls may have parentId")
+		}
+		if control.Rotation != 0 {
+			return errors.New("only hitzone controls may have rotation")
 		}
 	}
 	if err := validateGeometry(control.Geometry, section, "geometry"); err != nil {

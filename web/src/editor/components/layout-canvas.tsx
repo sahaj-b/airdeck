@@ -1,7 +1,5 @@
-import interact from 'interactjs';
 import { Hand, Mouse } from 'lucide-react';
 import {
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -26,23 +24,25 @@ import {
 } from '@/controller/layout-resolver';
 import { InputStateStore } from '@/controller/state';
 import { cn } from '@/lib/utils';
-import type {
-  Control,
-  Document as LayoutDocument,
-} from '@/shared/generated/layout';
+import type { Document as LayoutDocument } from '@/shared/generated/layout';
 import {
-  clampSectionDivider,
-  effectiveHitShape,
   findControl,
-  getHitzonesOf,
-  getSectionControlMin,
   moveControlAcross,
   moveParentWithHitzonesAcross,
   resizeControl,
   resolveAspectLock,
 } from '@/shared/layout-editor';
 import { useInteractGeometry } from '../use-interact-geometry';
-import { ControlOverlay } from './control-overlay';
+import { ControlHit } from './control-hit';
+import { SectionDivider } from './section-divider';
+import {
+  VIEWPORT_MAX_H,
+  VIEWPORT_MAX_W,
+  VIEWPORT_MIN_H,
+  VIEWPORT_MIN_W,
+  ViewportEdgeHandles,
+  ViewportSlider,
+} from './viewport-handles';
 
 const PRESETS = [
   { id: 'se', label: 'SE', fullName: 'iPhone SE', width: 667, height: 375 },
@@ -67,11 +67,6 @@ const GHOST_GEAR_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>';
 const GHOST_EXPAND_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
-
-const VIEWPORT_MIN_W = 320;
-const VIEWPORT_MAX_W = 1400;
-const VIEWPORT_MIN_H = 320;
-const VIEWPORT_MAX_H = 1400;
 
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 6;
@@ -453,20 +448,35 @@ export function LayoutCanvas({
     ? findControl(document, selectedControlId)?.control
     : null;
 
-  const selectedPeerIds = useMemo(() => {
-    if (!selectedControlId) return new Set<string>();
-    const found = findControl(document, selectedControlId);
-    if (!found || found.control.type === 'hitzone') return new Set<string>();
-    const hitzones = getHitzonesOf(document, selectedControlId);
-    return new Set<string>(hitzones);
-  }, [document, selectedControlId]);
+  // One pass over controls instead of a scan per hitzone lookup per render.
+  const hitzonesByParent = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const section of document.sections) {
+      for (const control of section.controls) {
+        if (control.type !== 'hitzone' || !control.parentId) continue;
+        const ids = map.get(control.parentId);
+        if (ids) ids.push(control.id);
+        else map.set(control.parentId, [control.id]);
+      }
+    }
+    return map;
+  }, [document]);
 
-  const hoveredPeerIds = useMemo(() => {
-    if (!hoveredControlId) return new Set<string>();
-    const found = findControl(document, hoveredControlId);
-    if (!found || found.control.type === 'hitzone') return new Set<string>();
-    return new Set<string>(getHitzonesOf(document, hoveredControlId));
-  }, [document, hoveredControlId]);
+  const selectedPeerIds = useMemo(
+    () =>
+      new Set(
+        selectedControlId ? hitzonesByParent.get(selectedControlId) : undefined,
+      ),
+    [hitzonesByParent, selectedControlId],
+  );
+
+  const hoveredPeerIds = useMemo(
+    () =>
+      new Set(
+        hoveredControlId ? hitzonesByParent.get(hoveredControlId) : undefined,
+      ),
+    [hitzonesByParent, hoveredControlId],
+  );
 
   const locked = selectedControl
     ? resolveAspectLock(selectedControl, locks)
@@ -510,7 +520,7 @@ export function LayoutCanvas({
     onDrag: (deltaX, deltaY) => {
       if (!selectedControlId) return;
       const cur = latestRef.current;
-      const hasHitzones = getHitzonesOf(cur, selectedControlId).length > 0;
+      const hasHitzones = hitzonesByParent.has(selectedControlId);
       let next: LayoutDocument;
       if (hasHitzones) {
         next = moveParentWithHitzonesAcross(
@@ -703,8 +713,7 @@ export function LayoutCanvas({
             section.controls.map((rc) => {
               const rect = rc.visual;
               const isSelected = rc.control.id === selectedControlId;
-              const isParent =
-                getHitzonesOf(document, rc.control.id).length > 0;
+              const isParent = hitzonesByParent.has(rc.control.id);
               const isSelectedPeer = selectedPeerIds.has(rc.control.id);
               const isPeer =
                 isSelectedPeer || hoveredPeerIds.has(rc.control.id);
@@ -856,487 +865,6 @@ export function LayoutCanvas({
       </div>
     </section>
   );
-}
-
-const ControlHit = memo(function ControlHit({
-  control,
-  rect,
-  isSelected,
-  isParent,
-  isPeer,
-  isSelectedPeer,
-  isHovered,
-  viewport,
-  viewportHeight,
-  scale,
-  latestRef,
-  selectedRef,
-  onSelectControl,
-  onSelectSection,
-  onDraftChange,
-}: {
-  control: Control;
-  rect: { left: number; top: number; width: number; height: number };
-  isSelected: boolean;
-  isParent: boolean;
-  isPeer: boolean;
-  isSelectedPeer: boolean;
-  isHovered: boolean;
-  viewport: { width: number; height: number };
-  viewportHeight: number;
-  scale: number;
-  latestRef: React.MutableRefObject<LayoutDocument>;
-  selectedRef: React.RefObject<HTMLDivElement | null>;
-  onSelectControl: (id: string | null) => void;
-  onSelectSection: (id: string | null) => void;
-  onDraftChange: (next: LayoutDocument, commit: boolean) => void;
-}) {
-  const hitRef = useRef<HTMLButtonElement>(null);
-  const scaleRef = useRef(scale);
-  const vhRef = useRef(viewportHeight);
-  const viewportRef = useRef(viewport);
-  const onSelectRef = useRef(onSelectControl);
-  const onDraftRef = useRef(onDraftChange);
-  const isSelectedRef = useRef(isSelected);
-  const isParentRef = useRef(isParent);
-  const onSelectSectionRef = useRef(onSelectSection);
-  const startWasSelectedRef = useRef(false);
-  const isHitzone = control.type === 'hitzone';
-  const isDpad = control.type === 'dpad';
-  const hitShape = effectiveHitShape(control);
-
-  // direct sync without effects - cheaper than 7 useEffects
-  scaleRef.current = scale;
-  vhRef.current = viewportHeight;
-  viewportRef.current = viewport;
-  onSelectRef.current = onSelectControl;
-  onDraftRef.current = onDraftChange;
-  isSelectedRef.current = isSelected;
-  isParentRef.current = isParent;
-  onSelectSectionRef.current = onSelectSection;
-
-  useEffect(() => {
-    const el = hitRef.current;
-    if (!el) return;
-    const instance = interact(el).draggable({
-      listeners: {
-        start() {
-          startWasSelectedRef.current = isSelectedRef.current;
-          if (!isSelectedRef.current) {
-            onSelectRef.current(control.id);
-            onSelectSectionRef.current(null);
-          }
-        },
-        move(event: { dx: number; dy: number }) {
-          if (startWasSelectedRef.current) return;
-          const vh = Math.max(1, vhRef.current);
-          const s = scaleRef.current || 1;
-          const deltaX = event.dx / s / vh;
-          const deltaY = event.dy / s / vh;
-          const latest = latestRef.current;
-          const isParentWithHitzones =
-            isParentRef.current && control.type !== 'hitzone';
-          let next: LayoutDocument;
-          if (isParentWithHitzones) {
-            next = moveParentWithHitzonesAcross(
-              latest,
-              control.id,
-              deltaX,
-              deltaY,
-              viewportRef.current,
-            );
-          } else {
-            next = moveControlAcross(
-              latest,
-              control.id,
-              deltaX,
-              deltaY,
-              viewportRef.current,
-            );
-          }
-          latestRef.current = next;
-          onDraftRef.current(next, false);
-        },
-        end() {
-          if (startWasSelectedRef.current) return;
-          onDraftRef.current(latestRef.current, true);
-        },
-      },
-    });
-    return () => instance.unset();
-  }, [control.id, control.type, latestRef]);
-
-  const isForgiving =
-    isSelected &&
-    hitShape === 'rect' &&
-    control.shape === 'round' &&
-    !isHitzone &&
-    control.type !== 'label' &&
-    control.type !== 'dpad';
-  const showHitzoneHatch = isHitzone && (isSelectedPeer || isSelected);
-
-  return (
-    <button
-      type="button"
-      ref={hitRef}
-      className={cn(
-        'editor-control-hit',
-        isDpad && 'editor-control-dpad',
-        isHitzone && 'editor-hit-only',
-        isSelected && 'editor-control-selected',
-        isPeer && !isSelected && 'editor-control-peer',
-        isHovered && !isSelected && !isPeer && 'editor-control-hovered',
-      )}
-      style={{
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height,
-      }}
-      data-control-id={control.id}
-      data-hit-shape={hitShape}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectControl(control.id);
-        onSelectSection(null);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.stopPropagation();
-          onSelectControl(control.id);
-          onSelectSection(null);
-        }
-      }}
-    >
-      {isForgiving && (
-        <div className="editor-forgiving-hatch" aria-hidden="true" />
-      )}
-      {showHitzoneHatch && (
-        <div className="editor-hitzone-hatch" aria-hidden="true" />
-      )}
-      {isSelected && (
-        <div ref={selectedRef} className="editor-interaction-layer">
-          <ControlOverlay selected isHitzone={isHitzone} />
-        </div>
-      )}
-    </button>
-  );
-});
-
-function ViewportSlider({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="flex min-w-0 max-w-[180px] flex-1 items-center gap-2">
-      <span className="w-3 shrink-0 text-[10px] font-medium text-muted-foreground">
-        {label}
-      </span>
-      <Slider
-        className="min-w-0 flex-1"
-        value={Math.round(value)}
-        min={min}
-        max={max}
-        step={1}
-        onValueChange={(v: number | readonly number[]) => {
-          const next = Array.isArray(v) ? v[0] : v;
-          if (typeof next === 'number') onChange(Math.round(next));
-        }}
-      />
-    </div>
-  );
-}
-
-function SectionDivider({
-  side,
-  document,
-  viewport,
-  scale,
-  x,
-  onDraftChange,
-  onSelectSection,
-  onSelectControl,
-}: {
-  side: 'left' | 'right';
-  document: LayoutDocument;
-  viewport: { width: number; height: number };
-  scale: number;
-  x: number;
-  onDraftChange: (next: LayoutDocument, commit: boolean) => void;
-  onSelectSection: (id: string | null) => void;
-  onSelectControl: (id: string | null) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const startRef = useRef(0);
-  const accRef = useRef(0);
-  const startScaleRef = useRef(scale);
-  const documentRef = useRef(document);
-  const viewportRef = useRef(viewport);
-  const scaleRef = useRef(scale);
-  const onDraftChangeRef = useRef(onDraftChange);
-  const onSelectSectionRef = useRef(onSelectSection);
-  const onSelectControlRef = useRef(onSelectControl);
-  documentRef.current = document;
-  viewportRef.current = viewport;
-  scaleRef.current = scale;
-  onDraftChangeRef.current = onDraftChange;
-  onSelectSectionRef.current = onSelectSection;
-  onSelectControlRef.current = onSelectControl;
-  startScaleRef.current = scale;
-
-  const sideSection = document.sections[side === 'left' ? 0 : 2];
-  const controlMin = getSectionControlMin(sideSection);
-  const currentWidth = sideSection.relativeWidth;
-  const isBlockedByControls = currentWidth <= controlMin + 0.001;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const instance = interact(el).draggable({
-      lockAxis: 'x',
-      startAxis: 'x',
-      cursorChecker: () => 'ew-resize',
-      listeners: {
-        start() {
-          const section = documentRef.current.sections.find(
-            (s) => s.id === side,
-          );
-          startRef.current = section?.relativeWidth ?? 0;
-          startScaleRef.current = scaleRef.current;
-          accRef.current = 0;
-          onSelectSectionRef.current(side);
-          onSelectControlRef.current(null);
-        },
-        move(event: { dx: number }) {
-          accRef.current += event.dx;
-          const vp = viewportRef.current;
-          const delta =
-            accRef.current / startScaleRef.current / Math.max(1, vp.height);
-          const proposed =
-            side === 'left'
-              ? startRef.current + delta
-              : startRef.current - delta;
-          const clamped = clampSectionDivider(
-            documentRef.current,
-            side,
-            proposed,
-            vp,
-          );
-          const clampedDelta =
-            side === 'left'
-              ? clamped - startRef.current
-              : startRef.current - clamped;
-          const clampedAcc =
-            clampedDelta * startScaleRef.current * Math.max(1, vp.height);
-          if (Math.abs(clamped - proposed) > 1e-9) {
-            accRef.current = clampedAcc;
-          }
-          const next = structuredClone(
-            documentRef.current,
-          ) as typeof documentRef.current;
-          const sec = next.sections.find((s) => s.id === side);
-          if (sec) sec.relativeWidth = clamped;
-          documentRef.current = next;
-          onDraftChangeRef.current(next, false);
-        },
-        end() {
-          onDraftChangeRef.current(documentRef.current, true);
-        },
-      },
-    });
-    return () => instance.unset();
-  }, [side]);
-
-  let tooltipText: string;
-  if (isBlockedByControls) {
-    const maxAbsX = Math.max(
-      ...sideSection.controls.map((c) => Math.abs(c.geometry.position.x)),
-    );
-    const limiting = sideSection.controls.filter(
-      (c) => Math.abs(c.geometry.position.x) >= maxAbsX - 0.005,
-    );
-    const name = limiting[0]?.label || limiting[0]?.id || 'control';
-    tooltipText = `Can't shrink, ${name} is in the way`;
-  } else {
-    tooltipText = 'Drag to resize';
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <div
-            ref={ref}
-            className="editor-section-divider"
-            style={{ left: x }}
-            aria-label={`Resize ${side} section`}
-          />
-        }
-      />
-      <TooltipContent side="top">{tooltipText}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function ViewportEdgeHandles({
-  viewport,
-  scale,
-  onViewportChange,
-}: {
-  viewport: { width: number; height: number };
-  scale: number;
-  onViewportChange: (next: { width: number; height: number }) => void;
-}) {
-  const rightRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const cornerRef = useRef<HTMLDivElement>(null);
-  const viewportRef = useRef(viewport);
-  const scaleRef = useRef(scale);
-  const onViewportChangeRef = useRef(onViewportChange);
-  viewportRef.current = viewport;
-  scaleRef.current = scale;
-  onViewportChangeRef.current = onViewportChange;
-
-  useEffect(() => {
-    const el = rightRef.current;
-    if (!el) return;
-    const start = { width: 0, height: 0 };
-    let accX = 0;
-    let startScale = 1;
-    const instance = interact(el).draggable({
-      lockAxis: 'x',
-      startAxis: 'x',
-      cursorChecker: () => 'ew-resize',
-      listeners: {
-        start() {
-          start.width = viewportRef.current.width;
-          start.height = viewportRef.current.height;
-          startScale = scaleRef.current || 1;
-          accX = 0;
-        },
-        move(event: { dx: number }) {
-          accX += event.dx;
-          const width = clamp(
-            start.width + accX / startScale,
-            VIEWPORT_MIN_W,
-            VIEWPORT_MAX_W,
-          );
-          onViewportChangeRef.current({
-            width,
-            height: start.height,
-          });
-        },
-      },
-    });
-    return () => instance.unset();
-  }, []);
-
-  useEffect(() => {
-    const el = bottomRef.current;
-    if (!el) return;
-    const start = { width: 0, height: 0 };
-    let accY = 0;
-    let startScale = 1;
-    const instance = interact(el).draggable({
-      lockAxis: 'y',
-      startAxis: 'y',
-      cursorChecker: () => 'ns-resize',
-      listeners: {
-        start() {
-          start.width = viewportRef.current.width;
-          start.height = viewportRef.current.height;
-          startScale = scaleRef.current || 1;
-          accY = 0;
-        },
-        move(event: { dy: number }) {
-          accY += event.dy;
-          const height = clamp(
-            start.height + accY / startScale,
-            VIEWPORT_MIN_H,
-            VIEWPORT_MAX_H,
-          );
-          onViewportChangeRef.current({
-            width: start.width,
-            height,
-          });
-        },
-      },
-    });
-    return () => instance.unset();
-  }, []);
-
-  useEffect(() => {
-    const el = cornerRef.current;
-    if (!el) return;
-    const start = { width: 0, height: 0 };
-    let accX = 0;
-    let accY = 0;
-    let startScale = 1;
-    const instance = interact(el).draggable({
-      cursorChecker: () => 'nwse-resize',
-      listeners: {
-        start() {
-          start.width = viewportRef.current.width;
-          start.height = viewportRef.current.height;
-          startScale = scaleRef.current || 1;
-          accX = 0;
-          accY = 0;
-        },
-        move(event: { dx: number; dy: number }) {
-          accX += event.dx;
-          accY += event.dy;
-          const width = clamp(
-            start.width + accX / startScale,
-            VIEWPORT_MIN_W,
-            VIEWPORT_MAX_W,
-          );
-          const height = clamp(
-            start.height + accY / startScale,
-            VIEWPORT_MIN_H,
-            VIEWPORT_MAX_H,
-          );
-          onViewportChangeRef.current({ width, height });
-        },
-      },
-    });
-    return () => instance.unset();
-  }, []);
-
-  return (
-    <>
-      <div
-        ref={rightRef}
-        className="editor-viewport-handle editor-handle-right"
-        aria-label="Resize width"
-        title="Drag to resize width (horizontal)"
-      />
-      <div
-        ref={bottomRef}
-        className="editor-viewport-handle editor-handle-bottom"
-        aria-label="Resize height"
-        title="Drag to resize height (vertical)"
-      />
-      <div
-        ref={cornerRef}
-        className="editor-viewport-handle editor-handle-corner"
-        aria-label="Resize viewport"
-        title="Drag to resize (diagonal)"
-      />
-    </>
-  );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function structureSignature(document: LayoutDocument): string {

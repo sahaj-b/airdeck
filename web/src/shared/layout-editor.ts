@@ -142,6 +142,43 @@ export function getAllowedBindings(type: Control['type']): Command[] {
   }
 }
 
+export function normalizeRotationDeg(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  let next = value % 360;
+  if (next < 0) next += 360;
+  if (Object.is(next, -0)) next = 0;
+  return next;
+}
+
+export function rotationOf(control: Control): number {
+  return typeof control.rotation === 'number'
+    ? normalizeRotationDeg(control.rotation)
+    : 0;
+}
+
+export function updateControlRotation(
+  document: LayoutDocument,
+  controlId: string,
+  nextRotation: number,
+): LayoutDocument {
+  const next = cloneDocument(document);
+  for (const section of next.sections) {
+    const control = section.controls.find(
+      (candidate) => candidate.id === controlId,
+    );
+    if (control) {
+      const normalized = normalizeRotationDeg(nextRotation);
+      if (normalized === 0) {
+        delete control.rotation;
+      } else {
+        control.rotation = normalized;
+      }
+      break;
+    }
+  }
+  return next;
+}
+
 export function effectiveHitShape(control: Control): 'rect' | 'ellipse' {
   if (control.type === 'dpad') return 'rect';
   if (control.type === 'hitzone')

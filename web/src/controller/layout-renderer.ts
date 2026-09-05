@@ -1,4 +1,8 @@
-import { effectiveHitShape, soloStick } from '@/shared/layout-editor';
+import {
+  effectiveHitShape,
+  rotationOf,
+  soloStick,
+} from '@/shared/layout-editor';
 import type { Orientation } from '../shared/contracts';
 import {
   type Control,
@@ -704,6 +708,11 @@ function applyResolvedGeometry(
       const resolvedControl = controlByID.get(renderedControl.control.id);
       if (!resolvedControl) continue;
       if (renderedControl.target) {
+        if (renderedControl.control.type === 'hitzone') {
+          const rotation = rotationOf(resolvedControl.control);
+          renderedControl.target.style.transform =
+            rotation !== 0 ? `rotate(${rotation}deg)` : '';
+        }
         setLocalRect(
           renderedControl.target,
           resolvedControl.hit,

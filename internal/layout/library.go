@@ -41,6 +41,7 @@ type Control struct {
 	Binding  protocol.Command `json:"binding,omitempty"`
 	Bindings *DPadBindings    `json:"bindings,omitempty"`
 	ParentID string           `json:"parentId,omitempty"`
+	Rotation float64          `json:"rotation,omitempty"`
 }
 
 type Section struct {

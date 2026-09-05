@@ -21,6 +21,8 @@ import {
   moveParentWithHitzonesAcross,
   resizeControl,
   resolveAspectLock,
+  rotationOf,
+  updateControlRotation,
 } from '@/shared/layout-editor';
 import {
   loadPersonalLayouts,
@@ -356,6 +358,21 @@ function PhoneEditorIsland({
     handleCommit(next);
   }, [handleDraftLive, handleCommit]);
 
+  const handleRotate = useCallback(() => {
+    const cur = draftRef.current;
+    const sid = selectedIdRef.current;
+    if (!cur || !sid) return;
+    const found = findControl(cur, sid);
+    if (found?.control.type !== 'hitzone') return;
+    const next = updateControlRotation(
+      cur,
+      sid,
+      rotationOf(found.control) + 15,
+    );
+    handleDraftLive(next);
+    handleCommit(next);
+  }, [handleDraftLive, handleCommit]);
+
   const handleSave = () => {
     const trimmed = name.trim();
     if (!trimmed) {
@@ -460,6 +477,7 @@ function PhoneEditorIsland({
         onDuplicate={handleDuplicate}
         onAddHitzone={handleAddHitzone}
         onToggleShape={handleToggleShape}
+        onRotate={handleRotate}
         onUndo={handleUndo}
         onRedo={handleRedo}
       />

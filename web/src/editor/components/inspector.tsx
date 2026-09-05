@@ -1,14 +1,5 @@
-import {
-  Check,
-  ClipboardPaste,
-  Copy,
-  Lock,
-  PanelRightClose,
-  Square,
-  Trash2,
-  Unlock,
-} from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Copy, PanelRightClose, Trash2 } from 'lucide-react';
+import { useMemo } from 'react';
 import { BindingLabel } from '@/components/ui/binding-label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,11 +25,18 @@ import type { ValidationError } from '@/shared/layout';
 import {
   findControl,
   getAllowedBindings,
-  isAspectLockForced,
   resolveAspectLock,
+  rotationOf,
+  updateControlGeometry,
+  updateControlRotation,
 } from '@/shared/layout-editor';
-import { useIsShiftHeld } from '../hooks/use-is-shift-held';
-import { useEditorStore } from '../store/editor-store';
+import { GeometrySection } from './geometry-section';
+import { NumberField } from './number-field';
+import {
+  ForgivingHitIcon,
+  HitzoneAddIcon,
+  PreciseHitIcon,
+} from './touch-area-icons';
 
 export interface InspectorProps {
   document: LayoutDocument;
@@ -347,7 +345,6 @@ function SectionFields({
             value={section.relativeMinWidth ?? 0}
             min={controlMin}
             max={4}
-            step={0.01}
             note={`min for controls ${controlMin.toFixed(2)} · 0 = no minimum`}
             error={fieldErrors.get('relativeMinWidth')}
             onChange={updateMinWidth}
@@ -379,7 +376,6 @@ function SectionFields({
           value={section.relativeWidth}
           min={Number(controlMin.toFixed(2))}
           max={4}
-          step={0.01}
           error={fieldErrors.get('relativeWidth')}
           onChange={updateWidth}
         />
@@ -429,6 +425,15 @@ function ControlFields({
     if (!found) return;
     Object.assign(found.control, fields);
     onDraftChange(next, true);
+  };
+
+  const updateGeometry = (mutate: (geometry: Control['geometry']) => void) => {
+    const next = structuredClone(document);
+    const found = findControl(next, control.id);
+    if (!found) return;
+    const geometry = structuredClone(found.control.geometry);
+    mutate(geometry);
+    onDraftChange(updateControlGeometry(next, control.id, geometry), true);
   };
 
   if (isHitzone) {
@@ -534,13 +539,22 @@ function ControlFields({
           </p>
         )}
 
+        <NumberField
+          label="Angle"
+          labelWidth="w-14"
+          value={rotationOf(control)}
+          error={fieldErrors.get('rotation')}
+          onChange={(v) => {
+            onDraftChange(updateControlRotation(document, control.id, v), true);
+          }}
+        />
+
         <GeometrySection
           control={control}
-          document={document}
+          updateGeometry={updateGeometry}
           fieldErrors={fieldErrors}
           locked={locked}
           onToggleLock={onToggleLock}
-          onDraftChange={onDraftChange}
         />
       </div>
     );
@@ -846,608 +860,11 @@ function ControlFields({
 
       <GeometrySection
         control={control}
-        document={document}
+        updateGeometry={updateGeometry}
         fieldErrors={fieldErrors}
         locked={locked}
         onToggleLock={onToggleLock}
-        onDraftChange={onDraftChange}
       />
     </div>
   );
-}
-
-function GeometrySection({
-  control,
-  document,
-  fieldErrors,
-  locked,
-  onToggleLock,
-  onDraftChange,
-}: {
-  control: Control;
-  document: LayoutDocument;
-  fieldErrors: Map<string, string>;
-  locked: boolean;
-  onToggleLock: (id: string) => void;
-  onDraftChange: (next: LayoutDocument, commit: boolean) => void;
-}) {
-  const shiftHeld = useIsShiftHeld();
-  const forced = isAspectLockForced(control);
-  const displayLocked = locked || shiftHeld;
-  const sizeClipboard = useEditorStore((s) => s.sizeClipboard);
-  const setSizeClipboard = useEditorStore((s) => s.setSizeClipboard);
-  const [copied, setCopied] = useState(false);
-  const copiedTimeoutRef = useRef<number | null>(null);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: control.id re-runs copy feedback on selection change; the effect only writes stable setState
-  useEffect(() => {
-    setCopied(false);
-  }, [control.id]);
-
-  useEffect(() => {
-    return () => {
-      if (copiedTimeoutRef.current)
-        window.clearTimeout(copiedTimeoutRef.current);
-    };
-  }, []);
-
-  const handleResetToSquare = () => {
-    const next = structuredClone(document);
-    const found = findControl(next, control.id);
-    if (!found) return;
-    const { size } = found.control.geometry;
-    const avg = (size.width + size.height) / 2;
-    const clamped = Math.min(Math.max(avg, 0.01), 2);
-    found.control.geometry.size.width = clamped;
-    found.control.geometry.size.height = clamped;
-    onDraftChange(next, true);
-  };
-
-  const handleCopySize = () => {
-    const w = control.geometry.size.width;
-    const h = control.geometry.size.height;
-    setSizeClipboard({ width: w, height: h });
-    setCopied(true);
-    if (copiedTimeoutRef.current) window.clearTimeout(copiedTimeoutRef.current);
-    copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1200);
-    const text = `${formatNumber(w)}×${formatNumber(h)}`;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {});
-    }
-  };
-
-  const handlePasteSize = () => {
-    if (!sizeClipboard) return;
-    const next = structuredClone(document);
-    const found = findControl(next, control.id);
-    if (!found) return;
-    found.control.geometry.size.width = sizeClipboard.width;
-    found.control.geometry.size.height = sizeClipboard.height;
-    onDraftChange(next, true);
-  };
-
-  const hasClipboard = !!sizeClipboard;
-  const isSameSize =
-    hasClipboard &&
-    Math.abs(sizeClipboard.width - control.geometry.size.width) < 1e-4 &&
-    Math.abs(sizeClipboard.height - control.geometry.size.height) < 1e-4;
-  const pasteDisabled = !hasClipboard || isSameSize;
-
-  return (
-    <div className="space-y-3 border-t border-border/60 pt-5">
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="text-xs font-semibold tracking-wide text-foreground uppercase">
-          Geometry
-        </h4>
-        <div className="flex items-center gap-1.5">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant={displayLocked ? 'secondary' : 'outline'}
-                  size="sm"
-                  disabled={forced}
-                  className={`h-7 gap-1.5 px-2.5 text-xs font-medium ${displayLocked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''} ${forced ? 'opacity-70' : ''}`}
-                  onClick={() => onToggleLock(control.id)}
-                >
-                  {displayLocked ? (
-                    <>
-                      <Lock className="size-3" />
-                      {forced || !shiftHeld || locked ? 'Locked' : 'Locked (⇧)'}
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="size-3" />
-                      Free
-                    </>
-                  )}
-                </Button>
-              }
-            />
-            <TooltipContent side="top">
-              {forced
-                ? 'Joysticks stay square'
-                : !displayLocked
-                  ? 'Lock aspect ratio (hold Shift)'
-                  : shiftHeld && !locked
-                    ? 'Shift held, temporarily locked'
-                    : 'Unlock aspect ratio'}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={handleResetToSquare}
-                  aria-label="Reset to Square"
-                >
-                  <Square className="size-3.5" />
-                </Button>
-              }
-            />
-            <TooltipContent side="top">Reset to Square</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-[color-mix(in_oklch,var(--muted)_30%,var(--card))] p-2.5">
-        <div className="grid grid-cols-2 gap-2">
-          <NumberField
-            label="X"
-            value={control.geometry.position.x}
-            step={0.01}
-            min={-2}
-            max={2}
-            error={fieldErrors.get('x')}
-            onChange={(v) => {
-              const next = structuredClone(document);
-              const found = findControl(next, control.id);
-              if (found) found.control.geometry.position.x = v;
-              onDraftChange(next, true);
-            }}
-          />
-          <NumberField
-            label="Y"
-            value={control.geometry.position.y}
-            step={0.01}
-            min={-2}
-            max={2}
-            error={fieldErrors.get('y')}
-            onChange={(v) => {
-              const next = structuredClone(document);
-              const found = findControl(next, control.id);
-              if (found) found.control.geometry.position.y = v;
-              onDraftChange(next, true);
-            }}
-          />
-          <NumberField
-            label="W"
-            value={control.geometry.size.width}
-            step={0.01}
-            min={0.01}
-            max={2}
-            error={fieldErrors.get('width')}
-            onChange={(v) => {
-              const next = structuredClone(document);
-              const found = findControl(next, control.id);
-              if (found) {
-                if (displayLocked) {
-                  const ratio =
-                    control.geometry.size.width / control.geometry.size.height;
-                  found.control.geometry.size.height = v / ratio;
-                }
-                found.control.geometry.size.width = v;
-              }
-              onDraftChange(next, true);
-            }}
-          />
-          <NumberField
-            label="H"
-            value={control.geometry.size.height}
-            step={0.01}
-            min={0.01}
-            max={2}
-            error={fieldErrors.get('height')}
-            onChange={(v) => {
-              const next = structuredClone(document);
-              const found = findControl(next, control.id);
-              if (found) {
-                if (displayLocked) {
-                  const ratio =
-                    control.geometry.size.width / control.geometry.size.height;
-                  found.control.geometry.size.width = v * ratio;
-                }
-                found.control.geometry.size.height = v;
-              }
-              onDraftChange(next, true);
-            }}
-          />
-        </div>
-        {fieldErrors.get('geometry') && (
-          <p className="mt-2 text-[11px] leading-tight text-destructive">
-            {fieldErrors.get('geometry')}
-          </p>
-        )}
-        <div className="mt-2.5 grid grid-cols-2 gap-1.5 border-t border-border/40 pt-2.5">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full gap-1.5 px-2.5 text-xs font-medium active:scale-[0.98] transition-transform"
-                  onClick={handleCopySize}
-                  aria-label="Copy size"
-                >
-                  {copied ? (
-                    <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <Copy className="size-3.5" />
-                  )}
-                  {copied ? 'Copied' : 'Copy size'}
-                </Button>
-              }
-            />
-            <TooltipContent side="top">Copy width × height</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full gap-1.5 px-2.5 text-xs font-medium active:scale-[0.98] transition-transform disabled:opacity-40"
-                  onClick={handlePasteSize}
-                  disabled={pasteDisabled}
-                  aria-label="Paste size"
-                >
-                  <ClipboardPaste className="size-3.5" />
-                  Paste
-                </Button>
-              }
-            />
-            <TooltipContent side="top">
-              {!hasClipboard
-                ? 'No size copied'
-                : isSameSize
-                  ? 'Already same size'
-                  : 'Paste copied size'}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-      <p className="text-[11px] leading-[1.4] text-muted-foreground">
-        X and Y are relative to the center of the section, in viewport-height
-        fractions. W and H are size in the same units.
-      </p>
-    </div>
-  );
-}
-
-function PreciseHitIcon() {
-  return (
-    <svg
-      viewBox="0 0 120 120"
-      width="72"
-      height="72"
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      <defs>
-        <pattern
-          id="precise-dashHatch"
-          width="9"
-          height="9"
-          patternTransform="rotate(45)"
-          patternUnits="userSpaceOnUse"
-        >
-          <line
-            x1="0"
-            y1="0"
-            x2="0"
-            y2="9"
-            stroke="var(--editor-accent)"
-            strokeWidth="2.6"
-            strokeDasharray="3.2,3.2"
-            strokeOpacity="1"
-          />
-        </pattern>
-        <clipPath id="precise-circleClip">
-          <circle cx="60" cy="60" r="52" />
-        </clipPath>
-      </defs>
-      {/* hatched circle — only ellipse is active, corners dead */}
-      <g clipPath="url(#precise-circleClip)">
-        <rect
-          x="5"
-          y="5"
-          width="110"
-          height="110"
-          fill="url(#precise-dashHatch)"
-        />
-      </g>
-      <circle
-        cx="60"
-        cy="60"
-        r="52"
-        fill="none"
-        stroke="var(--editor-accent)"
-        strokeWidth="3"
-      />
-      {/* bounding box — faint, dead corners */}
-      <rect
-        x="5"
-        y="5"
-        width="110"
-        height="110"
-        fill="none"
-        stroke="var(--muted-foreground)"
-        strokeOpacity="0.68"
-        strokeWidth="1.7"
-      />
-    </svg>
-  );
-}
-
-function ForgivingHitIcon() {
-  return (
-    <svg
-      viewBox="0 0 120 120"
-      width="72"
-      height="72"
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      <defs>
-        <pattern
-          id="forgiving-dashHatch"
-          width="9"
-          height="9"
-          patternTransform="rotate(45)"
-          patternUnits="userSpaceOnUse"
-        >
-          <line
-            x1="0"
-            y1="0"
-            x2="0"
-            y2="9"
-            stroke="var(--editor-accent)"
-            strokeWidth="2.6"
-            strokeDasharray="3.2,3.2"
-            strokeOpacity="1"
-          />
-        </pattern>
-      </defs>
-      {/* hatched square — full box active, corners count */}
-      <rect
-        x="5"
-        y="5"
-        width="110"
-        height="110"
-        fill="url(#forgiving-dashHatch)"
-      />
-      <rect
-        x="5"
-        y="5"
-        width="110"
-        height="110"
-        fill="none"
-        stroke="var(--editor-accent)"
-        strokeWidth="2"
-      />
-      <circle
-        cx="60"
-        cy="60"
-        r="52"
-        fill="none"
-        stroke="var(--muted-foreground)"
-        strokeOpacity="0.7"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function HitzoneAddIcon() {
-  return (
-    <svg
-      viewBox="0 0 136 84"
-      width="84"
-      height="52"
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      <defs>
-        <pattern
-          id="hitzone-parent-hatch"
-          width="9"
-          height="9"
-          patternTransform="rotate(45)"
-          patternUnits="userSpaceOnUse"
-        >
-          <line
-            x1="0"
-            y1="0"
-            x2="0"
-            y2="9"
-            stroke="var(--editor-accent)"
-            strokeWidth="2.6"
-            strokeDasharray="3.2,3.2"
-            strokeOpacity="1"
-          />
-        </pattern>
-        <pattern
-          id="hitzone-ghost-hatch"
-          width="9"
-          height="9"
-          patternTransform="rotate(45)"
-          patternUnits="userSpaceOnUse"
-        >
-          <line
-            x1="0"
-            y1="0"
-            x2="0"
-            y2="9"
-            stroke="var(--muted-foreground)"
-            strokeWidth="2.6"
-            strokeDasharray="3.2,3.2"
-            strokeOpacity="0.9"
-          />
-        </pattern>
-        <clipPath id="hitzone-parent-clip">
-          <circle cx="42" cy="42" r="40" />
-        </clipPath>
-      </defs>
-      {/* parent — hatched circle, accent — ~1.7x larger */}
-      <g clipPath="url(#hitzone-parent-clip)">
-        <rect
-          x="2"
-          y="2"
-          width="80"
-          height="80"
-          fill="url(#hitzone-parent-hatch)"
-        />
-      </g>
-      <circle
-        cx="42"
-        cy="42"
-        r="40"
-        fill="none"
-        stroke="var(--editor-accent)"
-        strokeWidth="2.4"
-      />
-      {/* ghost — hatched square (full), yellow dashed */}
-      <rect
-        x="90"
-        y="20"
-        width="40"
-        height="40"
-        fill="url(#hitzone-parent-hatch)"
-        stroke="rgb(250 204 21)"
-        strokeOpacity="1"
-        strokeWidth="1.2"
-        strokeDasharray="7 3"
-        rx="1"
-      />
-      <circle
-        cx="110"
-        cy="40"
-        r="17.5"
-        fill="none"
-        stroke="var(--muted-foreground)"
-        strokeOpacity="0.18"
-        strokeWidth="1.2"
-        strokeDasharray="3 3"
-      />
-      {/* plus badge */}
-      <g transform="translate(123 57)">
-        <circle
-          r="13"
-          fill="var(--editor-accent)"
-          stroke="var(--card)"
-          strokeWidth="2"
-        />
-        <path
-          d="M -5.2 0 H 5.2 M 0 -5.2 V 5.2"
-          stroke="white"
-          strokeWidth="2.1"
-          strokeLinecap="round"
-        />
-      </g>
-    </svg>
-  );
-}
-
-function NumberField({
-  label,
-  labelWidth = 'min-w-6',
-  value,
-  min,
-  max,
-  step: _step = 0.01,
-  error,
-  note,
-  onChange,
-}: {
-  label: string;
-  labelWidth?: string;
-  value: number;
-  min?: number;
-  max?: number;
-  step?: number;
-  error?: string;
-  note?: string;
-  onChange: (value: number) => void;
-}) {
-  const [text, setText] = useState(() => formatNumber(value));
-  const lastValueRef = useRef(value);
-
-  useEffect(() => {
-    if (value !== lastValueRef.current) {
-      lastValueRef.current = value;
-      setText(formatNumber(value));
-    }
-  }, [value]);
-
-  const parsed = parseFloat(text);
-  const invalid =
-    text.trim() === '' ||
-    !Number.isFinite(parsed) ||
-    (min !== undefined && parsed < min) ||
-    (max !== undefined && parsed > max);
-
-  return (
-    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
-      <Label
-        className={`shrink-0 text-[11px] font-medium text-muted-foreground text-center ${labelWidth}`}
-      >
-        {label}
-      </Label>
-      <Input
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={() => {
-          if (!invalid) {
-            lastValueRef.current = parsed;
-            onChange(parsed);
-          } else {
-            setText(formatNumber(lastValueRef.current));
-          }
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !invalid) {
-            lastValueRef.current = parsed;
-            onChange(parsed);
-            (event.target as HTMLInputElement).blur();
-          }
-          if (event.key === 'Escape') {
-            setText(formatNumber(lastValueRef.current));
-            (event.target as HTMLInputElement).blur();
-          }
-        }}
-        className={`min-w-0 h-7 font-mono text-xs ${invalid ? 'border-destructive bg-destructive/10 text-destructive focus-visible:border-destructive focus-visible:ring-destructive/20' : ''}`}
-      />
-      {error && (
-        <p className="col-start-2 text-[11px] leading-tight text-destructive">
-          {error}
-        </p>
-      )}
-      {note && !error && (
-        <p className="col-start-2 text-[11px] leading-tight text-muted-foreground">
-          {note}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function formatNumber(value: number): string {
-  return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
 }

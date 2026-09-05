@@ -162,6 +162,10 @@
           "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
           "description": "Required for hitzone, must reference a non-hitzone control (any section)."
         },
+        "rotation": {
+          "type": "number",
+          "description": "Hitzone-only tilt in degrees, normalized to [0, 360). Renderer applies CSS rotate."
+        },
         "binding": { "$ref": "#/$defs/binding" },
         "bindings": {
           "type": "object",
@@ -219,6 +223,19 @@
           "then": {
             "properties": {
               "subLabel": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hitzone" } } },
+          "then": {
+            "properties": {
+              "rotation": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 }
+            }
+          },
+          "else": {
+            "properties": {
+              "rotation": false
             }
           }
         }

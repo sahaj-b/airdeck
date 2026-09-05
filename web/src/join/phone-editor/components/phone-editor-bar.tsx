@@ -6,6 +6,7 @@ import {
   LockOpen,
   Plus,
   Redo2,
+  RotateCw,
   Square,
   Trash2,
   Undo2,
@@ -15,6 +16,7 @@ import {
   findControl,
   isAspectLockForced,
   resolveAspectLock,
+  rotationOf,
 } from '@/shared/layout-editor';
 import { loadPersonalLayouts } from '../../personal-layouts';
 
@@ -36,6 +38,7 @@ interface PhoneEditorBarProps {
   onDuplicate: () => void;
   onAddHitzone: () => void;
   onToggleShape: () => void;
+  onRotate: () => void;
   onUndo: () => void;
   onRedo: () => void;
 }
@@ -58,6 +61,7 @@ export function PhoneEditorBar({
   onDuplicate,
   onAddHitzone,
   onToggleShape,
+  onRotate,
   onUndo,
   onRedo,
 }: PhoneEditorBarProps) {
@@ -190,6 +194,20 @@ export function PhoneEditorBar({
             ) : (
               <Square size={12} />
             )}
+          </button>
+          <button
+            type="button"
+            className="grid place-items-center size-6 shrink-0 rounded border bg-white/10 text-white border-white/15 hover:bg-white/20 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Rotate hitzone 15 degrees"
+            title={
+              selectedControl?.type === 'hitzone'
+                ? `Rotate +15° (now ${Math.round(rotationOf(selectedControl))}°)`
+                : 'Select a hitzone to rotate'
+            }
+            disabled={selectedControl?.type !== 'hitzone'}
+            onClick={onRotate}
+          >
+            <RotateCw size={12} />
           </button>
           <button
             type="button"

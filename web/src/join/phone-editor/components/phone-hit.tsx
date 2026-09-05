@@ -8,6 +8,7 @@ import {
   getHitzonesOf,
   moveControlAcross,
   moveParentWithHitzonesAcross,
+  rotationOf,
 } from '@/shared/layout-editor';
 
 interface PhoneHitProps {
@@ -79,6 +80,7 @@ export const PhoneHit = memo(function PhoneHit({
     ? getHitzonesOf(draftRef.current, control.id).length > 0
     : false;
   isParentRef.current = parentCheck && control.type !== 'hitzone';
+  const rotation = control.type === 'hitzone' ? rotationOf(control) : 0;
 
   useEffect(() => {
     const el = hitRef.current;
@@ -157,6 +159,8 @@ export const PhoneHit = memo(function PhoneHit({
         width,
         height,
         borderRadius: hitShape === 'ellipse' ? '50%' : undefined,
+        transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+        transformOrigin: 'center',
       }}
       data-control-id={control.id}
       data-hit-shape={hitShape}
