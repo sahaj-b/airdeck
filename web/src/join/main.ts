@@ -33,6 +33,7 @@ import {
   textField,
   updateCapabilityMessage,
 } from './dom-helpers';
+import { invalidateHostLayout } from './layout-docs-cache';
 import {
   deletePersonalLayout,
   loadPersonalLayouts,
@@ -912,6 +913,8 @@ function showController(options: {
         });
     },
     onLayout: (layout, diagnostic) => {
+      // The pushed doc is newer than anything the preview cache fetched.
+      invalidateHostLayout(layout.id);
       if (skipInitialHostLayout) {
         skipInitialHostLayout = false;
         updateStatus(diagnostic ?? 'Controller ready.');

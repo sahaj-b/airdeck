@@ -24,7 +24,10 @@ function AlertDialogBackdrop({
   return (
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-backdrop"
-      className={cn('fixed inset-0 z-50 bg-black/50', className)}
+      className={cn(
+        'fixed inset-0 z-50 bg-black/50 supports-backdrop-filter:backdrop-blur-sm',
+        className,
+      )}
       {...props}
     />
   );

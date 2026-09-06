@@ -6,6 +6,7 @@ import type { FeedbackController } from '@/controller/feedback';
 import type { GyroController, GyroStatus } from '@/controller/gyro/controller';
 import { GyroSheet } from './gyro-sheet';
 import { InlineSettingsPanel } from './inline-settings-panel';
+import { prefetchHostLayouts } from './layout-docs-cache';
 import { LayoutsSheet } from './layouts-sheet';
 import type { settingsStore } from './settings-store';
 import { SkinsSheet } from './skins-sheet';
@@ -68,6 +69,12 @@ function IslandRoot({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   }, [view]);
+
+  // Prefetch host docs as soon as settings opens so the Layout tab is warm.
+  const hostIdsKey = opts.layouts.map((l) => l.id).join('\0');
+  useEffect(() => {
+    if (hostIdsKey) prefetchHostLayouts(hostIdsKey.split('\0'));
+  }, [hostIdsKey]);
 
   return (
     <Drawer
