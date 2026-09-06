@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Badge } from '../../components/ui/badge';
 import {
   Card,
@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from '../../components/ui/card';
 import { TooltipProvider } from '../../components/ui/tooltip';
+import { useLayoutDocs } from '../../components/use-layout-docs';
 import {
   type LayoutSummary,
   MAX_PLAYERS,
@@ -30,6 +31,9 @@ export function Roster({
   onLayout,
 }: RosterProps) {
   const [now, setNow] = useState(() => Date.now());
+
+  const layoutIds = useMemo(() => layouts.map((l) => l.id), [layouts]);
+  const layoutDocs = useLayoutDocs(layoutIds);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -68,6 +72,7 @@ export function Roster({
                     player={player}
                     players={players}
                     layouts={layouts}
+                    layoutDocs={layoutDocs}
                     now={now}
                     onKick={onKick}
                     onMove={onMove}

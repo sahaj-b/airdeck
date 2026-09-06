@@ -3,6 +3,8 @@ import {
   type ErrorMessage,
   FRAME_SIZE,
   type LayoutMessage,
+  type LayoutSummary,
+  type LayoutsMessage,
   MAX_PLAYERS,
   PROTOCOL_VERSION,
   type PublishResult,
@@ -50,6 +52,7 @@ export interface ControllerSocketOptions {
   onStateChange?: (state: ConnectionState) => void;
   onWelcome?: (welcome: Welcome) => void;
   onLayout?: (layout: LayoutDocument, diagnostic?: string) => void;
+  onLayouts?: (layouts: LayoutSummary[]) => void;
   onSlotUpdate?: (update: SlotUpdate) => void;
   onError?: (error: ErrorMessage) => void;
   onRumble?: (rumble: Rumble) => void;
@@ -223,6 +226,9 @@ export class ControllerSocket {
       case 'layout':
         this.handleLayout(message);
         return;
+      case 'layouts':
+        this.handleLayouts(message as unknown as LayoutsMessage);
+        return;
       case 'slot.update':
         if (
           Number.isInteger(message.slot) &&
@@ -334,6 +340,34 @@ export class ControllerSocket {
     this.options.onLayout?.(resolved.layout, resolved.diagnostic);
     if (this.receivedWelcome && this.stateValue === 'welcome-received')
       this.setState('active');
+  }
+
+  private handleLayouts(message: LayoutsMessage): void {
+    if (!Array.isArray(message.layouts)) {
+      this.reportError(
+        'invalid_message',
+        'The host sent an invalid layouts update.',
+      );
+      return;
+    }
+    const layouts: LayoutSummary[] = [];
+    for (const entry of message.layouts) {
+      if (
+        !isRecord(entry) ||
+        typeof entry.id !== 'string' ||
+        typeof entry.name !== 'string' ||
+        !entry.id ||
+        entry.id.length > 64
+      ) {
+        this.reportError(
+          'invalid_message',
+          'The host sent an invalid layouts update.',
+        );
+        return;
+      }
+      layouts.push({ id: entry.id, name: entry.name });
+    }
+    this.options.onLayouts?.(layouts);
   }
 
   private handleError(message: ErrorMessage): void {

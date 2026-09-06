@@ -529,6 +529,35 @@ function showController(options: {
     }
   };
 
+  const applyHostLayouts = (layouts: { id: string; name: string }[]) => {
+    availableLayouts = layouts;
+    if (island && !island.isDestroyed())
+      island.update({
+        layouts: availableLayouts,
+        personalLayouts: getPersonalList(),
+        selectedLayout: currentLayoutId,
+      });
+  };
+
+  const refreshHostLayouts = async () => {
+    try {
+      const res = await fetch('/api/layouts');
+      if (!res.ok) return;
+      const list: unknown = await res.json();
+      if (!Array.isArray(list)) return;
+      const clean = list.filter(
+        (entry): entry is { id: string; name: string } =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          typeof (entry as { id?: unknown }).id === 'string' &&
+          typeof (entry as { name?: unknown }).name === 'string',
+      );
+      applyHostLayouts(clean);
+    } catch {
+      // WS broadcast is the primary path; HTTP is best-effort fallback.
+    }
+  };
+
   const setPublishState = (next: typeof publishState) => {
     publishState = next;
     if (island && !island.isDestroyed()) island.update({ publishState });
@@ -938,6 +967,9 @@ function showController(options: {
       slot.textContent = `Player ${update.slot + 1}`;
       shell.style.setProperty('--slot-accent', update.accent);
     },
+    onLayouts: (layouts) => {
+      applyHostLayouts(layouts);
+    },
     onPublishResult: (result) => {
       clearPublishTimer();
       // only handle pending id match
@@ -946,6 +978,10 @@ function showController(options: {
       publishState = null;
       if (island && !island.isDestroyed())
         island.update({ publishState: null });
+      if (result.status === 'accepted') {
+        // WS `layouts` broadcast is primary; HTTP refetch covers a missed frame.
+        void refreshHostLayouts();
+      }
       const message =
         result.status === 'accepted'
           ? `Publish accepted (${result.id}).`

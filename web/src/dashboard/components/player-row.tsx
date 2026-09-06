@@ -1,5 +1,9 @@
 import { ArrowRightLeft, Unplug } from 'lucide-react';
 import { useState } from 'react';
+import {
+  LayoutMiniPreview,
+  LayoutMiniSkeleton,
+} from '../../components/layout-mini-preview';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import {
@@ -19,11 +23,13 @@ import {
   MAX_PLAYERS,
   type PlayerSnapshot,
 } from '../../shared/contracts';
+import type { LayoutDocument } from '../../shared/layout';
 
 interface PlayerRowProps {
   player: PlayerSnapshot;
   players: PlayerSnapshot[];
   layouts: LayoutSummary[];
+  layoutDocs: Map<string, LayoutDocument>;
   now: number;
   onKick: (id: string) => Promise<void>;
   onMove: (id: string, slot: number) => Promise<void>;
@@ -34,6 +40,7 @@ export function PlayerRow({
   player,
   players,
   layouts,
+  layoutDocs,
   now,
   onKick,
   onMove,
@@ -157,12 +164,26 @@ export function PlayerRow({
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              {layouts.map((layout) => (
-                <SelectItem key={layout.id} value={layout.id}>
-                  {layout.name}
-                </SelectItem>
-              ))}
+            <SelectContent className="w-[260px]">
+              {layouts.map((layout) => {
+                const doc = layoutDocs.get(layout.id);
+                return (
+                  <SelectItem key={layout.id} value={layout.id}>
+                    <span className="flex w-full min-w-0 items-center gap-2.5">
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {layout.name}
+                      </span>
+                      <span className="w-16 shrink-0">
+                        {doc ? (
+                          <LayoutMiniPreview doc={doc} />
+                        ) : (
+                          <LayoutMiniSkeleton />
+                        )}
+                      </span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 

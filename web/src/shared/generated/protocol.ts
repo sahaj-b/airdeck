@@ -50,6 +50,7 @@ export const MessageWelcome = "welcome";
 export const MessagePing = "ping";
 export const MessagePong = "pong";
 export const MessageLayout = "layout";
+export const MessageLayouts = "layouts";
 export const MessageLayoutSelect = "layout.select";
 export const MessageRumble = "rumble";
 export const MessageError = "error";
@@ -116,6 +117,16 @@ export interface LayoutMessage {
   type: 'layout';
   id: string;
   layout: any;
+}
+/**
+ * LayoutsMessage pushes the current host layout catalogue to phones.
+ * The host broadcasts it whenever the library changes (publish accept,
+ * dashboard create/update/delete/reload) so phone pickers never go stale.
+ * Welcome carries the initial list; this keeps it fresh without rejoining.
+ */
+export interface LayoutsMessage {
+  type: 'layouts';
+  layouts: LayoutSummary[];
 }
 export interface Rumble {
   type: 'rumble';

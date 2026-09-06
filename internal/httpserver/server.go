@@ -343,6 +343,14 @@ func (s *Server) broadcastAdminState() {
 	s.broadcastAdmin(s.currentState())
 }
 
+// broadcastPhoneLayouts pushes the layout catalogue to all connected phones.
+// Transport may be nil in unit tests that only exercise admin state.
+func (s *Server) broadcastPhoneLayouts() {
+	if s.options.Transport != nil {
+		s.options.Transport.BroadcastLayouts()
+	}
+}
+
 func (s *Server) Close(ctx context.Context) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()

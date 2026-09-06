@@ -23,6 +23,17 @@ function formatVibration(ms: number): string {
   return ms > 0 ? `${ms} ms` : 'Off';
 }
 
+// Last-resort display for a selected id that matches no known layout
+// (stale storage, deleted host layout). Layout ids are name slugs, so this
+// usually reconstructs the real name instead of leaking kebab-case.
+function humanizeLayoutId(id: string): string {
+  const words = id
+    .split(/[-_]+/g)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  return words.length > 0 ? words.join(' ') : 'Select layout';
+}
+
 const drillRow =
   'flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-accent/40 active:bg-accent/60';
 const drillIcon =
@@ -173,7 +184,7 @@ export function InlineSettingsPanel({
   const selectedLayoutName =
     [...personalLayouts, ...hostLayouts].find(
       (l) => l.id === opts.selectedLayout,
-    )?.name ?? opts.selectedLayout;
+    )?.name ?? humanizeLayoutId(opts.selectedLayout);
   const selectedSkinName = SKINS.find((s) => s.id === skin)?.name ?? skin;
 
   return (

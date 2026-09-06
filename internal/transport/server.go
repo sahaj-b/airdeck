@@ -244,6 +244,27 @@ func (s *Server) SendToPlayer(playerID string, value any) error {
 	return client.Send(value)
 }
 
+// BroadcastLayouts pushes the current layout catalogue to every connected
+// phone. Call it after any library mutation (publish accept, dashboard
+// create/update/delete/reload) so phone pickers stay in sync without rejoin.
+func (s *Server) BroadcastLayouts() {
+	summaries := s.Layouts.Summaries()
+	layouts := make([]protocol.LayoutSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		layouts = append(layouts, protocol.LayoutSummary{ID: summary.ID, Name: summary.Name})
+	}
+	message := protocol.LayoutsMessage{Type: protocol.MessageLayouts, Layouts: layouts}
+	s.mu.Lock()
+	clients := make([]*Client, 0, len(s.clients))
+	for client := range s.clients {
+		clients = append(clients, client)
+	}
+	s.mu.Unlock()
+	for _, client := range clients {
+		_ = client.Send(message)
+	}
+}
+
 func (s *Server) Close() {
 	if s.unsubscribe != nil {
 		s.unsubscribe()

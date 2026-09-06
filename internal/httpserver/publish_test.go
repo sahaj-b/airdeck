@@ -191,19 +191,8 @@ func TestPublishPendingAndAccept(t *testing.T) {
 		t.Fatal("no pending id")
 	}
 
-	// Admin should receive pending notification
-	adminConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, data, err := adminConn.ReadMessage()
-	if err != nil {
-		t.Fatalf("admin pending not received: %v", err)
-	}
-	var pending protocol.PublishPending
-	if err := json.Unmarshal(data, &pending); err != nil {
-		t.Fatalf("pending unmarshal: %v data %s", err, string(data))
-	}
-	if pending.ID != pendingID || pending.Type != protocol.MessagePublishPending {
-		t.Fatalf("pending = %+v", pending)
-	}
+	// Admin should receive pending notification (skip periodic state pushes).
+	_ = readAdminPending(t, adminConn, pendingID)
 
 	// Accept via admin
 	acceptReq := httptest.NewRequest(http.MethodPost, "/api/admin/layouts/publish/"+pendingID+"/accept", nil)
@@ -214,18 +203,19 @@ func TestPublishPendingAndAccept(t *testing.T) {
 		t.Fatalf("accept status = %d, body %s", rec.Code, rec.Body.String())
 	}
 
-	// Phone should receive publish.result accepted
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, data, err = conn.ReadMessage()
-	if err != nil {
-		t.Fatalf("publish result not received: %v", err)
+	// Phone should receive publish.result accepted (skip layouts broadcast).
+	_ = readPhonePublishResult(t, conn, pendingID, "accepted")
+	// Accept must also push the fresh catalogue so the phone picker updates.
+	layoutsMsg := readPhoneLayouts(t, conn)
+	found := false
+	for _, summary := range layoutsMsg.Layouts {
+		if summary.ID == "my-publish" {
+			found = true
+			break
+		}
 	}
-	var result protocol.PublishResult
-	if err := json.Unmarshal(data, &result); err != nil {
-		t.Fatalf("result unmarshal: %v data %s", err, string(data))
-	}
-	if result.ID != pendingID || result.Status != "accepted" {
-		t.Fatalf("result = %+v", result)
+	if !found {
+		t.Fatalf("layouts broadcast missing my-publish: %+v", layoutsMsg)
 	}
 
 	// Verify layout now exists via admin get
@@ -254,8 +244,8 @@ func TestPublishPendingAndAccept(t *testing.T) {
 	var resp2 map[string]string
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp2)
 	conflictID := resp2["id"]
-	// Drain admin pending
-	_, _, _ = adminConn.ReadMessage()
+	// Drain admin pending (skip periodic state pushes).
+	_ = readAdminPending(t, adminConn, conflictID)
 	acceptReq2 := httptest.NewRequest(http.MethodPost, "/api/admin/layouts/publish/"+conflictID+"/accept", nil)
 	acceptReq2.RemoteAddr = "127.0.0.1:1234"
 	rec = httptest.NewRecorder()
@@ -272,18 +262,7 @@ func TestPublishPendingAndAccept(t *testing.T) {
 		t.Fatalf("decline status = %d", rec.Code)
 	}
 	// Phone should get declined
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, data, err = conn.ReadMessage()
-	if err != nil {
-		t.Fatalf("decline result not received: %v", err)
-	}
-	var declineResult protocol.PublishResult
-	if err := json.Unmarshal(data, &declineResult); err != nil {
-		t.Fatal(err)
-	}
-	if declineResult.Status != "declined" {
-		t.Fatalf("decline result = %+v", declineResult)
-	}
+	_ = readPhonePublishResult(t, conn, conflictID, "declined")
 	// Ensure cancel works: publish again then cancel via DELETE
 	publishBody, _ = json.Marshal(map[string]any{"playerId": playerID, "document": map[string]any{"id": "cancel-test", "name": "Cancel", "schemaVersion": 1, "sections": []any{map[string]any{"id": "left", "relativeWidth": 0.86, "controls": []any{}}, map[string]any{"id": "center", "relativeWidth": 0.5, "controls": []any{}}, map[string]any{"id": "right", "relativeWidth": 0.94, "controls": []any{}}}}})
 	req = httptest.NewRequest(http.MethodPost, "/api/layouts/publish", bytes.NewReader(publishBody))
@@ -293,7 +272,7 @@ func TestPublishPendingAndAccept(t *testing.T) {
 	var resp3 map[string]string
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp3)
 	cancelID := resp3["id"]
-	_, _, _ = adminConn.ReadMessage()
+	_ = readAdminPending(t, adminConn, cancelID)
 	cancelReq := httptest.NewRequest(http.MethodDelete, "/api/layouts/publish/"+cancelID, nil)
 	cancelReq.RemoteAddr = "127.0.0.1:1234"
 	rec = httptest.NewRecorder()
@@ -301,16 +280,68 @@ func TestPublishPendingAndAccept(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("cancel status = %d", rec.Code)
 	}
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, data, err = conn.ReadMessage()
-	if err != nil {
-		t.Fatalf("cancel result not received: %v", err)
+	_ = readPhonePublishResult(t, conn, cancelID, "cancelled")
+}
+
+func readAdminPending(t *testing.T, adminConn *websocket.Conn, wantID string) []byte {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for i := 0; i < 10; i++ {
+		adminConn.SetReadDeadline(deadline)
+		_, data, err := adminConn.ReadMessage()
+		if err != nil {
+			t.Fatalf("admin pending not received: %v", err)
+		}
+		var pending protocol.PublishPending
+		if err := json.Unmarshal(data, &pending); err != nil {
+			continue
+		}
+		if pending.Type == protocol.MessagePublishPending && pending.ID == wantID {
+			return data
+		}
 	}
-	var cancelResult protocol.PublishResult
-	if err := json.Unmarshal(data, &cancelResult); err != nil {
-		t.Fatal(err)
+	t.Fatalf("admin pending %q not received", wantID)
+	return nil
+}
+
+func readPhonePublishResult(t *testing.T, conn *websocket.Conn, wantID, wantStatus string) protocol.PublishResult {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for i := 0; i < 10; i++ {
+		conn.SetReadDeadline(deadline)
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("publish result not received: %v", err)
+		}
+		var result protocol.PublishResult
+		if err := json.Unmarshal(data, &result); err != nil {
+			continue
+		}
+		if result.Type == protocol.MessagePublishResult && result.ID == wantID && result.Status == wantStatus {
+			return result
+		}
 	}
-	if cancelResult.Status != "cancelled" {
-		t.Fatalf("cancel result = %+v", cancelResult)
+	t.Fatalf("publish result %q=%q not received", wantID, wantStatus)
+	return protocol.PublishResult{}
+}
+
+func readPhoneLayouts(t *testing.T, conn *websocket.Conn) protocol.LayoutsMessage {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for i := 0; i < 10; i++ {
+		conn.SetReadDeadline(deadline)
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("layouts broadcast not received: %v", err)
+		}
+		var msg protocol.LayoutsMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			continue
+		}
+		if msg.Type == protocol.MessageLayouts {
+			return msg
+		}
 	}
+	t.Fatalf("layouts broadcast not received")
+	return protocol.LayoutsMessage{}
 }

@@ -42,6 +42,7 @@ func (s *Server) routes(adminOnly bool) http.Handler {
 		mux.HandleFunc("/ws", s.options.Transport.ServeHTTP)
 		mux.HandleFunc("/api/layouts/publish", s.handlePublishCreate)
 		mux.HandleFunc("/api/layouts/publish/", s.handlePublishCancel)
+		mux.HandleFunc("/api/layouts", s.handlePublicLayoutsList)
 		mux.HandleFunc("/api/layouts/", s.handlePublicLayoutGet)
 	}
 	mux.HandleFunc("/api/admin/", func(w http.ResponseWriter, r *http.Request) {
@@ -163,6 +164,19 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handlePublicLayoutsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	summaries := s.options.Layouts.Summaries()
+	out := make([]map[string]string, 0, len(summaries))
+	for _, summary := range summaries {
+		out = append(out, map[string]string{"id": summary.ID, "name": summary.Name})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) handlePublicLayoutGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -188,6 +202,9 @@ func (s *Server) layoutAdminAPI(w http.ResponseWriter, r *http.Request, path str
 			return
 		}
 		s.options.Session.ReconcileLayouts()
+		s.options.Session.PushAllLayouts()
+		s.broadcastPhoneLayouts()
+		s.broadcastAdminState()
 		writeJSON(w, http.StatusOK, s.currentState())
 		return
 	}
@@ -219,6 +236,7 @@ func (s *Server) layoutAdminAPI(w http.ResponseWriter, r *http.Request, path str
 			writeErrorStatus(w, err, http.StatusBadRequest)
 			return
 		}
+		s.broadcastPhoneLayouts()
 		s.broadcastAdminState()
 		writeJSON(w, http.StatusCreated, doc)
 		return
@@ -264,6 +282,8 @@ func (s *Server) layoutAdminAPI(w http.ResponseWriter, r *http.Request, path str
 			writeErrorStatus(w, err, http.StatusBadRequest)
 			return
 		}
+		s.options.Session.PushLayoutUpdate(doc.ID)
+		s.broadcastPhoneLayouts()
 		s.broadcastAdminState()
 		writeJSON(w, http.StatusOK, doc)
 	case http.MethodDelete:
@@ -284,6 +304,7 @@ func (s *Server) layoutAdminAPI(w http.ResponseWriter, r *http.Request, path str
 			return
 		}
 		s.options.Session.ReconcileLayouts()
+		s.broadcastPhoneLayouts()
 		s.broadcastAdminState()
 		writeJSON(w, http.StatusOK, s.currentState())
 	default:

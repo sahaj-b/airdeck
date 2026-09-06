@@ -59,6 +59,15 @@ type LayoutMessage struct {
 	Layout any    `json:"layout"`
 }
 
+// LayoutsMessage pushes the current host layout catalogue to phones.
+// The host broadcasts it whenever the library changes (publish accept,
+// dashboard create/update/delete/reload) so phone pickers never go stale.
+// Welcome carries the initial list; this keeps it fresh without rejoining.
+type LayoutsMessage struct {
+	Type    string          `json:"type" tstype:"'layouts'"`
+	Layouts []LayoutSummary `json:"layouts"`
+}
+
 type Rumble struct {
 	Type   string `json:"type" tstype:"'rumble'"`
 	Strong uint16 `json:"strong"`

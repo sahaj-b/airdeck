@@ -58,6 +58,7 @@ export type {
   LayoutMessage,
   LayoutSelect,
   LayoutSummary,
+  LayoutsMessage,
   Ping,
   Pong,
   PublishPending,
@@ -86,6 +87,7 @@ export interface AdminLayoutSummary {
 export type ServerMessage =
   | import('./generated/protocol').Welcome
   | import('./generated/protocol').LayoutMessage
+  | import('./generated/protocol').LayoutsMessage
   | import('./generated/protocol').SlotUpdate
   | import('./generated/protocol').Ping
   | import('./generated/protocol').ErrorMessage

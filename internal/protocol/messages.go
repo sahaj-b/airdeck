@@ -14,6 +14,7 @@ const (
 	MessagePing           = "ping"
 	MessagePong           = "pong"
 	MessageLayout         = "layout"
+	MessageLayouts        = "layouts"
 	MessageLayoutSelect   = "layout.select"
 	MessageRumble         = "rumble"
 	MessageError          = "error"

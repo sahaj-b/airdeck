@@ -1,5 +1,10 @@
 import { Pencil, RefreshCw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  LayoutMiniPreview,
+  LayoutMiniSkeleton,
+} from '@/components/layout-mini-preview';
+import { useLayoutDocs } from '@/components/use-layout-docs';
 import { Button } from '../../components/ui/button';
 import { buttonVariants } from '../../components/ui/button-variants';
 import {
@@ -233,6 +238,9 @@ function LayoutCard({
   const defaultLabel =
     layouts.find((layout) => layout.id === defaultLayout)?.name ??
     defaultLayout;
+  const layoutIds = useMemo(() => layouts.map((l) => l.id), [layouts]);
+  const layoutDocs = useLayoutDocs(layoutIds);
+  const selectedDoc = layoutDocs.get(defaultLayout);
   return (
     <Card>
       <CardHeader>
@@ -250,14 +258,35 @@ function LayoutCard({
                   {defaultLabel || 'Select layout'}
                 </span>
               </SelectTrigger>
-              <SelectContent>
-                {layouts.map((layout) => (
-                  <SelectItem key={layout.id} value={layout.id}>
-                    {layout.name}
-                  </SelectItem>
-                ))}
+              <SelectContent className="w-[260px]">
+                {layouts.map((layout) => {
+                  const doc = layoutDocs.get(layout.id);
+                  return (
+                    <SelectItem key={layout.id} value={layout.id}>
+                      <span className="flex w-full min-w-0 items-center gap-2.5">
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          {layout.name}
+                        </span>
+                        <span className="w-16 shrink-0">
+                          {doc ? (
+                            <LayoutMiniPreview doc={doc} />
+                          ) : (
+                            <LayoutMiniSkeleton />
+                          )}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
+          </div>
+          <div className="pt-1">
+            {selectedDoc ? (
+              <LayoutMiniPreview doc={selectedDoc} />
+            ) : (
+              <LayoutMiniSkeleton />
+            )}
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
             New phones join with this.

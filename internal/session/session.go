@@ -630,6 +630,61 @@ func (s *Session) ReconcileLayouts() {
 	}
 }
 
+// PushLayoutUpdate sends the fresh document to every player currently using
+// layoutID. Call it after a dashboard edit saves so phones render the new
+// geometry without reselecting the layout.
+func (s *Session) PushLayoutUpdate(layoutID string) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	document, ok := s.layouts.Get(layoutID)
+	if !ok {
+		return
+	}
+	s.mu.RLock()
+	var sends []func(any) error
+	for _, player := range s.players {
+		if player.LayoutID == layoutID && player.Send != nil {
+			sends = append(sends, player.Send)
+		}
+	}
+	s.mu.RUnlock()
+	for _, send := range sends {
+		_ = send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: document.ID, Layout: document})
+	}
+}
+
+// PushAllLayouts sends each player its current document. Used after a library
+// reload where any file may have changed; ReconcileLayouts only covers
+// deleted IDs, this covers edited content for existing IDs.
+func (s *Session) PushAllLayouts() {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.mu.RLock()
+	defaultID := s.defaultLayout
+	type pending struct {
+		send func(any) error
+		doc  layout.Document
+	}
+	var sends []pending
+	for _, player := range s.players {
+		if player.Send == nil {
+			continue
+		}
+		doc, ok := s.layouts.Get(player.LayoutID)
+		if !ok {
+			doc, ok = s.layouts.Get(defaultID)
+		}
+		if !ok {
+			doc = s.layouts.Default()
+		}
+		sends = append(sends, pending{send: player.Send, doc: doc})
+	}
+	s.mu.RUnlock()
+	for _, p := range sends {
+		_ = p.send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: p.doc.ID, Layout: p.doc})
+	}
+}
+
 func (s *Session) NotifySettings() { s.emit(Event{Type: "settings"}) }
 
 func (s *Session) Layout(id string) (layout.Document, error) {

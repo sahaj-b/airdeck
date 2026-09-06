@@ -147,6 +147,43 @@ describe('ControllerSocket', () => {
     expect(socket.state).toBe('hello-sent');
   });
 
+  it('applies host layouts updates and reports malformed ones', () => {
+    const fake = new FakeSocket();
+    const seen: Array<Array<{ id: string; name: string }>> = [];
+    const errors: string[] = [];
+    new ControllerSocket({
+      sessionCode: '4821',
+      capabilities: {
+        sound: false,
+        wakeLock: false,
+        fullscreen: false,
+        orientation: false,
+      },
+      socketFactory: () => fake,
+      onLayouts: (layouts) => seen.push(layouts),
+      onError: (error) => errors.push(error.code),
+    }).connect();
+    fake.open();
+    fake.message(
+      JSON.stringify({
+        type: 'layouts',
+        layouts: [
+          { id: 'xbox-default', name: 'Xbox default' },
+          { id: 'my-publish', name: 'My publish' },
+        ],
+      }),
+    );
+    expect(seen).toEqual([
+      [
+        { id: 'xbox-default', name: 'Xbox default' },
+        { id: 'my-publish', name: 'My publish' },
+      ],
+    ]);
+    fake.message(JSON.stringify({ type: 'layouts', layouts: [{ id: '' }] }));
+    expect(seen.length).toBe(1);
+    expect(errors).toEqual(['invalid_message']);
+  });
+
   it('rejects the connection after a pre-welcome admission error', () => {
     const fake = new FakeSocket();
     const states: string[] = [];

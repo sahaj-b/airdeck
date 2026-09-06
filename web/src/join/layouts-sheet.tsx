@@ -7,6 +7,10 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
+  LayoutMiniPreview,
+  LayoutMiniSkeleton,
+} from '@/components/layout-mini-preview';
+import {
   AlertDialog,
   AlertDialogCancel,
   AlertDialogContent,
@@ -22,7 +26,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { LayoutDocument } from '../shared/layout';
-import { LayoutMiniPreview, LayoutMiniSkeleton } from './layout-mini-preview';
 import { loadPersonalLayouts } from './personal-layouts';
 import type { MountOptions } from './settings-island';
 import { useHostLayoutDocs } from './use-host-layout-docs';
