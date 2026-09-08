@@ -6,6 +6,13 @@ import { defineConfig } from 'vite';
 
 const root = dirname(fileURLToPath(import.meta.url));
 
+// Pages builds cannot see outside their root, so emit into web/dist there.
+const outDir =
+  process.env.AIRDECK_WEB_OUTDIR ??
+  (process.env.CF_PAGES
+    ? resolve(root, 'dist')
+    : resolve(root, '../internal/web/dist'));
+
 const devPort = process.env.AIRDECK_PORT ?? '6969';
 const viteDevProxy = process.env.AIRDECK_DEV
   ? {
@@ -24,7 +31,7 @@ export default defineConfig({
   clearScreen: false,
   server: viteDevProxy ? { proxy: viteDevProxy, host: true } : undefined,
   build: {
-    outDir: resolve(root, '../internal/web/dist'),
+    outDir,
     emptyOutDir: true,
     rollupOptions: {
       input: {

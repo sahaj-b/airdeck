@@ -9,3 +9,4 @@ benchmarks/
 .DS_Store
 Caddyfile
 node_modules/
+web/dist/
