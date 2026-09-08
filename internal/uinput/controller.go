@@ -108,18 +108,25 @@ func NewController(cfg Config) (*Controller, error) {
 	if err != nil {
 		return nil, fmt.Errorf("uinput: open %s: %w", path, err)
 	}
-	c := &Controller{
-		file:     f,
-		rumble:   cfg.Rumble,
-		effects:  make(map[int16]ffRumbleEffect),
-		loopDone: make(chan struct{}),
-	}
+	c := newController(f, cfg.Rumble)
 	if err := c.setup(name); err != nil {
 		f.Close()
 		return nil, err
 	}
 	go c.readLoop()
 	return c, nil
+}
+
+// newController builds a Controller around an already-open file without
+// touching kernel ioctls, so tests can drive the read loop and Destroy
+// against a socketpair instead of /dev/uinput.
+func newController(f *os.File, rumble func(strong, weak uint16)) *Controller {
+	return &Controller{
+		file:     f,
+		rumble:   rumble,
+		effects:  make(map[int16]ffRumbleEffect),
+		loopDone: make(chan struct{}),
+	}
 }
 
 func (c *Controller) setup(name string) error {
@@ -327,6 +334,12 @@ func (c *Controller) writeBytes(data []byte) error {
 
 func (c *Controller) writeBytesUntil(data []byte, deadline time.Time) error {
 	for len(data) > 0 {
+		// The device fd is non-blocking, so Go parks writes in the net
+		// poller instead of returning EAGAIN. The write deadline bounds
+		// that wait; without it a full kernel buffer parks us forever.
+		if err := c.file.SetWriteDeadline(deadline); err != nil {
+			return err
+		}
 		n, err := c.file.Write(data)
 		if n > 0 {
 			data = data[n:]
@@ -343,82 +356,28 @@ func (c *Controller) writeBytesUntil(data []byte, deadline time.Time) error {
 		if errors.Is(err, syscall.EINTR) {
 			continue
 		}
-		if !errors.Is(err, syscall.EAGAIN) {
-			return err
-		}
-		if err := waitWritable(c.file, deadline); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// pollTimeoutMs bounds each ppoll cycle so the loop notices destruction.
-const (
-	writeTimeout  = 500 * time.Millisecond
-	pollTimeoutMs = 200
-	pollIn        = 0x0001
-	pollOut       = 0x0004
-	pollErr       = 0x0008
-	pollHup       = 0x0010
-	pollNval      = 0x0020
-)
-
-// pollFd mirrors struct pollfd; the Go stdlib no longer exposes poll(2).
-type pollFd struct {
-	Fd      int32
-	Events  int16
-	Revents int16
-}
-
-func ppoll(fds []pollFd, timeoutMs int) error {
-	ts := syscall.NsecToTimespec(int64(timeoutMs) * int64(time.Millisecond))
-	_, _, errno := syscall.Syscall6(
-		syscall.SYS_PPOLL,
-		uintptr(unsafe.Pointer(&fds[0])),
-		uintptr(len(fds)),
-		uintptr(unsafe.Pointer(&ts)),
-		0,
-		0,
-		0,
-	)
-	if errno != 0 {
-		return errno
-	}
-	return nil
-}
-
-func waitWritable(file *os.File, deadline time.Time) error {
-	fds := []pollFd{{Fd: int32(file.Fd()), Events: pollOut}}
-	for {
-		fds[0].Revents = 0
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
 			return errors.New("uinput: write timed out")
 		}
-		timeoutMs := int(remaining / time.Millisecond)
-		if timeoutMs < 1 {
-			timeoutMs = 1
-		}
-		if err := ppoll(fds, timeoutMs); err != nil {
-			if errors.Is(err, syscall.EINTR) {
-				continue
-			}
-			return err
-		}
-		if fds[0].Revents&pollOut != 0 {
-			return nil
-		}
-		if fds[0].Revents&(pollErr|pollHup|pollNval) != 0 {
-			return errors.New("uinput: device is not writable")
-		}
+		return err
 	}
+	return nil
 }
+
+const (
+	writeTimeout = 500 * time.Millisecond
+	// readTimeout bounds each read so the loop re-checks destroyed even
+	// when the kernel never delivers another event.
+	readTimeout = 200 * time.Millisecond
+	// destroyWaitTimeout bounds Destroy's wait for the read loop. The loop
+	// always wakes within readTimeout, so hitting this means the kernel is
+	// wedged; shutdown must not hang forever behind it.
+	destroyWaitTimeout = 2 * time.Second
+)
 
 func (c *Controller) readLoop() {
 	defer close(c.loopDone)
 	buf := make([]byte, inputEventSize*16)
-	fds := []pollFd{{Fd: int32(c.file.Fd()), Events: pollIn}}
 	for {
 		c.mu.Lock()
 		done := c.destroyed
@@ -426,15 +385,27 @@ func (c *Controller) readLoop() {
 		if done {
 			return
 		}
-		if err := ppoll(fds, pollTimeoutMs); err != nil && !errors.Is(err, syscall.EINTR) {
-			return
+		// Reads on the non-blocking fd park in the Go net poller instead
+		// of returning EAGAIN, and a destroyed device delivers no more
+		// wakeups. The deadline forces a periodic re-check of destroyed
+		// so Destroy can never wait on this loop forever.
+		if err := c.file.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+			return // closed by Destroy; nothing left to serve
 		}
 		n, err := c.file.Read(buf)
 		if err != nil {
-			if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EINTR) {
+			if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EINTR) {
 				continue
 			}
 			return // device destroyed or kernel error; nothing left to serve
+		}
+		c.mu.Lock()
+		done = c.destroyed
+		c.mu.Unlock()
+		if done {
+			// Destroy closed in on us; drop late events instead of
+			// issuing ioctls on a stale fd.
+			return
 		}
 		for off := 0; off+inputEventSize <= n; off += inputEventSize {
 			var ev inputEvent
@@ -497,7 +468,9 @@ func (c *Controller) fireEffect(id int16, value int32) {
 }
 
 // Destroy removes the virtual device and releases the file descriptor. It is
-// safe to call more than once.
+// safe to call more than once, and it always returns: the read-loop wait is
+// bounded so a kernel wedge cannot deadlock session teardown (and SIGINT)
+// behind it.
 func (c *Controller) Destroy() error {
 	var err error
 	c.destroy.Do(func() {
@@ -512,13 +485,19 @@ func (c *Controller) Destroy() error {
 		err = ioctl(c.file, uiDevDestroy, 0)
 		c.writeMu.Unlock()
 
-		// readLoop calls File.Fd before each poll. Keep the file open until
-		// that goroutine observes destroyed and exits, otherwise Close races
-		// with Fd under the race detector.
-		<-c.loopDone
+		// Closing unblocks a readLoop parked in the net poller: its Read
+		// fails and the loop exits via loopDone. The loop never calls
+		// File.Fd, so Close cannot race it under the race detector.
 		cerr := c.file.Close()
 		if err == nil {
 			err = cerr
+		}
+		select {
+		case <-c.loopDone:
+		case <-time.After(destroyWaitTimeout):
+			if err == nil {
+				err = errors.New("uinput: read loop did not exit after destroy")
+			}
 		}
 	})
 	return err

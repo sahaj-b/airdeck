@@ -19,6 +19,10 @@ import (
 	"github.com/sahaj-b/airdeck/internal/web"
 )
 
+// shutdownTimeout bounds the whole graceful shutdown. Device teardown is
+// internally bounded too; this is the backstop for the listener drain.
+const shutdownTimeout = 10 * time.Second
+
 type App struct {
 	Config       config.Config
 	ConfigPath   string
@@ -62,7 +66,9 @@ func (a *App) Run(ctx context.Context) error {
 	log.Printf("session %s, join URL %s", a.Session.Code(), joinURL)
 	printJoinQR(joinURL)
 	<-ctx.Done()
-	return a.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	return a.Shutdown(shutdownCtx)
 }
 
 func printJoinQR(joinURL string) {
@@ -84,16 +90,21 @@ func printJoinQR(joinURL string) {
 func (a *App) Shutdown(ctx context.Context) error {
 	var first error
 	a.shutdownOnce.Do(func() {
+		log.Printf("shutting down")
 		a.Session.SetAcceptingJoins(false)
+		log.Printf("shutting down: closing phone connections")
 		a.Transport.Close()
 		a.HTTP.CloseConnections()
 		a.Input.Close()
+		log.Printf("shutting down: destroying virtual devices")
 		if err := a.Session.Close(); err != nil && first == nil {
 			first = err
 		}
+		log.Printf("shutting down: closing HTTP listeners")
 		if err := a.HTTP.Close(ctx); err != nil && first == nil {
 			first = err
 		}
+		log.Printf("shutdown complete")
 	})
 	return first
 }

@@ -2,23 +2,43 @@ package uinput
 
 import (
 	"os"
+	"syscall"
 	"testing"
+	"time"
 )
 
-func TestPPollTimeout(t *testing.T) {
-	readEnd, writeEnd, err := os.Pipe()
+// Destroy must return even when the read loop is parked with no events
+// pending. Regression test: the loop used to sleep in the net poller past
+// device teardown, so Destroy waited on loopDone forever and wedged session
+// Close, which made SIGINT look like it did nothing.
+func TestDestroyUnblocksParkedReadLoop(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
+		t.Skipf("socketpair unavailable: %v", err)
+	}
+	// Mirror production: a non-blocking fd whose reads park in the net
+	// poller, and a peer that never sends, so no wakeup ever arrives.
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
 		t.Fatal(err)
 	}
-	defer readEnd.Close()
-	defer writeEnd.Close()
-
-	fds := []pollFd{{Fd: int32(readEnd.Fd()), Events: pollIn}}
-	if err := ppoll(fds, 1); err != nil {
-		t.Fatalf("ppoll returned an error: %v", err)
-	}
-	if fds[0].Revents != 0 {
-		t.Fatalf("ppoll reported unexpected events %#x", fds[0].Revents)
+	file := os.NewFile(uintptr(fds[0]), "uinput-test")
+	peer := os.NewFile(uintptr(fds[1]), "uinput-test-peer")
+	defer peer.Close()
+	controller := newController(file, nil)
+	go controller.readLoop()
+	// Let the loop reach its parked read before tearing down. Without this
+	// the loop can observe destroyed on its first check and exit without
+	// ever blocking, which would pass even with the bug present.
+	time.Sleep(500 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		_ = controller.Destroy()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Destroy did not return while the read loop was parked without events")
 	}
 }
 

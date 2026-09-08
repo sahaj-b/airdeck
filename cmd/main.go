@@ -79,6 +79,27 @@ func runDoctor(args []string) error {
 	return err
 }
 
+// signalTrap cancels its context on the first SIGINT/SIGTERM and force-exits
+// the process on the second. A wedged shutdown must never eat the terminal:
+// the first press starts graceful teardown, the next one always kills.
+func signalTrap() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-signals
+		fmt.Fprintln(os.Stderr, "airdeck: received "+sig.String()+", shutting down (press Ctrl-C again to force quit)")
+		cancel()
+		sig = <-signals
+		fmt.Fprintln(os.Stderr, "airdeck: received "+sig.String()+" again, forcing exit")
+		os.Exit(130)
+	}()
+	return ctx, func() {
+		signal.Stop(signals)
+		cancel()
+	}
+}
+
 func checkStatus(check doctor.Check) string {
 	code, text := colorGreen, "ok"
 	if !check.OK {
@@ -148,7 +169,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signalTrap()
 	defer stop()
 	return application.Run(ctx)
 }
