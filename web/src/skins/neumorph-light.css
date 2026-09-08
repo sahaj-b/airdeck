@@ -73,13 +73,48 @@
     color: #5b7cfa;
   }
 
-  .icon-button {
+  /* Active dpad arm: keep the surface bg instead of the base fallback's
+   dark navy mix. Shadow only on the outer edges, the inner edge facing
+   the center gap stays clean so the four arms read as one cross. */
+  .controller-dpad[data-direction="up"] .dpad-up {
+    background: var(--surface);
+    box-shadow:
+      inset 0 -3px 6px var(--shade),
+      inset 3px 0 6px var(--shade),
+      inset -3px 0 6px var(--light);
+  }
+
+  .controller-dpad[data-direction="down"] .dpad-down {
+    background: var(--surface);
+    box-shadow:
+      inset 3px 0 6px var(--shade),
+      inset -3px 0 6px var(--light),
+      inset 0 3px 6px var(--light);
+  }
+
+  .controller-dpad[data-direction="left"] .dpad-left {
+    background: var(--surface);
+    box-shadow:
+      inset 3px 0 6px var(--shade),
+      inset 0 -3px 6px var(--shade),
+      inset 0 3px 6px var(--light);
+  }
+
+  .controller-dpad[data-direction="right"] .dpad-right {
+    background: var(--surface);
+    box-shadow:
+      inset -3px 0 6px var(--light),
+      inset 0 -3px 6px var(--shade),
+      inset 0 3px 6px var(--light);
+  }
+
+  .controller-shell .icon-button {
     box-shadow:
       3px 3px 6px var(--shade),
       -3px -3px 6px var(--light);
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     border-color: #5b7cfa;
   }
 }

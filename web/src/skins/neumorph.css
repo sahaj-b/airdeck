@@ -105,13 +105,13 @@
       inset 0 3px 6px var(--light);
   }
 
-  .icon-button {
+  .controller-shell .icon-button {
     box-shadow:
       3px 3px 6px var(--shade),
       -3px -3px 6px var(--light);
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     border-color: #7aa2f7;
   }
 }

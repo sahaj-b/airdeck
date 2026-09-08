@@ -7,11 +7,14 @@ import './base.css';
 import './airdeck.css';
 import './clay.css';
 import './console.css';
-import './minimal.css';
+import './denim.css';
+import './leather.css';
 import './moonlight.css';
 import './neumorph-light.css';
 import './neumorph.css';
 import './oled.css';
+import './outrun.css';
+import './pro.css';
 import './retro.css';
 
 export { DEFAULT_SKIN_ID, isSkinId, SKINS } from './index';

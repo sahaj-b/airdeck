@@ -279,8 +279,8 @@ body {
 }
 
 /* Dim the idle arms while a direction is held; the active arm pops back via
-   the rules below. Only minimal sets the idle token, everywhere else it
-   no-ops to the arm color. */
+   the rules below. Skins that set --sk-dpad-idle-color dim the idle arms,
+   everywhere else it no-ops to the arm color. */
 .controller-dpad[data-direction] .dpad-direction {
   color: var(--sk-dpad-idle-color, var(--sk-dpad-color, #aeb9c9));
 }
@@ -318,13 +318,16 @@ body {
   color: var(--sk-status-color, inherit);
 }
 
-.icon-button {
+.controller-shell .icon-button {
+  /* Shell-scoped: the join screen reuses .icon-button outside the shell
+  for its fullscreen toggle, which is Join UI and must never pick up
+  skin visuals. Controller gear + fullscreen live inside the shell. */
   background: var(--sk-btn-bg, transparent);
   border: var(--sk-btn-border, none);
   color: var(--sk-btn-color, inherit);
 }
 
-.icon-button:hover {
+.controller-shell .icon-button:hover {
   background: var(--sk-btn-hover-bg, var(--sk-btn-bg, transparent));
   color: var(--sk-btn-hover-color, var(--sk-btn-color, inherit));
 }

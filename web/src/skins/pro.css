@@ -1,0 +1,144 @@
+@scope ([data-skin="pro"]) to ([data-skin]) {
+  /* Pro white — realistic first-party hardware. Matte robot-white shell,
+   Xbox-style colored ABXY fills, black dish dpad and sticks. The only
+   light skeuomorphic skin: white plastic + black wells + color pops. */
+
+  :scope {
+    --slot-accent: #0e7a0e;
+    --sk-page-bg: #c9cfd9;
+    --sk-shell-bg: #c9cfd9;
+    --sk-ink: #1a1d21;
+
+    --sk-frame-bg:
+      linear-gradient(
+        180deg,
+        rgb(255 255 255 / 0.7) 0%,
+        transparent 30%,
+        rgb(0 0 0 / 0.08) 100%
+      ),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+      linear-gradient(180deg, #ffffff 0%, #eef1f4 48%, #d5dae0 100%);
+    --sk-frame-border: 1px solid #a7afba;
+    --sk-frame-radius: 22px;
+    --sk-frame-shadow:
+      inset 0 1px 0 #fff, inset 0 -4px 8px rgb(0 0 0 / 0.08),
+      0 10px 24px rgb(0 0 0 / 0.35);
+
+    --sk-control-bg: linear-gradient(180deg, #f4f6f8 0%, #dfe4ea 100%);
+    --sk-control-color: #1a1d21;
+    --sk-control-border: 1px solid #a7afba;
+    --sk-control-radius: 0.7rem;
+    --sk-control-shadow:
+      inset 0 1px 0 #fff, inset 0 -2px 4px rgb(0 0 0 / 0.1),
+      0 2px 4px rgb(0 0 0 / 0.2);
+    --sk-control-weight: 700;
+    --sk-control-transition:
+      transform 90ms ease, box-shadow 90ms ease, filter 90ms ease;
+
+    /* Xbox fills: colored button, white letter, yellow takes dark ink. */
+    --sk-south-bg: linear-gradient(180deg, #23a226 0%, #128a15 100%);
+    --sk-south-color: #fff;
+    --sk-east-bg: linear-gradient(180deg, #ef5350 0%, #c62828 100%);
+    --sk-east-color: #fff;
+    --sk-west-bg: linear-gradient(180deg, #42a5f5 0%, #1565c0 100%);
+    --sk-west-color: #fff;
+    --sk-north-bg: linear-gradient(180deg, #ffca28 0%, #e6a200 100%);
+    --sk-north-color: #1a1a1a;
+    --sk-face-shadow:
+      inset 0 1.5px 0 rgb(255 255 255 / 0.55),
+      inset 0 -3px 5px rgb(0 0 0 / 0.22), 0 2px 5px rgb(0 0 0 / 0.28);
+
+    --sk-pressed-transform: translateY(2px);
+    --sk-pressed-filter: brightness(0.92);
+    --sk-pressed-shadow:
+      inset 0 3px 6px rgb(0 0 0 / 0.3), 0 1px 2px rgb(0 0 0 / 0.2);
+
+    --sk-stick-bg: radial-gradient(circle at 50% 42%, #3a3e44 0%, #17191d 70%);
+    --sk-stick-border: 1px solid #0c0d0f;
+    --sk-stick-shadow:
+      inset 0 4px 9px rgb(0 0 0 / 0.7), inset 0 -2px 4px rgb(255 255 255 / 0.1),
+      0 1px 0 rgb(255 255 255 / 0.7);
+    --sk-stick-active-shadow:
+      inset 0 4px 9px rgb(0 0 0 / 0.7), 0 0 0 2px rgb(14 122 14 / 0.5);
+
+    --sk-knob-size: 56%;
+    --sk-knob-bg: radial-gradient(
+      circle at 34% 28%,
+      #4a4f56 0%,
+      #26292e 55%,
+      #131518 100%
+    );
+    --sk-knob-border: 1px solid #0c0d0f;
+    --sk-knob-shadow:
+      0 5px 10px rgb(0 0 0 / 0.4),
+      inset 0 2px 2px rgb(255 255 255 / 0.3),
+      inset 0 -4px 7px rgb(0 0 0 / 0.55),
+      inset 0 0 0 4px rgb(0 0 0 / 0.18);
+    --sk-knob-active-filter: brightness(0.92);
+
+    --sk-dpad-bg: linear-gradient(180deg, #33373d 0%, #1e2126 100%);
+    --sk-dpad-color: #cfd5dd;
+    --sk-dpad-border: 1px solid #0c0d0f;
+    --sk-dpad-radius: 18%;
+    --sk-dpad-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -3px 5px rgb(0 0 0 / 0.5),
+      0 2px 4px rgb(0 0 0 / 0.3);
+    --sk-dpad-active-color: #fff;
+
+    --sk-slot-color: #0e7a0e;
+    --sk-name-color: #1a1d21;
+    --sk-label-color: #5b6470;
+    --sk-sub-color: #5b6470;
+
+    --sk-status-bg: #f4f6f8;
+    --sk-status-border: 1px solid #a7afba;
+    --sk-status-color: #1a1d21;
+
+    --sk-btn-bg: #f4f6f8;
+    --sk-btn-border: 1px solid #a7afba;
+    --sk-btn-color: #1a1d21;
+    --sk-btn-hover-color: #000;
+
+    --sk-orient-bg: #f4f6f8;
+    --sk-orient-border: 1px solid #a7afba;
+    --sk-orient-color: #1a1d21;
+  }
+
+  /* Extras, all scoped so they render in previews too. */
+
+  /* Brushed-metal lip on the shoulder buttons. */
+  .control-trigger {
+    border-top: 1px solid rgb(255 255 255 / 0.8);
+    background: linear-gradient(180deg, #f7f9fb 0%, #d5dae0 60%, #c2c8d0 100%);
+  }
+
+  /* Engraved shadow on the colored face letters. */
+  [data-command="south"],
+  [data-command="east"],
+  [data-command="west"],
+  [data-command="north"] {
+    text-shadow: 0 -1px 1px rgb(0 0 0 / 0.35);
+  }
+
+  /* Single cross body behind the transparent-shelled dpad arms. */
+  .controller-dpad::before {
+    display: block;
+    position: absolute;
+    left: 30%;
+    top: 30%;
+    width: 40%;
+    height: 40%;
+    border: 1px solid #0c0d0f;
+    border-radius: 14%;
+    background: #2b2f35;
+    content: "";
+  }
+
+  .controller-control:not(.control-joystick):not(.controller-dpad).is-pressed {
+    border-color: #0e7a0e;
+  }
+
+  .controller-shell .icon-button:hover {
+    border-color: #0e7a0e;
+  }
+}

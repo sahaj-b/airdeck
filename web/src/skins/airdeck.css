@@ -102,7 +102,7 @@
     border-color: var(--slot-accent);
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     border-color: color-mix(in oklch, var(--border) 32%, var(--foreground) 68%);
   }
 

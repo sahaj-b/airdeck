@@ -7,11 +7,14 @@ export const SKINS: Skin[] = [
   { id: 'airdeck', name: 'Airdeck' },
   { id: 'clay', name: 'Clay' },
   { id: 'console', name: 'Console' },
-  { id: 'minimal', name: 'Minimal' },
+  { id: 'denim', name: 'Denim' },
+  { id: 'leather', name: 'Leather' },
   { id: 'moonlight', name: 'Moonlight' },
   { id: 'neumorph-light', name: 'Neumorph Light' },
   { id: 'neumorph', name: 'Neumorph' },
   { id: 'oled', name: 'OLED' },
+  { id: 'outrun', name: 'Outrun' },
+  { id: 'pro', name: 'Pro White' },
   { id: 'retro', name: 'Retro' },
 ];
 

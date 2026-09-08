@@ -113,8 +113,9 @@
     --sk-orient-color: #cfc8ff;
   }
 
-  /* Extras: filter-only hover. */
-  .icon-button:hover {
+  /* Extras: filter-only hover. Join page fullscreen reuses .icon-button
+  outside the shell, so keep this scoped to controller chrome. */
+  .controller-shell .icon-button:hover {
     filter: brightness(1.15);
   }
 }

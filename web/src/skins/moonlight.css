@@ -115,7 +115,7 @@
     border-radius: 0.75rem;
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     border-color: #7ba4d6;
   }
 }

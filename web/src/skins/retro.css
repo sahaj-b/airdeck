@@ -86,13 +86,13 @@
     text-shadow: 2px 2px 0 var(--line);
   }
 
-  .icon-button {
+  .controller-shell .icon-button {
     border-radius: 0;
     box-shadow: 3px 3px 0 var(--line);
     text-shadow: 2px 2px 0 var(--line);
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     filter: brightness(1.15);
   }
 

@@ -152,7 +152,7 @@
     content: "";
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     border-color: #9ade3b;
   }
 }

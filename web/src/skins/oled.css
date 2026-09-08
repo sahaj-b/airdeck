@@ -10,8 +10,8 @@
     --sk-frame-bg: #000000;
 
     --sk-control-bg: #000000;
-    --sk-control-color: #999999;
-    --sk-control-border: 1.5px solid #999999;
+    --sk-control-color: #e8e8e8;
+    --sk-control-border: 1.5px solid #e8e8e8;
     --sk-control-radius: 0.5rem;
     --sk-control-transition: border-color 120ms ease, color 120ms ease;
 
@@ -21,20 +21,20 @@
     --sk-north-color: #ffca28;
 
     --sk-pressed-bg: #0a0a0a;
-    --sk-pressed-color: #e0e0e0;
+    --sk-pressed-color: #f5f5f5;
 
     --sk-stick-bg: #000000;
-    --sk-stick-border: 1.5px solid #999999;
+    --sk-stick-border: 1.5px solid #e8e8e8;
     --sk-stick-transition: border-color 120ms ease;
 
     --sk-knob-size: 36%;
     --sk-knob-bg: #000000;
-    --sk-knob-border: 1.5px solid #999999;
+    --sk-knob-border: 1.5px solid #e8e8e8;
     --sk-knob-transition: border-color 120ms ease, background-color 120ms ease;
     --sk-knob-active-bg: #4fc3f7;
 
     --sk-dpad-bg: transparent;
-    --sk-dpad-color: #999999;
+    --sk-dpad-color: #e8e8e8;
     --sk-dpad-border: none;
     --sk-dpad-radius: 0;
     --sk-dpad-transition: color 100ms ease;
@@ -42,20 +42,20 @@
     --sk-dpad-active-color: #4fc3f7;
 
     --sk-slot-color: #4fc3f7;
-    --sk-name-color: #e0e0e0;
+    --sk-name-color: #f5f5f5;
 
     --sk-status-bg: #000000;
-    --sk-status-border: 1.5px solid #999999;
-    --sk-status-color: #999999;
+    --sk-status-border: 1.5px solid #e8e8e8;
+    --sk-status-color: #e8e8e8;
 
     --sk-btn-bg: #000000;
-    --sk-btn-border: 1.5px solid #999999;
-    --sk-btn-color: #999999;
-    --sk-btn-hover-color: #e0e0e0;
+    --sk-btn-border: 1.5px solid #e8e8e8;
+    --sk-btn-color: #e8e8e8;
+    --sk-btn-hover-color: #f5f5f5;
 
     --sk-orient-bg: #000000;
-    --sk-orient-border: 1.5px solid #999999;
-    --sk-orient-color: #e0e0e0;
+    --sk-orient-border: 1.5px solid #e8e8e8;
+    --sk-orient-color: #f5f5f5;
   }
 
   /* Extras: state border-color deltas and the per-arm dpad treatment. The
@@ -101,7 +101,7 @@
     border-left: 0;
   }
 
-  .icon-button:hover {
+  .controller-shell .icon-button:hover {
     border-color: #4fc3f7;
   }
 }
