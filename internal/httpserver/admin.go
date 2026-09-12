@@ -13,23 +13,25 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sahaj-b/airdeck/internal/config"
 	"github.com/sahaj-b/airdeck/internal/layout"
+	"github.com/sahaj-b/airdeck/internal/roomcode"
 	"github.com/sahaj-b/airdeck/internal/session"
 	"github.com/sahaj-b/airdeck/internal/transport"
 )
 
 type adminState struct {
-	Code                 string                   `json:"code"`
-	AcceptingJoins       bool                     `json:"acceptingJoins"`
-	AdvertisedJoinURL    string                   `json:"advertisedJoinURL"`
-	OnlineJoinURL        string                   `json:"onlineJoinURL"`
-	CentralReachable     bool                     `json:"centralReachable"`
-	ClaimConflict        string                   `json:"claimConflict,omitempty"`
-	AdvertisedCandidates []string                 `json:"advertisedCandidates"`
-	PublicPort           int                      `json:"publicPort"`
-	AdminPort            int                      `json:"adminPort"`
-	Config               config.Config            `json:"config"`
-	Layouts              []layout.Summary         `json:"layouts"`
-	Players              []session.PlayerSnapshot `json:"players"`
+	Code                 string                    `json:"code"`
+	AcceptingJoins       bool                      `json:"acceptingJoins"`
+	AdvertisedJoinURL    string                    `json:"advertisedJoinURL"`
+	OnlineJoinURL        string                    `json:"onlineJoinURL"`
+	CentralReachable     bool                      `json:"centralReachable"`
+	ClaimConflict        string                    `json:"claimConflict,omitempty"`
+	AdvertisedCandidates []string                  `json:"advertisedCandidates"`
+	PublicPort           int                       `json:"publicPort"`
+	AdminPort            int                       `json:"adminPort"`
+	Config               config.Config             `json:"config"`
+	Layouts              []layout.Summary          `json:"layouts"`
+	Players              []session.PlayerSnapshot  `json:"players"`
+	Pendings             []session.PendingSnapshot `json:"pendings"`
 }
 
 type adminEvent struct {
@@ -88,6 +90,17 @@ func (s *Server) currentState() adminState {
 	s.mu.Unlock()
 	players := s.options.Session.Players()
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
+	if agent != nil {
+		for i := range players {
+			players[i].Relayed = agent.IsRelayed(players[i].ID)
+		}
+	}
+	var pendings []session.PendingSnapshot
+	if agent == nil {
+		pendings = s.sessionPendings()
+	} else {
+		pendings = s.pendingJoins(agent)
+	}
 	state := adminState{
 		Code:                 s.options.Session.Code(),
 		AcceptingJoins:       s.options.Session.AcceptingJoins(),
@@ -99,12 +112,45 @@ func (s *Server) currentState() adminState {
 		Config:               cfg,
 		Layouts:              s.options.Layouts.Summaries(),
 		Players:              players,
+		Pendings:             pendings,
 	}
 	if agent != nil {
 		state.CentralReachable = agent.Reachable()
 		state.ClaimConflict = agent.Conflict()
 	}
 	return state
+}
+
+// sessionPendings returns LAN-only queue rows, never nil for JSON.
+func (s *Server) sessionPendings() []session.PendingSnapshot {
+	out := s.options.Session.Pendings()
+	if out == nil {
+		return []session.PendingSnapshot{}
+	}
+	return out
+}
+
+// pendingJoins merges the dashboard approval queue: relay pendings (keyed
+// by relay id, routed through the agent so rtc.Accept goes out) plus LAN
+// session pendings that do not back a relay approval. One guest never
+// appears twice.
+func (s *Server) pendingJoins(agent interface {
+	Pendings() []session.PendingSnapshot
+	OwnsSessionPending(string) bool
+},
+) []session.PendingSnapshot {
+	out := agent.Pendings()
+	if out == nil {
+		out = []session.PendingSnapshot{}
+	}
+	for _, snapshot := range s.options.Session.Pendings() {
+		if agent.OwnsSessionPending(snapshot.ID) {
+			continue
+		}
+		out = append(out, snapshot)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].WaitingSince.Before(out[j].WaitingSince) })
+	return out
 }
 
 func advertisedCandidates() []string {
@@ -151,6 +197,12 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.currentState())
 	case path == "/settings" && r.Method == http.MethodPut:
 		s.updateSettings(w, r)
+	case strings.HasPrefix(path, "/approval/"):
+		s.approvalAPI(w, r, strings.TrimPrefix(path, "/approval/"))
+	case path == "/room-code" && r.Method == http.MethodPut:
+		s.setRoomCodeAPI(w, r)
+	case path == "/room-code/generate" && r.Method == http.MethodPost:
+		s.generateRoomCodeAPI(w, r)
 	case path == "/players/layout" && r.Method == http.MethodPut:
 		s.bulkLayoutAPI(w, r)
 	case strings.HasPrefix(path, "/players/"):
@@ -351,6 +403,7 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		AdvertisedPort     *int    `json:"advertisedPort"`
 		DefaultLayout      *string `json:"defaultLayout"`
 		GracePeriodSeconds *int    `json:"gracePeriodSeconds"`
+		ApprovalRequired   *bool   `json:"approvalRequired"`
 	}
 	if err := decodeJSON(r, &update); err != nil {
 		writeErrorStatus(w, err, http.StatusBadRequest)
@@ -371,6 +424,9 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if update.DefaultLayout != nil {
 		current.DefaultLayout = *update.DefaultLayout
+	}
+	if update.ApprovalRequired != nil {
+		current.ApprovalRequired = *update.ApprovalRequired
 	}
 	if err := config.Validate(current); err != nil {
 		writeErrorStatus(w, err, http.StatusBadRequest)
@@ -397,8 +453,171 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	if update.GracePeriodSeconds != nil && current.GracePeriodSeconds != previous.GracePeriodSeconds {
 		s.options.Session.SetGracePeriod(time.Duration(current.GracePeriodSeconds) * time.Second)
 	}
+	if current.ApprovalRequired != previous.ApprovalRequired {
+		s.options.Session.SetApprovalRequired(current.ApprovalRequired)
+		s.mu.Lock()
+		agent := s.options.Online
+		s.mu.Unlock()
+		if agent != nil {
+			agent.SetApprovalRequired(current.ApprovalRequired)
+		}
+	}
 	if current != previous {
 		s.options.Session.NotifySettings()
+	}
+	if s.options.OnSettings != nil {
+		if err := s.options.OnSettings(current); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, s.currentState())
+}
+
+// approvalAPI drives the dashboard approval queue: accept promotes one
+// pending join to a player, reject drops it. Relay pendings route through
+// the online agent (which sends rtc.Accept/Reject); LAN pendings fall back
+// to the session. A full session keeps the pending queued and reports 409.
+func (s *Server) approvalAPI(w http.ResponseWriter, r *http.Request, value string) {
+	parts := strings.Split(strings.Trim(value, "/"), "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	id, action := parts[0], parts[1]
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	s.mu.Lock()
+	agent := s.options.Online
+	s.mu.Unlock()
+	switch action {
+	case "accept":
+		if agent != nil {
+			err := agent.AcceptPending(id)
+			if err == nil {
+				writeJSON(w, http.StatusOK, s.currentState())
+				return
+			}
+			if !isPendingNotFound(err) {
+				writeApprovalError(w, err)
+				return
+			}
+		}
+		if _, err := s.options.Session.AcceptPending(id); err != nil {
+			writeApprovalError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, s.currentState())
+	case "reject":
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		// Reason is optional; an empty body still rejects.
+		if r.ContentLength != 0 {
+			if err := decodeJSON(r, &body); err != nil {
+				writeErrorStatus(w, err, http.StatusBadRequest)
+				return
+			}
+		}
+		if agent != nil {
+			err := agent.RejectPending(id, body.Reason)
+			if err == nil {
+				writeJSON(w, http.StatusOK, s.currentState())
+				return
+			}
+			if !isPendingNotFound(err) {
+				writeApprovalError(w, err)
+				return
+			}
+		}
+		if err := s.options.Session.RejectPending(id, body.Reason); err != nil {
+			writeApprovalError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, s.currentState())
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func isPendingNotFound(err error) bool {
+	return errors.Is(err, session.ErrPendingNotFound)
+}
+
+func writeApprovalError(w http.ResponseWriter, err error) {
+	if errors.Is(err, session.ErrSessionFull) {
+		writeErrorStatus(w, err, http.StatusConflict)
+		return
+	}
+	if errors.Is(err, session.ErrPendingNotFound) {
+		writeErrorStatus(w, err, http.StatusNotFound)
+		return
+	}
+	writeError(w, err)
+}
+
+// setRoomCodeAPI installs a custom room code from the dashboard conflict
+// banner. The session is the single source of truth: it updates together
+// with the agent and persisted config so LAN validation and relay routing
+// never diverge. The old code tombstones on the relay and never reassigns.
+func (s *Server) setRoomCodeAPI(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RoomCode string `json:"roomCode"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeErrorStatus(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := roomcode.Validate(body.RoomCode); err != nil {
+		writeErrorStatus(w, err, http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	current := s.options.Config
+	agent := s.options.Online
+	s.mu.Unlock()
+	current.RoomCode = roomcode.Normalize(body.RoomCode)
+	if err := config.Validate(current); err != nil {
+		writeErrorStatus(w, err, http.StatusBadRequest)
+		return
+	}
+	s.UpdateConfig(current)
+	s.options.Session.SetCode(current.RoomCode)
+	if agent != nil {
+		agent.SetCode(current.RoomCode, current.ApprovalRequired)
+	}
+	if s.options.OnSettings != nil {
+		if err := s.options.OnSettings(current); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, s.currentState())
+}
+
+// generateRoomCodeAPI mints a fresh 6-char code for the conflict banner.
+// Same persistence and fan-out as the custom-code path.
+func (s *Server) generateRoomCodeAPI(w http.ResponseWriter, r *http.Request) {
+	code, err := roomcode.Generate()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.mu.Lock()
+	current := s.options.Config
+	agent := s.options.Online
+	s.mu.Unlock()
+	current.RoomCode = code
+	if err := config.Validate(current); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.UpdateConfig(current)
+	s.options.Session.SetCode(current.RoomCode)
+	if agent != nil {
+		agent.SetCode(current.RoomCode, current.ApprovalRequired)
 	}
 	if s.options.OnSettings != nil {
 		if err := s.options.OnSettings(current); err != nil {

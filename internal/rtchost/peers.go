@@ -637,6 +637,51 @@ func (m *PeerManager) PeerCount() int {
 	return len(m.peers)
 }
 
+// Has reports whether one player currently owns a PeerConnection.
+// The dashboard uses it to separate RTC players from LAN ws players.
+func (m *PeerManager) Has(playerID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.peers[playerID]
+	return ok
+}
+
+// IsRelayed collapses the host-observed selected ICE candidate pair to
+// the dashboard boolean: true when either side of the selected pair is
+// TURN-relayed, false for direct (host/srflx) or not yet connected.
+// LAN ws players have no peer and always report false.
+func (m *PeerManager) IsRelayed(playerID string) bool {
+	m.mu.Lock()
+	p, ok := m.peers[playerID]
+	m.mu.Unlock()
+	if !ok || p == nil || p.pc == nil {
+		return false
+	}
+	sctp := p.pc.SCTP()
+	if sctp == nil {
+		return false
+	}
+	dtls := sctp.Transport()
+	if dtls == nil {
+		return false
+	}
+	iceTransport := dtls.ICETransport()
+	if iceTransport == nil {
+		return false
+	}
+	pair, err := iceTransport.GetSelectedCandidatePair()
+	if err != nil || pair == nil {
+		return false
+	}
+	if pair.Local != nil && pair.Local.Typ == webrtc.ICECandidateTypeRelay {
+		return true
+	}
+	if pair.Remote != nil && pair.Remote.Typ == webrtc.ICECandidateTypeRelay {
+		return true
+	}
+	return false
+}
+
 // Close tears down every PeerConnection. Shutdown order in app calls this
 // alongside Transport.Close: data paths stop together, then devices.
 func (m *PeerManager) Close() {

@@ -811,6 +811,21 @@ func (a *Agent) armOfferTimeout(relayPendingID string, admission session.Admissi
 	})
 }
 
+// IsRelayed reports the dashboard transport badge for one player: true
+// when the selected ICE pair is TURN-relayed, false for direct or LAN.
+func (a *Agent) IsRelayed(playerID string) bool {
+	if a == nil {
+		return false
+	}
+	a.mu.Lock()
+	peers := a.peers
+	a.mu.Unlock()
+	if peers == nil {
+		return false
+	}
+	return peers.IsRelayed(playerID)
+}
+
 // PendingCount reports queued relay approvals (dashboard badge).
 func (a *Agent) PendingCount() int {
 	a.mu.Lock()
@@ -822,4 +837,52 @@ func (a *Agent) PendingCount() int {
 		}
 	}
 	return n
+}
+
+// Pendings returns the queued relay approvals for the dashboard queue.
+// Each entry carries the relay pending id (the dashboard accept/reject
+// key), with display name plus waiting time resolved from the backing
+// session pending. Accepted admissions awaiting their post-accept offer
+// are players already, never queue rows.
+func (a *Agent) Pendings() []session.PendingSnapshot {
+	a.mu.Lock()
+	queued := make(map[string]string, len(a.approvals))
+	for relayID, entry := range a.approvals {
+		if !entry.accepted {
+			queued[relayID] = entry.sessionPending
+		}
+	}
+	a.mu.Unlock()
+	if len(queued) == 0 {
+		return nil
+	}
+	bySession := make(map[string]session.PendingSnapshot, len(queued))
+	for _, snapshot := range a.session.Pendings() {
+		bySession[snapshot.ID] = snapshot
+	}
+	out := make([]session.PendingSnapshot, 0, len(queued))
+	for relayID, sessionID := range queued {
+		snapshot, ok := bySession[sessionID]
+		if !ok {
+			continue
+		}
+		snapshot.ID = relayID
+		out = append(out, snapshot)
+	}
+	return out
+}
+
+// OwnsSessionPending reports whether one session pending backs a queued
+// relay approval. The dashboard hides such session rows and shows the
+// relay id instead, so one guest never appears twice and accepts route
+// through the agent (which sends rtc.Accept) instead of the session.
+func (a *Agent) OwnsSessionPending(sessionID string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, entry := range a.approvals {
+		if !entry.accepted && entry.sessionPending == sessionID {
+			return true
+		}
+	}
+	return false
 }

@@ -102,6 +102,15 @@ export function PlayerRow({
             >
               {labelForState(player.state)}
             </Badge>
+            {player.relayed ? (
+              <Badge
+                className="rounded-full border-sky-500/20 bg-sky-500/10 px-2 py-0 text-[11px] font-medium leading-none text-sky-700 dark:text-sky-300"
+                variant="secondary"
+                title="Joined over the online relay"
+              >
+                relay
+              </Badge>
+            ) : null}
             {player.graceDeadline && player.state === 'disconnected-grace' && (
               <span className="text-[11px] tabular-nums text-muted-foreground">
                 until {formatTime(player.graceDeadline)}

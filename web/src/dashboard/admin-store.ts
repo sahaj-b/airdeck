@@ -2,17 +2,21 @@ import { useSyncExternalStore } from 'react';
 import type { AdminState, PendingPublishRequest } from '../shared/contracts';
 import {
   type AdminEvent,
+  acceptApproval,
   acceptPublish,
   declinePublish,
+  generateRoomCode,
   getAdminState,
   kickPlayer,
   movePlayer,
   newSession,
+  rejectApproval,
   reloadAdminLayouts,
   type SettingsUpdate,
   setAllPlayerLayouts,
   setJoins,
   setPlayerLayout,
+  setRoomCode,
   updateSettings,
 } from './api';
 
@@ -50,7 +54,7 @@ export class AdminStore {
   async load(): Promise<void> {
     this.setSnapshot({ loading: true, error: null });
     try {
-      const state = await getAdminState();
+      const state = normalizeAdminState(await getAdminState());
       this.setSnapshot({ state, loading: false, error: null });
     } catch (error) {
       const message =
@@ -99,6 +103,26 @@ export class AdminStore {
 
   async setAcceptingJoins(value: boolean): Promise<void> {
     await this.runAction(setJoins(value));
+  }
+
+  async setApprovalRequired(value: boolean): Promise<void> {
+    await this.runAction(updateSettings({ approvalRequired: value }));
+  }
+
+  async acceptPending(id: string): Promise<void> {
+    await this.runAction(acceptApproval(id));
+  }
+
+  async rejectPending(id: string, reason?: string): Promise<void> {
+    await this.runAction(rejectApproval(id, reason));
+  }
+
+  async generateRoomCode(): Promise<void> {
+    await this.runAction(generateRoomCode());
+  }
+
+  async setRoomCode(roomCode: string): Promise<void> {
+    await this.runAction(setRoomCode(roomCode));
   }
 
   async saveSettings(update: SettingsUpdate): Promise<void> {
@@ -194,7 +218,7 @@ export class AdminStore {
   private async runAction(action: Promise<AdminState>): Promise<void> {
     try {
       this.setSnapshot({ error: null });
-      this.setSnapshot({ state: await action });
+      this.setSnapshot({ state: normalizeAdminState(await action) });
     } catch (error) {
       const message =
         error instanceof Error
@@ -214,9 +238,15 @@ export class AdminStore {
         return;
       }
       if (isAdminState(message)) {
-        this.setSnapshot({ state: message, loading: false });
+        this.setSnapshot({
+          state: normalizeAdminState(message),
+          loading: false,
+        });
       } else if (isAdminEvent(message)) {
-        this.setSnapshot({ state: message.state, loading: false });
+        this.setSnapshot({
+          state: normalizeAdminState(message.state),
+          loading: false,
+        });
       }
     } catch {
       this.setSnapshot({ error: 'The host sent an invalid dashboard update.' });
@@ -243,6 +273,15 @@ export function useAdminSnapshot(store: AdminStore): AdminSnapshot {
     store.getSnapshot,
     store.getSnapshot,
   );
+}
+
+function normalizeAdminState(state: AdminState): AdminState {
+  return {
+    ...state,
+    onlineJoinURL: state.onlineJoinURL ?? state.advertisedJoinURL,
+    centralReachable: state.centralReachable ?? false,
+    pendings: state.pendings ?? [],
+  };
 }
 
 function isAdminState(value: unknown): value is AdminState {

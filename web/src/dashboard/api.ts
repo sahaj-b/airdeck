@@ -7,6 +7,7 @@ export interface SettingsUpdate {
   advertisedPort?: number;
   defaultLayout?: string;
   gracePeriodSeconds?: number;
+  approvalRequired?: boolean;
 }
 
 export interface AdminEvent {
@@ -138,6 +139,39 @@ export function setAllPlayerLayouts(layoutId: string): Promise<AdminState> {
   return request<AdminState>('/api/admin/players/layout', {
     method: 'PUT',
     body: JSON.stringify({ layoutId }),
+  });
+}
+
+export function acceptApproval(id: string): Promise<AdminState> {
+  return request<AdminState>(
+    `/api/admin/approval/${encodeURIComponent(id)}/accept`,
+    { method: 'POST' },
+  );
+}
+
+export function rejectApproval(
+  id: string,
+  reason?: string,
+): Promise<AdminState> {
+  return request<AdminState>(
+    `/api/admin/approval/${encodeURIComponent(id)}/reject`,
+    {
+      method: 'POST',
+      body: reason ? JSON.stringify({ reason }) : undefined,
+    },
+  );
+}
+
+export function generateRoomCode(): Promise<AdminState> {
+  return request<AdminState>('/api/admin/room-code/generate', {
+    method: 'POST',
+  });
+}
+
+export function setRoomCode(roomCode: string): Promise<AdminState> {
+  return request<AdminState>('/api/admin/room-code', {
+    method: 'PUT',
+    body: JSON.stringify({ roomCode }),
   });
 }
 

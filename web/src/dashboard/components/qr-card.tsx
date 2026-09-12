@@ -22,6 +22,10 @@ export function QRCard({ state }: QRCardProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const advertisedJoinURL = state.advertisedJoinURL;
   const displayedCode = state.code;
+  const isOnline =
+    state.centralReachable &&
+    !state.claimConflict &&
+    advertisedJoinURL === state.onlineJoinURL;
 
   // take the overlay to real fullscreen when it opens; the click that opened
   // it is still a valid user gesture, so this counts.
@@ -104,12 +108,27 @@ export function QRCard({ state }: QRCardProps) {
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 Join URL
+                <span
+                  className={
+                    isOnline
+                      ? 'rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0 text-[10px] font-semibold tracking-normal text-emerald-700 normal-case dark:text-emerald-300'
+                      : 'rounded-full border border-border bg-muted px-2 py-0 text-[10px] font-semibold tracking-normal text-muted-foreground normal-case'
+                  }
+                >
+                  {isOnline ? 'online' : 'LAN'}
+                </span>
               </div>
               <code className="block rounded-md bg-muted px-3 py-2 text-xs break-all text-muted-foreground">
                 {advertisedJoinURL}
               </code>
+              {!isOnline && state.onlineJoinURL !== advertisedJoinURL && (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Remote joins resume at {state.onlineJoinURL} once central is
+                  reachable.
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-3">

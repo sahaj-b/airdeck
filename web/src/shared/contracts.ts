@@ -131,11 +131,20 @@ export interface PlayerSnapshot {
   rttNanos: number;
   deviceReason?: string;
   graceDeadline?: string;
+  relayed?: boolean;
+}
+export interface PendingJoin {
+  id: string;
+  displayName: string;
+  waitingSince: string;
 }
 export interface AdminState {
   code: string;
   acceptingJoins: boolean;
   advertisedJoinURL: string;
+  onlineJoinURL: string;
+  centralReachable: boolean;
+  claimConflict?: string;
   advertisedCandidates: string[];
   publicPort: number;
   adminPort: number;
@@ -148,7 +157,12 @@ export interface AdminState {
     defaultLayout: string;
     inputRate: number;
     gracePeriodSeconds: number;
+    roomCode: string;
+    approvalRequired: boolean;
+    lanOnly: boolean;
+    noCode: boolean;
   };
   layouts: AdminLayoutSummary[];
   players: PlayerSnapshot[];
+  pendings: PendingJoin[];
 }

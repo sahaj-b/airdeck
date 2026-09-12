@@ -30,6 +30,7 @@ import type { SettingsUpdate } from '../api';
 interface HostPanelProps {
   state: AdminState;
   onJoinsChange: (value: boolean) => void;
+  onApprovalChange: (value: boolean) => void;
   onNewSession: () => void;
   onSave: (update: SettingsUpdate) => void;
   onApplyLayoutToAll: (layoutId: string) => void;
@@ -39,6 +40,7 @@ interface HostPanelProps {
 export function HostPanel({
   state,
   onJoinsChange,
+  onApprovalChange,
   onNewSession,
   onSave,
   onApplyLayoutToAll,
@@ -154,8 +156,11 @@ export function HostPanel({
         <CardContent className="space-y-6">
           <GeneralSection
             acceptingJoins={state.acceptingJoins}
+            approvalRequired={state.config.approvalRequired}
+            pendingCount={state.pendings.length}
             gracePeriodSeconds={gracePeriodSeconds}
             onJoinsChange={onJoinsChange}
+            onApprovalChange={onApprovalChange}
             onGraceChange={setGracePeriodSeconds}
             onGraceCommit={handleGraceCommit}
           />
@@ -213,7 +218,7 @@ export function HostPanel({
           Start new session
         </Button>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Kicks all players and rotates the session code.
+          Kicks all players. Your room code stays the same.
         </p>
       </div>
     </div>
@@ -332,14 +337,20 @@ function LayoutCard({
 
 function GeneralSection({
   acceptingJoins,
+  approvalRequired,
+  pendingCount,
   gracePeriodSeconds,
   onJoinsChange,
+  onApprovalChange,
   onGraceChange,
   onGraceCommit,
 }: {
   acceptingJoins: boolean;
+  approvalRequired: boolean;
+  pendingCount: number;
   gracePeriodSeconds: number;
   onJoinsChange: (v: boolean) => void;
+  onApprovalChange: (v: boolean) => void;
   onGraceChange: (v: number) => void;
   onGraceCommit: () => void;
 }) {
@@ -361,6 +372,29 @@ function GeneralSection({
           {acceptingJoins
             ? 'Players can enter the session.'
             : 'New joins are blocked.'}
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <Label htmlFor="approval-required" className="shrink-0 text-sm">
+            Require approval
+          </Label>
+          <Switch
+            id="approval-required"
+            checked={approvalRequired}
+            onCheckedChange={(checked) => onApprovalChange(checked)}
+            className="ml-auto"
+          />
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {approvalRequired
+            ? pendingCount === 0
+              ? 'New joins wait in the approval queue.'
+              : pendingCount === 1
+                ? '1 join waiting for approval.'
+                : `${pendingCount} joins waiting for approval.`
+            : 'New joins are admitted immediately.'}
         </p>
       </div>
 

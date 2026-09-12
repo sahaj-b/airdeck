@@ -4,11 +4,13 @@ import '@/index.css';
 import { PublishApprovalBanner } from '@/editor/components/publish-approval-banner';
 import { AdminStore, useAdminSnapshot } from './admin-store';
 import type { SettingsUpdate } from './api';
+import { ApprovalQueue } from './components/approval-queue';
 import { ErrorScreen } from './components/error-screen';
 import { HostPanel } from './components/host-panel';
 import { LoadingScreen } from './components/loading-screen';
 import { QRCard } from './components/qr-card';
 import { Roster } from './components/roster';
+import { StatusBanners } from './components/status-banners';
 
 const store = new AdminStore();
 
@@ -26,6 +28,16 @@ function Dashboard() {
   const onJoinsChange = (value: boolean): void => {
     run(() => store.setAcceptingJoins(value));
   };
+  const onApprovalChange = (value: boolean): void => {
+    run(() => store.setApprovalRequired(value));
+  };
+  const onAcceptPending = (id: string): Promise<void> =>
+    store.acceptPending(id);
+  const onRejectPending = (id: string): Promise<void> =>
+    store.rejectPending(id);
+  const onGenerateCode = (): Promise<void> => store.generateRoomCode();
+  const onSetCustomCode = (code: string): Promise<void> =>
+    store.setRoomCode(code);
   const onNewSession = (): void => {
     run(() => store.startNewSession());
   };
@@ -90,9 +102,20 @@ function Dashboard() {
 
         <PublishApprovalBanner store={store} />
 
+        <StatusBanners
+          state={state}
+          onGenerateCode={onGenerateCode}
+          onSetCustomCode={onSetCustomCode}
+        />
+
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-6">
             <QRCard state={state} />
+            <ApprovalQueue
+              pendings={state.pendings}
+              onAccept={onAcceptPending}
+              onReject={onRejectPending}
+            />
             <Roster
               players={state.players}
               layouts={state.layouts}
@@ -104,6 +127,7 @@ function Dashboard() {
           <HostPanel
             state={state}
             onJoinsChange={onJoinsChange}
+            onApprovalChange={onApprovalChange}
             onNewSession={onNewSession}
             onSave={onSaveSettings}
             onApplyLayoutToAll={onApplyLayoutToAll}
