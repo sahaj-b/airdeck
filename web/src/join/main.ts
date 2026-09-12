@@ -10,9 +10,15 @@ import {
   renderLayout,
 } from '../controller/layout-renderer';
 import type { StickPrefs } from '../controller/pointer-input';
-import { ControllerSocket, SELECTED_LAYOUT_KEY } from '../controller/socket';
+import {
+  ControllerSocket,
+  type ControllerSocketOptions,
+  SELECTED_LAYOUT_KEY,
+} from '../controller/socket';
 import { InputStateStore } from '../controller/state';
 import { bindTap } from '../controller/tap';
+import { RtcTransport } from '../controller/transport/rtc-transport';
+import type { ControllerTransport } from '../controller/transport/types';
 import type { Welcome } from '../shared/contracts';
 import type { LayoutDocument } from '../shared/layout';
 import { DEFAULT_LAYOUT, validateLayout } from '../shared/layout';
@@ -42,6 +48,8 @@ import {
 import { settingsStore } from './settings-store';
 import {
   getSessionCode,
+  isValidRoomCode,
+  normalizeRoomCode,
   readBoolean,
   readStorage,
   writeStorage,
@@ -55,7 +63,7 @@ if (!rootElement) throw new Error('join root is missing');
 const root: HTMLElement = rootElement;
 root.classList.add('dark');
 
-let activeSocket: ControllerSocket | undefined;
+let activeSocket: ControllerTransport | undefined;
 let activeSender: FrameSender | undefined;
 let activeRenderer: RenderedLayout | undefined;
 let activeFeedback: FeedbackController | undefined;
@@ -67,6 +75,22 @@ let removeJoinFullscreenHandler: (() => void) | undefined;
 
 renderJoinScreen();
 startSkinSync(settingsStore);
+
+// shouldUseRtcTransport picks the online WebRTC path when the join page
+// itself is served from Central (airdeck.sahaj.dev) or a drill override
+// (?transport=rtc, ?relay=) is present. LAN-hosted pages keep the raw
+// WebSocket fallback. No UI: the seam hides the wire either way.
+function shouldUseRtcTransport(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get('transport');
+    if (forced === 'ws') return false;
+    if (forced === 'rtc' || params.get('relay')) return true;
+    return window.location.hostname === 'airdeck.sahaj.dev';
+  } catch {
+    return false;
+  }
+}
 
 function renderJoinScreen(errorMessage = '', revealCode = false): void {
   activeSocket?.close();
@@ -142,15 +166,18 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   const hasUrlCode = urlCode !== '';
   const shouldHideCode = hasUrlCode && !revealCode;
   const codeField = textField(
-    'Session code',
+    'Room code',
     'code',
     urlCode,
-    'Enter the 4-digit code',
+    'Enter the room code',
   );
-  // textField already applied Tailwind + mono tracking for code input
-  codeField.input.inputMode = 'numeric';
-  codeField.input.maxLength = 4;
-  codeField.input.pattern = '[0-9]{4}';
+  // Room codes are Crockford-style letters and digits (plus dashes when
+  // typed by hand); normalization folds case, dashes, and spaces.
+  codeField.input.inputMode = 'text';
+  codeField.input.maxLength = 24;
+  codeField.input.removeAttribute('pattern');
+  codeField.input.autocapitalize = 'characters';
+  codeField.input.spellcheck = false;
   if (shouldHideCode) codeField.wrapper.hidden = true;
   const codeToggle = document.createElement('button');
   codeToggle.type = 'button';
@@ -244,12 +271,10 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    const rawCode = codeField.wrapper.hidden
-      ? urlCode
-      : codeField.input.value.trim();
-    const code = rawCode;
-    if (code !== '' && !/^\d{4}$/.test(code)) {
-      showError(error, 'Enter the 4-digit session code.');
+    const rawCode = codeField.wrapper.hidden ? urlCode : codeField.input.value;
+    const code = normalizeRoomCode(rawCode);
+    if (code !== '' && !isValidRoomCode(rawCode)) {
+      showError(error, 'Enter the room code (4-24 letters and digits).');
       codeField.input.focus();
       return;
     }
@@ -411,7 +436,15 @@ function showController(options: {
 
   const center = document.createElement('div');
   center.className = 'controller-center';
-  center.append(status, gearButton);
+  // Approval-mode waiting state: cancel closes the signaling wss so the
+  // relay evaporates the pending entry. Hidden unless state is waiting.
+  const cancelButton = document.createElement('button');
+  cancelButton.type = 'button';
+  cancelButton.className = 'icon-button';
+  cancelButton.setAttribute('aria-label', 'Cancel join request');
+  cancelButton.textContent = '✕';
+  cancelButton.hidden = true;
+  center.append(status, gearButton, cancelButton);
   chrome.append(identity, center);
 
   const host = document.createElement('div');
@@ -849,6 +882,10 @@ function showController(options: {
   const unbindGearTap = bindTap(gearButton, () => {
     void openSettings();
   });
+  const unbindCancelTap = bindTap(cancelButton, () => {
+    activeSocket?.close();
+    renderJoinScreen();
+  });
 
   const onShellKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && island) {
@@ -859,6 +896,7 @@ function showController(options: {
   removeControllerDocumentHandlers = () => {
     document.removeEventListener('keydown', onShellKeyDown);
     unbindGearTap();
+    unbindCancelTap();
     fullscreen.cleanup();
     clearPublishTimer();
     unsubFeedback();
@@ -869,14 +907,7 @@ function showController(options: {
     island?.unmount();
   };
 
-  activeSender = new FrameSender(
-    {
-      sendBinary: (frame) => activeSocket?.sendBinary(frame) ?? false,
-    },
-    state,
-  );
-
-  const socket = new ControllerSocket({
+  const transportOptions: ControllerSocketOptions = {
     sessionCode: options.sessionCode,
     displayName: options.displayName,
     selectedLayout: (() => {
@@ -886,11 +917,13 @@ function showController(options: {
     })(),
     capabilities: () => options.capabilities.capabilities,
     onStateChange: (nextState) => {
+      cancelButton.hidden = nextState !== 'waiting';
       updateStatus(nextState === 'active' ? null : null);
       if (nextState === 'active') activeSender?.start();
       if (
         nextState === 'closed' ||
         nextState === 'kicked' ||
+        nextState === 'declined' ||
         nextState === 'session-reset'
       ) {
         activeSender?.stop();
@@ -997,13 +1030,20 @@ function showController(options: {
       if (
         message.code === 'invalid_reconnect' ||
         message.code === 'invalid_code' ||
+        message.code === 'room_not_found' ||
+        message.code === 'declined' ||
         message.code === 'joins_closed' ||
         message.code === 'session_full' ||
         message.code === 'device_error'
       ) {
+        // Unknown, retired, and offline-host codes share one generic
+        // room_not_found error (no enumeration oracle); declined returns
+        // to the join screen for an immediate retry.
         const reveal =
           message.code === 'invalid_code' ||
-          message.code === 'invalid_reconnect';
+          message.code === 'invalid_reconnect' ||
+          message.code === 'room_not_found' ||
+          message.code === 'declined';
         renderJoinScreen(message.message, reveal);
         return;
       }
@@ -1024,8 +1064,14 @@ function showController(options: {
     onClose: () => {
       updateStatus('The connection to the host closed.');
     },
-  });
+  };
+  // Session logic above the seam never knows the wire: LAN pages ride
+  // the raw WebSocket, Central pages ride the WebRTC DataChannels.
+  const socket: ControllerTransport = shouldUseRtcTransport()
+    ? new RtcTransport(transportOptions)
+    : new ControllerSocket(transportOptions);
   activeSocket = socket;
+  activeSender = new FrameSender(socket, state);
 
   const neutralize = (): void => {
     if (phoneEditorActive) {

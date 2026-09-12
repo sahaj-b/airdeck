@@ -10,6 +10,8 @@ export const CONNECTION_LABELS: Record<ConnectionState, string> = {
   'hello-sent': 'Joining',
   'welcome-received': 'Loading',
   active: 'Connected',
+  waiting: 'Waiting for host approval',
+  declined: 'Declined',
   reconnecting: 'Reconnecting',
   rejected: 'Rejected',
   kicked: 'Kicked',
@@ -22,6 +24,8 @@ export const PILL_LABELS: Record<ConnectionState, string> = {
   'hello-sent': 'Joining',
   'welcome-received': 'Loading',
   active: 'Ready',
+  waiting: 'Waiting',
+  declined: 'Declined',
   reconnecting: 'Reconnecting',
   rejected: 'Rejected',
   kicked: 'Kicked',
@@ -38,6 +42,11 @@ export const SHORT_STATUS: Record<string, string> = {
   [`This session already has ${MAX_PLAYERS} players.`]: 'Session full',
   'The reconnect window has expired. Join as a new player.':
     'Reconnect expired',
+  'Room not found or host offline.': 'Room not found',
+  // The relay sends the same generic error without the trailing period.
+  'Room not found or host offline': 'Room not found',
+  'The host declined your join.': 'Declined',
+  'The host went offline before the join completed.': 'Host offline',
   'The host could not create your virtual controller.': 'Device error',
   'The host sent an invalid layout. The default layout is being used.':
     'Invalid layout',
