@@ -45,7 +45,9 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	sess.SetCode(cfg.RoomCode)
 	sess.SetCodeRequired(!cfg.NoCode)
+	sess.SetApprovalRequired(cfg.ApprovalRequired)
 	handler := input.NewHandler(sess)
 	transportServer := transport.NewServer(sess, handler, layouts, cfg.InputRate)
 	httpServer := httpserver.New(httpserver.Options{Config: cfg, Session: sess, Input: handler, Transport: transportServer, Layouts: layouts, Static: web.FS(), OnSettings: func(updated config.Config) error {

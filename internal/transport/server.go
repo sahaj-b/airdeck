@@ -85,6 +85,10 @@ func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *
 	}
 	admission, err := s.Session.Admit(hello.SessionCode, hello.DisplayName, hello.ReconnectID, hello.SelectedLayout, client.Send, client.Close)
 	if err != nil {
+		if errors.Is(err, session.ErrApprovalPending) {
+			s.servePending(client, admission, playerIDForCleanup)
+			return
+		}
 		code, message := admissionError(err)
 		s.sendError(client, code, message, true)
 		return
@@ -100,11 +104,7 @@ func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *
 		*playerIDForCleanup = player.ID
 	}
 	s.mu.Unlock()
-	welcome := protocol.Welcome{Type: protocol.MessageWelcome, PlayerID: player.ID, Slot: player.Slot, DisplayName: player.Name, Accent: player.Accent, ReconnectID: player.ReconnectID, ProtocolVersion: protocol.Version, FrameSize: protocol.FrameSize, TargetInputRate: s.TargetInputRate, SelectedLayout: player.LayoutID}
-	welcome.AvailableLayouts = make([]protocol.LayoutSummary, 0)
-	for _, summary := range s.Layouts.Summaries() {
-		welcome.AvailableLayouts = append(welcome.AvailableLayouts, protocol.LayoutSummary{ID: summary.ID, Name: summary.Name})
-	}
+	welcome := session.BuildWelcome(player, s.Layouts, s.TargetInputRate)
 	if err := client.Send(welcome); err != nil {
 		return
 	}
@@ -117,6 +117,155 @@ func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *
 	}
 	s.heartbeat(client, player.ID)
 	s.readClient(client, player.ID, generation)
+}
+
+// servePending parks an approval-gated LAN join with its socket open until
+// the host accepts, rejects, or the guest disconnects. No timers: the
+// pending lives exactly while this socket stays connected, mirroring the
+// relay evaporate rule.
+//
+// A single reader goroutine owns every socket read for the whole join flow.
+// Gorilla marks any read failure sticky on the conn (later reads fail
+// without touching the network), so the wait must never use read deadlines
+// to poll: a poll timeout would poison post-accept input. Disconnects and
+// cancels surface as read results racing the session outcome channel.
+func (s *Server) servePending(client *Client, admission session.Admission, playerIDForCleanup *string) {
+	pendingID := admission.PendingID
+	wait := admission.PendingWait
+	if pendingID == "" || wait == nil {
+		s.sendError(client, "device_error", "The host could not queue your join.", true)
+		return
+	}
+	code, message := session.AdmissionError(session.ErrApprovalPending)
+	s.sendError(client, code, message)
+	accepted := false
+	disconnected := false
+	defer func() {
+		if !accepted {
+			s.Session.RemovePending(pendingID)
+		}
+	}()
+
+	var stateMu sync.Mutex
+	serving := false
+	var playerID string
+	var generation uint64
+	done := make(chan struct{}, 1)
+	signalDone := func() {
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+	}
+	// The reader ignores input before accept (no player yet) and mirrors
+	// readClient dispatch after main flips serving on accept.
+	go func() {
+		for {
+			messageType, data, err := client.conn.ReadMessage()
+			if err != nil {
+				signalDone()
+				return
+			}
+			stateMu.Lock()
+			on := serving
+			pid := playerID
+			gen := generation
+			stateMu.Unlock()
+			if !on {
+				if messageType == websocket.TextMessage {
+					if typeName, _ := protocol.MessageType(data); typeName == protocol.MessageClose {
+						signalDone()
+						return
+					}
+				}
+				continue
+			}
+			switch messageType {
+			case websocket.BinaryMessage:
+				frame, err := protocol.DecodeFrame(data)
+				if err != nil {
+					s.sendError(client, "invalid_frame", err.Error())
+					continue
+				}
+				if err := s.Input.Handle(pid, gen, frame); err != nil && !errors.Is(err, session.ErrGeneration) {
+					s.sendError(client, "input_rejected", err.Error())
+				}
+			case websocket.TextMessage:
+				s.handleText(client, pid, gen, data)
+			default:
+				s.sendError(client, "invalid_message", "unsupported WebSocket message type")
+			}
+		}
+	}()
+
+	handleOutcome := func(outcome session.PendingOutcome) {
+		if outcome.Err != nil {
+			if errors.Is(outcome.Err, session.ErrDeclined) {
+				declinedCode, declinedMsg := session.AdmissionError(outcome.Err)
+				if outcome.Reason != "" {
+					declinedMsg = outcome.Reason
+				}
+				s.sendError(client, declinedCode, declinedMsg, true)
+			} else {
+				goneCode, goneMsg := session.AdmissionError(outcome.Err)
+				s.sendError(client, goneCode, goneMsg, true)
+			}
+			return
+		}
+		player := outcome.Admission.Player
+		gen := player.Generation
+		accepted = true
+		stateMu.Lock()
+		serving = true
+		playerID = player.ID
+		generation = gen
+		stateMu.Unlock()
+		defer func() {
+			_ = s.Input.Disconnect(player.ID, gen)
+		}()
+		s.mu.Lock()
+		s.clientsByID[player.ID] = client
+		if playerIDForCleanup != nil {
+			*playerIDForCleanup = player.ID
+		}
+		s.mu.Unlock()
+		welcome := session.BuildWelcome(player, s.Layouts, s.TargetInputRate)
+		if err := client.Send(welcome); err != nil {
+			return
+		}
+		document, err := s.Session.Layout(player.ID)
+		if err != nil {
+			return
+		}
+		if err := client.Send(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: document.ID, Layout: document}); err != nil {
+			return
+		}
+		s.heartbeat(client, player.ID)
+		if !disconnected {
+			<-done
+		}
+	}
+
+	select {
+	case outcome := <-wait:
+		handleOutcome(outcome)
+		return
+	case <-done:
+		disconnected = true
+		// Evaporate under the session lock first so a later Accept fails
+		// clean with pending_gone, then drain an already-queued decision.
+		// Accept wins when it deleted first: RemovePending no-ops, the
+		// drain serves the accept, and grace reclaims the dead socket's
+		// slot instead of leaking an Active player with no Disconnect
+		// ever scheduled.
+		s.Session.RemovePending(pendingID)
+		select {
+		case outcome := <-wait:
+			handleOutcome(outcome)
+		default:
+		}
+		return
+	}
 }
 
 func (s *Server) readClient(client *Client, playerID string, generation uint64) {
@@ -207,19 +356,11 @@ func (s *Server) sendError(client *Client, code, message string, closeAfter ...b
 	_ = client.Send(errMsg)
 }
 
+// admissionError is the shared session mapping so the LAN socket and the
+// future WebRTC control channel reject with identical codes. Kept as a
+// wrapper so existing call sites stay put; /ws behavior is byte-identical.
 func admissionError(err error) (string, string) {
-	switch {
-	case errors.Is(err, session.ErrInvalidCode):
-		return "invalid_code", "The session code is invalid."
-	case errors.Is(err, session.ErrJoinsClosed):
-		return "joins_closed", "This session is not accepting new joins."
-	case errors.Is(err, session.ErrSessionFull):
-		return "session_full", fmt.Sprintf("This session already has %d players.", session.MaxPlayers)
-	case errors.Is(err, session.ErrInvalidReconnect):
-		return "invalid_reconnect", "The reconnect window has expired. Join as a new player."
-	default:
-		return "device_error", "The host could not create your virtual controller."
-	}
+	return session.AdmissionError(err)
 }
 
 func (s *Server) broadcastReset() {
