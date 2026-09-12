@@ -14,6 +14,8 @@ import (
 	"github.com/sahaj-b/airdeck/internal/httpserver"
 	"github.com/sahaj-b/airdeck/internal/input"
 	"github.com/sahaj-b/airdeck/internal/layout"
+	"github.com/sahaj-b/airdeck/internal/online"
+	"github.com/sahaj-b/airdeck/internal/rtchost"
 	"github.com/sahaj-b/airdeck/internal/session"
 	"github.com/sahaj-b/airdeck/internal/transport"
 	"github.com/sahaj-b/airdeck/internal/web"
@@ -31,6 +33,8 @@ type App struct {
 	Devices      *device.Manager
 	Input        *input.Handler
 	Transport    *transport.Server
+	Peers        *rtchost.PeerManager
+	Online       *online.Agent
 	HTTP         *httpserver.Server
 	shutdownOnce sync.Once
 }
@@ -50,16 +54,33 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	sess.SetApprovalRequired(cfg.ApprovalRequired)
 	handler := input.NewHandler(sess)
 	transportServer := transport.NewServer(sess, handler, layouts, cfg.InputRate)
+	peers := rtchost.New(sess, handler, layouts, cfg.InputRate)
 	httpServer := httpserver.New(httpserver.Options{Config: cfg, Session: sess, Input: handler, Transport: transportServer, Layouts: layouts, Static: web.FS(), OnSettings: func(updated config.Config) error {
 		if configPath == "" {
 			return nil
 		}
 		return config.Save(configPath, updated)
 	}})
-	return &App{Config: cfg, ConfigPath: configPath, Layouts: layouts, Session: sess, Devices: devices, Input: handler, Transport: transportServer, HTTP: httpServer}, nil
+	agent := online.New(online.Options{
+		RoomCode: cfg.RoomCode, InstallationKey: cfg.InstallationKey,
+		ApprovalRequired: cfg.ApprovalRequired, LanOnly: cfg.LanOnly,
+		Session: sess, Peers: peers,
+		OnStateChange: func() {
+			httpServer.BroadcastState()
+			// Reprint so the terminal tracks the dashboard: startup always
+			// prints LAN (the probe has not run yet), then the flip lands
+			// here. TTY-gated and rare, never spam.
+			joinURL := httpServer.AdvertisedJoinURL()
+			log.Printf("join URL %s", joinURL)
+			printJoinQR(joinURL)
+		},
+	})
+	httpServer.SetOnline(agent)
+	return &App{Config: cfg, ConfigPath: configPath, Layouts: layouts, Session: sess, Devices: devices, Input: handler, Transport: transportServer, Peers: peers, Online: agent, HTTP: httpServer}, nil
 }
 
 func (a *App) Run(ctx context.Context) error {
+	a.Online.Start()
 	if err := a.HTTP.Start(); err != nil {
 		return err
 	}
@@ -94,7 +115,10 @@ func (a *App) Shutdown(ctx context.Context) error {
 	a.shutdownOnce.Do(func() {
 		log.Printf("shutting down")
 		a.Session.SetAcceptingJoins(false)
+		log.Printf("shutting down: stopping central registration")
+		a.Online.Close()
 		log.Printf("shutting down: closing phone connections")
+		a.Peers.Close()
 		a.Transport.Close()
 		a.HTTP.CloseConnections()
 		a.Input.Close()

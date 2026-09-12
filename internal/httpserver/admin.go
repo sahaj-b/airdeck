@@ -21,6 +21,9 @@ type adminState struct {
 	Code                 string                   `json:"code"`
 	AcceptingJoins       bool                     `json:"acceptingJoins"`
 	AdvertisedJoinURL    string                   `json:"advertisedJoinURL"`
+	OnlineJoinURL        string                   `json:"onlineJoinURL"`
+	CentralReachable     bool                     `json:"centralReachable"`
+	ClaimConflict        string                   `json:"claimConflict,omitempty"`
 	AdvertisedCandidates []string                 `json:"advertisedCandidates"`
 	PublicPort           int                      `json:"publicPort"`
 	AdminPort            int                      `json:"adminPort"`
@@ -81,13 +84,15 @@ func isLoopbackRequest(r *http.Request) bool { return transport.IsLoopbackRemote
 func (s *Server) currentState() adminState {
 	s.mu.Lock()
 	cfg, publicPort, adminPort := s.options.Config, s.publicPort, s.adminPort
+	agent := s.options.Online
 	s.mu.Unlock()
 	players := s.options.Session.Players()
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
-	return adminState{
+	state := adminState{
 		Code:                 s.options.Session.Code(),
 		AcceptingJoins:       s.options.Session.AcceptingJoins(),
 		AdvertisedJoinURL:    s.AdvertisedJoinURL(),
+		OnlineJoinURL:        s.OnlineJoinURL(),
 		AdvertisedCandidates: advertisedCandidates(),
 		PublicPort:           publicPort,
 		AdminPort:            adminPort,
@@ -95,6 +100,11 @@ func (s *Server) currentState() adminState {
 		Layouts:              s.options.Layouts.Summaries(),
 		Players:              players,
 	}
+	if agent != nil {
+		state.CentralReachable = agent.Reachable()
+		state.ClaimConflict = agent.Conflict()
+	}
+	return state
 }
 
 func advertisedCandidates() []string {

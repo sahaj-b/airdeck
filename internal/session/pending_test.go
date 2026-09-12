@@ -497,3 +497,34 @@ func TestApprovalDoesNotQueueInvalidCodeOrClosedJoins(t *testing.T) {
 		t.Fatalf("closed joins queued %d pendings, want 0", len(pendings))
 	}
 }
+
+func TestAttachTransportSwapsSenderOnly(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	admission, err := session.Admit(session.Code(), "Phone", "", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached := false
+	if err := session.AttachTransport(admission.Player.ID, admission.Player.Generation, func(any) error { attached = true; return nil }, func() {}); err != nil {
+		t.Fatalf("AttachTransport: %v", err)
+	}
+	session.mu.RLock()
+	stored := session.players[admission.Player.ID]
+	session.mu.RUnlock()
+	if stored == nil || stored.Send == nil || stored.Close == nil {
+		t.Fatal("attached transport was not installed on the player")
+	}
+	if err := stored.Send(nil); err != nil || !attached {
+		t.Fatal("attached sender was not installed")
+	}
+	if players := session.Players(); len(players) != 1 {
+		t.Fatalf("attach minted players: %d, want 1", len(players))
+	}
+	if err := session.AttachTransport(admission.Player.ID, admission.Player.Generation+99, nil, nil); !errors.Is(err, ErrGeneration) {
+		t.Fatalf("wrong generation error = %v, want ErrGeneration", err)
+	}
+	if err := session.AttachTransport("missing", 1, nil, nil); !errors.Is(err, ErrPlayerNotFound) {
+		t.Fatalf("unknown player error = %v, want ErrPlayerNotFound", err)
+	}
+}

@@ -205,6 +205,26 @@ func (s *Session) CheckCode(sessionCode string) error {
 	return nil
 }
 
+// AttachTransport installs the live transport callbacks for an admitted
+// player. The RTC path admits at join-forward time before any DataChannel
+// exists, so the control channel calls this when its validation-only
+// hello succeeds. It swaps senders only: slot, generation, and reconnect
+// identity are untouched, and it can never mint a second player.
+func (s *Session) AttachTransport(id string, generation uint64, send func(any) error, close func()) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	player, ok := s.players[id]
+	if !ok {
+		return ErrPlayerNotFound
+	}
+	if player.Generation != generation {
+		return ErrGeneration
+	}
+	player.Send = send
+	player.Close = close
+	return nil
+}
+
 func (s *Session) Subscribe(listener func(Event)) func() {
 	s.mu.Lock()
 	s.listeners = append(s.listeners, listener)
