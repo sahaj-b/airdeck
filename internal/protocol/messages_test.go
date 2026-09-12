@@ -3,14 +3,21 @@ package protocol
 import "testing"
 
 func TestDecodeHelloValidatesAdmissionFields(t *testing.T) {
-	valid := []byte(`{"type":"hello","sessionCode":"0042","displayName":"Player","clientVersion":"test","capabilities":{}}`)
+	valid := []byte(`{"type":"hello","sessionCode":"ABCD2E","displayName":"Player","clientVersion":"test","capabilities":{}}`)
 	if _, err := DecodeHello(valid); err != nil {
 		t.Fatal(err)
+	}
+	// Dashes, spaces, and lowercase fold before validation; the wire field
+	// name stays `sessionCode`.
+	folded := []byte(`{"type":"hello","sessionCode":"ab-cd 2e","displayName":"Player","clientVersion":"test","capabilities":{}}`)
+	if _, err := DecodeHello(folded); err != nil {
+		t.Fatalf("folded room code rejected: %v", err)
 	}
 	cases := []string{
 		`{"type":"hello","sessionCode":"42","clientVersion":"test"}`,
 		`{"type":"hello","sessionCode":"12x4","clientVersion":"test"}`,
-		`{"type":"hello","sessionCode":"1234","clientVersion":"test","unexpected":true}`,
+		`{"type":"hello","sessionCode":"0042","clientVersion":"test"}`,
+		`{"type":"hello","sessionCode":"ABCD2E","clientVersion":"test","unexpected":true}`,
 	}
 	for _, data := range cases {
 		if _, err := DecodeHello([]byte(data)); err == nil {

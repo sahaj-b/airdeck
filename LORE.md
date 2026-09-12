@@ -8,7 +8,12 @@
 - **Semantic command:** A profile-independent logical control name such as `south`, `leftStick`, or `rightTrigger`. A visual label or native device bit is a separate mapping.
 - **Standard layout control:** A validated `LayoutDocument` control of type button, D-pad, joystick, trigger, label, or hitzone. All types except hitzone are always visible. hitzone is the only invisible type and exists solely to extend a parent's hit area. No `visible` boolean exists. Controls cannot execute arbitrary code or define a new protocol command.
 - **Virtual controller:** A Linux input device created by airdeck through `uinput` and exposed to games as a real controller.
-- **Session code:** A random four-digit numeric code generated for one running session. QR joins carry it in the URL; manually typed base URLs ask the client to enter it. It is a lightweight LAN room guard, not strong authentication.
+- **Room code:** The persistent human-entered identifier used to find one online host. Generated codes are 6 chars from Crockford-style alphabet (A-Z/2-9 minus ambiguous 0/O, 1/I/L). Custom codes are 4-24 chars from the same alphabet plus dash. Normalization before lookup and claiming: trim, uppercase, strip dashes and spaces. Lives in host configuration, survives restarts until the owner explicitly changes it. Changed or retired codes burn permanently and are never reassigned, so stale links fail instead of reaching a different host. It is a lightweight room guard, not strong authentication.
+- **Installation key:** A random key generated once for one Airdeck installation and stored in host configuration. It proves that a returning host owns its durable room-code claim. It is not derived from hardware and is never shown to players. If the key is lost (reinstall, wiped config), its claimed codes stay tombstoned forever with no recovery; migration means copying the config file.
+- **Room-code claim:** The durable central record binding one normalized room code to one installation key. Changed or retired codes remain reserved to that installation and cannot be claimed by another installation.
+- **Central:** The static join page on `airdeck.sahaj.dev` via Cloudflare Pages plus the signaling relay on `signal.airdeck.sahaj.dev` running on a VPS plus Cloudflare TURN for relay fallback. Central swaps SDP and mints TURN creds at join time only; live input frames never flow through it.
+- **ControllerTransport:** The phone-side seam abstracting the wire. `WsTransport` wraps the LAN WebSocket, `RtcTransport` wraps the reliable `control` plus unreliable `inputs` DataChannel pair. Session logic above it never knows which wire it rides.
+- **Approval mode:** Optional admission control, off by default. Open mode admits anyone holding the room code; approval mode parks joins in a dashboard queue for accept or reject before slot assignment.
 - **Display name:** An optional player label shown in the host roster. If absent, the host generates a slot-based fallback such as `Player 1`.
 - **Slot accent:** A stable accessible color assigned from the player's slot. It supports scanning but never replaces the slot number or display name.
 - **Advertised URL:** The host-selected LAN URL shown to users and encoded in the QR code. It may differ from the address on which the server listens. QR joins use `/join?code=...`; the base URL opens the code prompt.
@@ -71,6 +76,14 @@ Airdeck's v1 input frame is 20 bytes: version `u8`, flags `u8`, sequence `u32` l
 ## Raw WebSocket for LAN transport
 
 Airdeck uses a raw WebSocket connection for browser-to-host LAN communication in v1. Each phone has one connection for control and input. JSON text frames carry low-rate session and control messages. Binary frames carry high-rate complete input snapshots. We chose this over Socket.IO, WebRTC, and WebTransport because direct LAN browser support and a small failure surface matter more than transport features we have not measured as necessary. The connection layer must allow a later control/input/media split without changing the player or session contract.
+
+## WebRTC DataChannel for online transport
+
+Online joins run over WebRTC: one PeerConnection per phone, a reliable-ordered `control` channel carrying the existing JSON protocol untouched, and an unreliable-unordered `inputs` channel for 20B snapshots. The LAN WebSocket above stays as the offline fallback, and both hide behind one `ControllerTransport` seam so session logic is written once. Direct LAN wins ICE whenever possible; Cloudflare TURN relays CGNAT and remote peers. Considered per-transport branching (every future feature written twice) and offline-WebRTC-everywhere (needs per-guest CA installs for secure context, the exact friction the fallback avoids).
+
+## Conditional SDP offer timing
+
+The phone always creates both DataChannels and always sends the offer, but when differs by mode: open-mode joins carry the offer and the host answers at once, while approval-mode joins are offer-less until the relay forwards an accept (which also delivers TURN creds). Rejected phones therefore never burn ICE gathering, TURN allocations, or host PeerConnections, and early admission is structurally impossible since no peer exists before accept. Considered always-offer-at-join (uniform client, but every reject needs bilateral teardown and long-pending offers go stale and need re-offer anyway). Reconnect is a fresh rejoin carrying the stored reconnect ID, never an ICE restart.
 
 ## Go host in one process
 
@@ -230,6 +243,10 @@ Browser clients must connect from the host-served origin. Origin-less future nat
 
 Airdeck trusts the user-controlled LAN or hotspot for v1. It uses a short session code as a lightweight guard against accidental or prank joins, not as strong authentication. QR URLs include the code, while manually typed base URLs prompt for it. The product does not add accounts, persistent passwords, cryptographic join challenges, or mandatory approval for the first release.
 
+## Persistent room codes replace session codes
+
+The join guard is one persistent host-configured room code, not a per-process session code: 6-char generated or 4-24-char custom from a Crockford-style alphabet, normalized by trim, uppercase, and dash stripping. LAN validates it locally against config, online joins validate via the durable central claim, same code both paths. Changed and retired codes burn permanently and are never reassigned. Prank joins are answered by optional approval mode (default off), not by code rotation. Installation-key loss bricks its codes with no recovery; migration means copying the config file.
+
 ## Layout editor split and 3-fixed sections
 
 Airdeck's controller layout is 3 fixed sections (`left`, `center`, `right`) with `relativeWidth` (width in height units). Left and right are fixed at `relativeWidth`; center fills the remainder. No `maxWidth`, `flexGrow`/`flexShrink`, `protected`, or `padding` in v1. Shapes are `round`|`rect` only (`pill` was removed; stretched `round` covers the capsule via aspect unlock). Orientation is landscape-locked; portrait shows a rotate fallback. We chose 3-fixed over N-section flex because all 20 QRController presets (5 generic + 15 game-specific) use exactly 3 sections and variants are layout switches, not section-count changes. The trade-off is that a future 4-section or 2-section layout needs a schema v2, but the v1 invariant keeps the resolver, validator, and editor divider logic trivial.
@@ -245,6 +262,10 @@ Phone controller themes are named skins that overlay `data-skin` CSS without cha
 ## Go-canonical typed contracts with tygo codegen
 
 Go types in `internal/protocol`, `internal/layout`, and `internal/config` are the single source of truth for wire messages, layout documents, and host configuration. TypeScript types are derived via `tygo` code generation to `web/src/shared/generated` using `tygo.yaml` as the mapping, with `tstype` tags providing literal unions for discriminated `type` fields and command bindings. JSON Schema and preset layouts remain file-synced via `scripts/sync-contracts.mjs`, but typed structs are never hand-duplicated. The frontend re-exports generated types and builds runtime constants such as `ButtonBits`, `PROTOCOL_VERSION`, and `FRAME_SIZE` from generated values, so adding a `Command` or layout field in Go requires only `make sync-contracts` to stay consistent. Drift is enforced by `make lint`, which regenerates and fails on `git diff --exit-code` for the generated directory, and generated files are excluded from formatting and linting and must not be edited manually.
+
+## Signaling relay lives in this repo
+
+Central needs a wss relay plus claim database on the VPS. The relay lives in this monorepo as a separate `cmd/signal-relay` binary sharing an `internal/rtc` contract package, so host, join page, and relay compile the same message types and signaling drift fails at build time. Considered a separate repo (every message change becomes a two-repo sync, the exact drift tygo codegen exists to kill) and a same-binary flag (ships dead central code to every laptop, invites rogue relays).
 
 # Decisions
 
@@ -264,4 +285,4 @@ Go types in `internal/protocol`, `internal/layout`, and `internal/config` are th
 - The exact maximum supported player count beyond the v1 ceiling of 16.
 - Future binary protocol extensions beyond the v1 20-byte input frame.
 - Whether the editor needs extra interaction primitives beyond `interact.js` drag/resize (snapping was explicitly cut).
-- Whether v2 needs individual slot locks or an approval queue beyond the v1 global accepting-joins toggle.
+- Whether v2 needs individual slot locks beyond the global lock (benchmark-gated at 1, 8, and 16 players). Approval queue decided: yes, optional, default off, gating all transports in `Session.Admit`; see SPEC.

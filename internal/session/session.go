@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/sahaj-b/airdeck/internal/device"
 	"github.com/sahaj-b/airdeck/internal/layout"
 	"github.com/sahaj-b/airdeck/internal/protocol"
+	"github.com/sahaj-b/airdeck/internal/roomcode"
 	"github.com/sahaj-b/airdeck/internal/uinput"
 )
 
@@ -71,12 +71,12 @@ func New(layouts *layout.Library, devices *device.Manager, gracePeriod time.Dura
 	return &Session{code: code, codeRequired: true, acceptingJoins: true, players: make(map[string]*Player), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices, gracePeriod: gracePeriod}, nil
 }
 
+// newCode generates a room-code-alphabet code so the transitional session
+// code passes protocol.DecodeHello. Phase 4 replaces this rotation with the
+// persistent config room code; this keeps Phase 1 tests green without a
+// second validation dialect.
 func newCode() (string, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(10000))
-	if err != nil {
-		return "", fmt.Errorf("generate session code: %w", err)
-	}
-	return fmt.Sprintf("%04d", n.Int64()), nil
+	return roomcode.Generate()
 }
 
 func newID() (string, error) {
@@ -138,7 +138,9 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
-	if s.codeRequired && sessionCode != s.code {
+	// Both sides normalize: the wire accepts folded input (lowercase,
+	// dashes, spaces per DecodeHello) and hand-edited configs may hold it.
+	if s.codeRequired && roomcode.Normalize(sessionCode) != roomcode.Normalize(s.code) {
 		s.mu.Unlock()
 		return Admission{}, ErrInvalidCode
 	}

@@ -14,6 +14,10 @@ export interface Config {
   inputRate: number /* int */;
   gracePeriodSeconds: number /* int */;
   noCode: boolean;
+  roomCode: string;
+  installationKey: string;
+  lanOnly: boolean;
+  approvalRequired: boolean;
 }
 export interface Overrides {
   Bind?: string;
@@ -24,4 +28,7 @@ export interface Overrides {
   InputRate?: number /* int */;
   GracePeriodSeconds?: number /* int */;
   NoCode?: boolean;
+  RoomCode?: string;
+  LanOnly?: boolean;
+  ApprovalRequired?: boolean;
 }

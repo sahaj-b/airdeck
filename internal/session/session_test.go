@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -326,6 +327,17 @@ func TestAdmitHonorsCodeRequiredToggle(t *testing.T) {
 	}
 	if admission.Reconnected {
 		t.Fatal("expected a fresh admission, not a reconnect")
+	}
+}
+
+func TestAdmitNormalizesFoldedRoomCode(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	code := session.Code()
+	// Lowercase, dashes, and spaces fold to the canonical code.
+	folded := strings.ToLower(code[:3]+"-"+code[3:]) + " "
+	if _, err := session.Admit(folded, "Player", "", "", nil, nil); err != nil {
+		t.Fatalf("Admit(%q) = %v, want success (folds to %q)", folded, code, code)
 	}
 }
 

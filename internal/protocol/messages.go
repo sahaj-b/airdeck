@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"unicode/utf8"
+
+	"github.com/sahaj-b/airdeck/internal/roomcode"
 )
 
 const (
@@ -56,9 +58,13 @@ func DecodeHello(data []byte) (Hello, error) {
 	}
 	// An empty code is allowed at this layer so no-code sessions can admit
 	// without one; Session.Admit still enforces the code when it is required.
-	if message.SessionCode != "" && (len(message.SessionCode) != 4 || !digitsOnly(message.SessionCode)) {
-		return message, fmt.Errorf("session code must contain exactly four digits")
+	// The wire field stays `sessionCode`; it carries the persistent room code.
+	if message.SessionCode != "" {
+		if err := roomcode.Validate(message.SessionCode); err != nil {
+			return message, fmt.Errorf("invalid session code: %w", err)
+		}
 	}
+
 	if !utf8.ValidString(message.DisplayName) || utf8.RuneCountInString(message.DisplayName) > 40 {
 		return message, fmt.Errorf("display name must be at most 40 characters")
 	}
@@ -66,13 +72,4 @@ func DecodeHello(data []byte) (Hello, error) {
 		return message, fmt.Errorf("hello contains an invalid identifier or client version")
 	}
 	return message, nil
-}
-
-func digitsOnly(value string) bool {
-	for _, character := range value {
-		if character < '0' || character > '9' {
-			return false
-		}
-	}
-	return true
 }

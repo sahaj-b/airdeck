@@ -123,6 +123,9 @@ func runServe(args []string) error {
 	gracePeriod := flags.Int("grace-period", 0, "reconnect grace period override in seconds")
 	noCode := flags.Bool("no-code", false, "let clients join /join without entering a session code")
 	flags.BoolVar(noCode, "n", false, "shorthand for --no-code")
+	roomCode := flags.String("room-code", "", "persistent room code override")
+	lanOnly := flags.Bool("lan-only", false, "serve LAN only without probing central")
+	approvalRequired := flags.Bool("approval-required", false, "require host approval before admitting joins")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -160,6 +163,15 @@ func runServe(args []string) error {
 	}
 	if *noCode {
 		overrides.NoCode = noCode
+	}
+	if *roomCode != "" {
+		overrides.RoomCode = roomCode
+	}
+	if *lanOnly {
+		overrides.LanOnly = lanOnly
+	}
+	if *approvalRequired {
+		overrides.ApprovalRequired = approvalRequired
 	}
 	cfg, err = config.ApplyOverrides(cfg, overrides)
 	if err != nil {

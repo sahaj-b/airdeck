@@ -1,11 +1,15 @@
 package config
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/sahaj-b/airdeck/internal/roomcode"
 )
 
 const CurrentVersion = 1
@@ -20,16 +24,36 @@ type Config struct {
 	InputRate          int    `json:"inputRate"`
 	GracePeriodSeconds int    `json:"gracePeriodSeconds"`
 	NoCode             bool   `json:"noCode"`
+	RoomCode           string `json:"roomCode"`
+	InstallationKey    string `json:"installationKey"`
+	LanOnly            bool   `json:"lanOnly"`
+	ApprovalRequired   bool   `json:"approvalRequired"`
 }
 
 func Defaults() Config {
-	return Config{Version: CurrentVersion, Port: 6969, Bind: "0.0.0.0", AdvertisedPort: 0, DefaultLayout: "xbox-default", InputRate: 60, GracePeriodSeconds: 5}
+	// Crypto failure here means the machine cannot do anything safe;
+	// panicking beats writing an identity-less config that self-bricks.
+	code, err := roomcode.Generate()
+	if err != nil {
+		panic(err)
+	}
+	key, err := roomcode.GenerateInstallationKey()
+	if err != nil {
+		panic(err)
+	}
+	return Config{Version: CurrentVersion, Port: 6969, Bind: "0.0.0.0", AdvertisedPort: 0, DefaultLayout: "xbox-default", InputRate: 60, GracePeriodSeconds: 5, RoomCode: code, InstallationKey: key}
 }
 
 func Load(path string) (Config, error) {
-	defaults := Defaults()
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
+		// First run: generate identity once and persist it. Returning an
+		// unsaved in-memory identity would rotate the room code every
+		// restart and self-brick the relay claim (SPEC Q16).
+		defaults := Defaults()
+		if err := Save(path, defaults); err != nil {
+			return Config{}, err
+		}
 		return defaults, nil
 	}
 	if err != nil {
@@ -39,7 +63,13 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
+	// Canonicalize hand-edited codes (lowercase, dashes, spaces) so the
+	// stored identity matches what roomcode.Normalize produces everywhere.
+	cfg.RoomCode = roomcode.Normalize(cfg.RoomCode)
 	if err := Validate(cfg); err != nil {
+		if strings.Contains(err.Error(), "unsupported config") {
+			return Config{}, fmt.Errorf("%w: delete %s to regenerate", err, path)
+		}
 		return Config{}, err
 	}
 	return cfg, nil
@@ -47,7 +77,16 @@ func Load(path string) (Config, error) {
 
 func Validate(cfg Config) error {
 	if cfg.Version != CurrentVersion {
-		return fmt.Errorf("unsupported config version %d", cfg.Version)
+		return fmt.Errorf("unsupported config version %d (expected %d)", cfg.Version, CurrentVersion)
+	}
+	if cfg.RoomCode == "" || cfg.InstallationKey == "" {
+		return errors.New("unsupported config: missing roomCode/installationKey (pre-room-code file)")
+	}
+	if err := roomcode.Validate(cfg.RoomCode); err != nil {
+		return fmt.Errorf("unsupported config: invalid roomCode: %w", err)
+	}
+	if key, err := hex.DecodeString(cfg.InstallationKey); err != nil || len(key) != 32 {
+		return errors.New("unsupported config: invalid installationKey (expected 64 hex chars)")
 	}
 	if cfg.Port < 0 || cfg.Port > 65535 || cfg.AdvertisedPort < 0 || cfg.AdvertisedPort > 65535 {
 		return errors.New("config ports must be between 0 and 65535")
@@ -111,6 +150,9 @@ type Overrides struct {
 	InputRate          *int
 	GracePeriodSeconds *int
 	NoCode             *bool
+	RoomCode           *string
+	LanOnly            *bool
+	ApprovalRequired   *bool
 }
 
 func ApplyOverrides(cfg Config, overrides Overrides) (Config, error) {
@@ -137,6 +179,15 @@ func ApplyOverrides(cfg Config, overrides Overrides) (Config, error) {
 	}
 	if overrides.NoCode != nil {
 		cfg.NoCode = *overrides.NoCode
+	}
+	if overrides.RoomCode != nil {
+		cfg.RoomCode = roomcode.Normalize(*overrides.RoomCode)
+	}
+	if overrides.LanOnly != nil {
+		cfg.LanOnly = *overrides.LanOnly
+	}
+	if overrides.ApprovalRequired != nil {
+		cfg.ApprovalRequired = *overrides.ApprovalRequired
 	}
 	return cfg, Validate(cfg)
 }

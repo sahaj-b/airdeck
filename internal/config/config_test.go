@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,6 +73,119 @@ func TestLoadRejectsGarbageConfig(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("garbage config was accepted")
+	}
+}
+
+func TestDefaultsGenerateRoomIdentity(t *testing.T) {
+	first := Defaults()
+	if first.RoomCode == "" || first.InstallationKey == "" {
+		t.Fatal("defaults must generate roomCode and installationKey")
+	}
+	if err := Validate(first); err != nil {
+		t.Fatalf("defaults failed validation: %v", err)
+	}
+	second := Defaults()
+	if first.RoomCode == second.RoomCode || first.InstallationKey == second.InstallationKey {
+		t.Fatal("defaults must generate fresh identity per call")
+	}
+}
+
+func TestLoadFailsOldFileWithDeleteHint(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	// Pre-room-code file: valid v1 shape but no roomCode/installationKey.
+	legacy := map[string]any{"version": 1, "port": 6969, "bind": "0.0.0.0", "defaultLayout": "xbox-default", "inputRate": 60, "gracePeriodSeconds": 5}
+	data, _ := json.Marshal(legacy)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("old file without room identity should be rejected")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "delete") || !strings.Contains(msg, path) {
+		t.Fatalf("error %q should point at deleting %s to regenerate", msg, path)
+	}
+}
+
+func TestFirstRunGeneratesAndSavesBack(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nested", "config.json")
+	first, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.RoomCode == "" || first.InstallationKey == "" {
+		t.Fatal("first run must generate room identity")
+	}
+	second, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.RoomCode != second.RoomCode || first.InstallationKey != second.InstallationKey {
+		t.Fatal("second load must return the saved identity, not rotate")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("config mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestLoadNormalizesHandEditedRoomCode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	cfg := Defaults()
+	want := cfg.RoomCode // Generate() output is already canonical.
+	// Lowercase + dash + space must canonicalize on load.
+	cfg.RoomCode = strings.ToLower(want[:3]+"-"+want[3:]) + " "
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.RoomCode != want {
+		t.Fatalf("loaded roomCode = %q, want normalized %q", loaded.RoomCode, want)
+	}
+}
+
+func TestLoadRejectsNonHexInstallationKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	cfg := Defaults()
+	cfg.InstallationKey = strings.Repeat("Z", 64)
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("64-char non-hex installation key should be rejected")
+	}
+}
+
+func TestRoomCodeAndLanOnlyOverrides(t *testing.T) {
+	code := "ab-cd 2e"
+	lanOnly := true
+	approval := true
+	updated, err := ApplyOverrides(Defaults(), Overrides{RoomCode: &code, LanOnly: &lanOnly, ApprovalRequired: &approval})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.RoomCode != "ABCD2E" {
+		t.Fatalf("roomCode override = %q, want normalized ABCD2E", updated.RoomCode)
+	}
+	if !updated.LanOnly || !updated.ApprovalRequired {
+		t.Fatalf("overrides not applied: %+v", updated)
+	}
+	bad := "00-00"
+	if _, err := ApplyOverrides(Defaults(), Overrides{RoomCode: &bad}); err == nil {
+		t.Fatal("ambiguous roomCode override should be rejected")
 	}
 }
 
