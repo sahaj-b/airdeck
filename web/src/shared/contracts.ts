@@ -69,6 +69,24 @@ export type {
   Welcome,
 } from './generated/protocol';
 export type { LayoutDocument };
+// Re-export generated signaling contract (Go internal/rtc canonical, Phase 2)
+export type {
+  Accept,
+  Accepted,
+  Answer,
+  Conflict,
+  ICEServer,
+  Join,
+  Joined,
+  Offer,
+  Pending,
+  PeerLeft,
+  Register,
+  Registered,
+  Reject,
+  Rejected,
+  ErrorMessage as RtcErrorMessage,
+} from './generated/rtc';
 
 export interface PendingPublishRequest {
   id: string;

@@ -14,3 +14,5 @@ packages:
       - "frame.go"
   - path: "github.com/sahaj-b/airdeck/internal/config"
     output_path: "web/src/shared/generated/config.ts"
+  - path: "github.com/sahaj-b/airdeck/internal/rtc"
+    output_path: "web/src/shared/generated/rtc.ts"
