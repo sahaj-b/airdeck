@@ -1,8 +1,8 @@
 SHELL := /bin/sh
 
-GO_FILES := cmd/main.go tools/lanbench/main.go $(shell find internal -type f -name '*.go' | sort)
+GO_FILES := $(shell find cmd internal tools -type f -name '*.go' | sort)
 
-.PHONY: sync-contracts web-build build dev test lint fmt bench
+.PHONY: sync-contracts web-build build relay dev test lint fmt bench
 
 sync-contracts:
 	node scripts/sync-contracts.mjs
@@ -14,6 +14,9 @@ web-build: sync-contracts
 
 build: web-build
 	go build -o airdeck ./cmd
+
+relay:
+	go build -o signal-relay ./cmd/signal-relay
 
 test:
 	go test ./...
