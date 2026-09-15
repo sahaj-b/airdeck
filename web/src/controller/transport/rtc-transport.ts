@@ -1,31 +1,31 @@
-import {
-  FRAME_SIZE,
-  type ICEServer,
-  type LayoutMessage,
-  type LayoutSummary,
-  type LayoutsMessage,
-  MAX_PLAYERS,
-  PROTOCOL_VERSION,
-  type PublishResult,
-  type ServerMessage,
-  type Welcome,
-} from '../../shared/contracts';
 import { normalizeRoomCode } from '../../join/storage';
+import type {
+  ICEServer,
+  LayoutMessage,
+  LayoutsMessage,
+  Welcome,
+} from '../../shared/contracts';
 import { parseLayoutDocument } from '../../shared/layout';
+import {
+  dispatchControlMessage,
+  isRecord,
+  isValidLayouts,
+  isValidWelcome,
+  readSessionValue,
+  removeSessionValue,
+  writeSessionValue,
+} from './guards';
 import type {
   ConnectionState,
   ControllerTransport,
   ControllerTransportOptions,
+  SocketConnection,
 } from './types';
-import { RECONNECT_ID_KEY, type SocketConnection } from './ws-transport';
+import { RECONNECT_ID_KEY } from './types';
 
-// Production relay join socket. Localhost drills override via ?relay= or
-// the automatic loopback mapping below.
+// Production relay join socket.
 export const PROD_RELAY_JOIN_URL = 'wss://signal.airdeck.sahaj.dev/join';
 
-// STUN served alongside TURN in every relay bundle (internal/turn.STUNURL).
-// The phone gathers its open-mode offer against this before any TURN creds
-// arrive, so the direct path never waits on the mint.
 const FALLBACK_ICE_SERVERS: ICEServer[] = [
   { urls: ['stun:stun.cloudflare.com:3478'] },
 ];
@@ -33,12 +33,19 @@ const FALLBACK_ICE_SERVERS: ICEServer[] = [
 const CONTROL_LABEL = 'control';
 const INPUTS_LABEL = 'inputs';
 const DATA_CHANNEL_PROTOCOL = 'airdeck-v1';
-// Mirrors the SPEC drop rule the host enforces: frames queueing past this
+// Mirrors the drop rule the host enforces: frames queueing past this
 // on the unreliable channel are dropped, never backpressured into input.
 const MAX_BUFFERED_BYTES = 1024;
 // Bounds ICE gathering like the host gatherTimeout so a dead STUN server
 // cannot stall the join: the offer goes out with host candidates.
 const GATHER_TIMEOUT_MS = 5000;
+// Bounds one open-mode join attempt: the relay has no host-to-guest error
+// path for open flows (see handleRelayJoin), so a host that admits nothing
+// answers nothing and the guest would sit in connecting forever. Firing
+// first means the phone gives up on its own and shows the dead-code error
+// instead of hanging. Approval-mode guests never trip it: they get pending
+// or an error while the timer is parked.
+const JOIN_TIMEOUT_MS = 15000;
 
 // relayJoinURL resolves the signaling socket URL: explicit ?relay= wins
 // (LAN drills through Caddy), loopback pages map to the local relay
@@ -101,6 +108,7 @@ export interface RtcPeerConnectionLike {
 export interface RtcTransportOptions extends ControllerTransportOptions {
   relayUrl?: string;
   reconnectDelay?: number;
+  joinTimeoutMs?: number;
   signalingSocketFactory?: (url: string) => SocketConnection;
   peerConnectionFactory?: (config: {
     iceServers: ICEServer[];
@@ -109,19 +117,9 @@ export interface RtcTransportOptions extends ControllerTransportOptions {
 }
 
 // RtcTransport implements ControllerTransport over WebRTC: one signaling
-// WebSocket to the relay for SDP, then a reliable ordered control channel
-// carrying the identical JSON protocol as the LAN socket plus an
-// unreliable unordered inputs channel for 20-byte frames.
-//
-// Conditional offer timing (SPEC Q4): the join starts open-style (offer
-// attached after both DataChannels exist and gathering completes), because
-// the phone cannot learn approvalRequired before joining and an
-// offer-less open-mode join is deliberately a generic dead-code error.
-// If the relay answers pending, the pre-accept PC is torn down and the
-// phone offers fresh only after accepted. The relay strips the pre-accept
-// offer (joinApproval queues displayName/reconnectId only), so rejected
-// phones never burn host PCs or TURN allocations and no peer exists
-// before accept. The only cost is one wasted STUN-only local gather.
+// socket for SDP, a reliable ordered control channel for JSON, and an
+// unreliable unordered inputs channel for 20-byte frames. Joins offer at
+// once; approval-mode pendings tear that PC down and re-offer after accept.
 export class RtcTransport implements ControllerTransport {
   private signaling: SocketConnection | undefined;
   private pc: RtcPeerConnectionLike | undefined;
@@ -137,6 +135,7 @@ export class RtcTransport implements ControllerTransport {
   private allowReconnect = true;
   private receivedWelcome = false;
   private reconnectId: string | undefined;
+  private joinTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly options: RtcTransportOptions;
 
   constructor(options: RtcTransportOptions) {
@@ -157,7 +156,6 @@ export class RtcTransport implements ControllerTransport {
     this.joinSeq += 1;
     this.openSignaling();
   }
-
   sendBinary(frame: Uint8Array): boolean {
     const inputs = this.inputs;
     if (inputs?.readyState !== 'open') return false;
@@ -193,6 +191,7 @@ export class RtcTransport implements ControllerTransport {
     this.allowReconnect = false;
     this.intentionalClose = true;
     this.joinSeq += 1;
+    this.clearJoinTimer();
     if (this.reconnectTimer !== undefined) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = undefined;
@@ -212,6 +211,37 @@ export class RtcTransport implements ControllerTransport {
     removeSessionValue(RECONNECT_ID_KEY);
   }
 
+  // armJoinTimer bounds one open-mode join attempt. The relay has no
+  // host-to-guest error path for open flows, so a host that admits
+  // nothing answers nothing and the guest would sit in connecting until
+  // the user gives up. Approval guests never trip it: pending parks the
+  // timer until accept, and accept re-arms for the post-accept offer.
+  private armJoinTimer(seq: number): void {
+    this.clearJoinTimer();
+    this.joinTimer = setTimeout(() => {
+      this.joinTimer = undefined;
+      if (seq !== this.joinSeq || !this.allowReconnect) return;
+      if (this.receivedWelcome || this.stateValue === 'active') return;
+      this.options.onError?.({
+        type: 'error',
+        code: 'room_not_found',
+        message: 'Room not found or host offline.',
+      });
+      this.allowReconnect = false;
+      this.pendingId = undefined;
+      this.teardownPeer();
+      this.closeSignaling();
+      this.setState('rejected');
+    }, this.options.joinTimeoutMs ?? JOIN_TIMEOUT_MS);
+  }
+
+  private clearJoinTimer(): void {
+    if (this.joinTimer !== undefined) {
+      clearTimeout(this.joinTimer);
+      this.joinTimer = undefined;
+    }
+  }
+
   private openSignaling(): void {
     this.setState('connecting');
     const url = this.options.relayUrl ?? relayJoinURL();
@@ -225,7 +255,10 @@ export class RtcTransport implements ControllerTransport {
         return;
       }
       this.reconnectAttempts = 0;
-      void this.startJoinAttempt(seq);
+      // Open mode offers at once. Approval mode is offer-less until
+      // accept: the join carries no offer, the PC is built post-accept.
+      this.armJoinTimer(seq);
+      void this.sendJoinRequest(seq);
     };
     socket.onmessage = (event) => {
       if (socket !== this.signaling) return;
@@ -263,10 +296,27 @@ export class RtcTransport implements ControllerTransport {
     return new RTCPeerConnection(config) as unknown as RtcPeerConnectionLike;
   }
 
-  // startJoinAttempt builds one phone-side PeerConnection: both
-  // DataChannels first (host only handles ondatachannel), then the offer
-  // after gathering completes (non-trickle v1, one relay round-trip).
-  private async startJoinAttempt(seq: number): Promise<void> {
+  // sendJoinRequest starts one open-mode join flow: build the PC, gather,
+  // send the join with offer. Approval-mode pendings tear the PC down
+  // and the post-accept offer (startPostAcceptOffer) reuses buildPeerAndOffer.
+  private sendJoinRequest(seq: number): Promise<void> {
+    return this.buildPeerAndOffer(seq, (offerSdp) => ({
+      type: 'join',
+      roomCode: normalizeRoomCode(this.options.sessionCode),
+      displayName: this.options.displayName?.trim().slice(0, 40) || undefined,
+      reconnectId: this.reconnectId,
+      offer: offerSdp,
+    }));
+  }
+
+  // buildPeerAndOffer builds one phone-side PeerConnection with both
+  // DataChannels first (host only handles ondatachannel), gathers to
+  // completion (non-trickle v1, one relay round-trip), then delivers the
+  // SDP through send. A stale seq or a closed transport tears the PC down.
+  private async buildPeerAndOffer(
+    seq: number,
+    send: (offerSdp: string) => Record<string, unknown>,
+  ): Promise<void> {
     const pc = this.createPeerConnection(this.iceServers);
     if (seq !== this.joinSeq || !this.allowReconnect) {
       pc.close();
@@ -300,13 +350,7 @@ export class RtcTransport implements ControllerTransport {
       this.handleAttemptFailed(seq);
       return;
     }
-    this.sendSignaling({
-      type: 'join',
-      roomCode: normalizeRoomCode(this.options.sessionCode),
-      displayName: this.options.displayName?.trim().slice(0, 40) || undefined,
-      reconnectId: this.reconnectId,
-      offer: offerSdp,
-    });
+    this.sendSignaling(send(offerSdp));
   }
 
   private wirePeerConnection(pc: RtcPeerConnectionLike, seq: number): void {
@@ -387,7 +431,7 @@ export class RtcTransport implements ControllerTransport {
       case 'joined': {
         const answer = typeof parsed.answer === 'string' ? parsed.answer : '';
         if (!answer) return;
-        // Arrives post-offer: kept for spec symmetry, never a re-gather.
+        this.clearJoinTimer();
         this.iceServers = readIceServers(parsed.iceServers);
         await this.applyRemoteAnswer(answer, seq);
         return;
@@ -396,15 +440,18 @@ export class RtcTransport implements ControllerTransport {
         // Approval-mode answer to the post-accept offer.
         const sdp = typeof parsed.sdp === 'string' ? parsed.sdp : '';
         if (!sdp) return;
+        this.clearJoinTimer();
         this.pendingId = undefined;
         await this.applyRemoteAnswer(sdp, seq);
         return;
       }
       case 'pending': {
         if (typeof parsed.pendingId !== 'string' || !parsed.pendingId) return;
-        // Approval mode: the open-style offer is discarded with its local
+        // Approval mode: the pre-accept offer is discarded with its local
         // PC. The host burned nothing (no PC before accept); the fresh
-        // offer goes out only after accepted.
+        // offer goes out only after accepted. Park the join timer: the
+        // guest now waits on the host, not on the network.
+        this.clearJoinTimer();
         this.pendingId = parsed.pendingId;
         this.teardownPeer();
         this.setState('waiting');
@@ -413,6 +460,7 @@ export class RtcTransport implements ControllerTransport {
       case 'accepted': {
         if (!this.pendingId) return;
         this.iceServers = readIceServers(parsed.iceServers);
+        this.armJoinTimer(seq);
         await this.startPostAcceptOffer(seq);
         return;
       }
@@ -421,6 +469,7 @@ export class RtcTransport implements ControllerTransport {
           typeof parsed.reason === 'string' && parsed.reason
             ? parsed.reason
             : 'The host declined your join.';
+        this.clearJoinTimer();
         this.options.onError?.({
           type: 'error',
           code: 'declined',
@@ -434,6 +483,7 @@ export class RtcTransport implements ControllerTransport {
         return;
       }
       case 'peer.left': {
+        this.clearJoinTimer();
         this.options.onError?.({
           type: 'error',
           code: 'peer_left',
@@ -452,6 +502,7 @@ export class RtcTransport implements ControllerTransport {
           typeof parsed.message === 'string' && parsed.message
             ? parsed.message
             : 'Room not found or host offline.';
+        this.clearJoinTimer();
         this.options.onError?.({ type: 'error', code, message });
         if (!this.receivedWelcome) {
           this.allowReconnect = false;
@@ -488,42 +539,13 @@ export class RtcTransport implements ControllerTransport {
   // startPostAcceptOffer rebuilds the PC against the accepted TURN bundle
   // so the approval-mode offer gathers srflx plus relay candidates from
   // the start, then sends it as a bare offer message on the same wss.
-  private async startPostAcceptOffer(seq: number): Promise<void> {
+  private startPostAcceptOffer(seq: number): Promise<void> {
     this.teardownPeer();
-    const pc = this.createPeerConnection(this.iceServers);
-    if (seq !== this.joinSeq || !this.allowReconnect) {
-      pc.close();
-      return;
-    }
-    this.pc = pc;
-    this.wirePeerConnection(pc, seq);
-    this.control = pc.createDataChannel(CONTROL_LABEL, {
-      ordered: true,
-      protocol: DATA_CHANNEL_PROTOCOL,
-    });
-    this.inputs = pc.createDataChannel(INPUTS_LABEL, {
-      ordered: false,
-      maxRetransmits: 0,
-      protocol: DATA_CHANNEL_PROTOCOL,
-    });
-    this.wireControlChannel(this.control);
-    let sdp: string | undefined;
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription({ type: 'offer', sdp: offer.sdp });
-      await waitForGatheringComplete(pc);
-      sdp = pc.localDescription?.sdp ?? offer.sdp;
-    } catch {
-      if (seq !== this.joinSeq) return;
-      this.handleAttemptFailed(seq);
-      return;
-    }
-    if (seq !== this.joinSeq || !this.allowReconnect || !sdp) return;
-    this.sendSignaling({
+    return this.buildPeerAndOffer(seq, (offerSdp) => ({
       type: 'offer',
       pendingId: this.pendingId,
-      sdp,
-    });
+      sdp: offerSdp,
+    }));
   }
 
   private handleAttemptFailed(seq: number): void {
@@ -613,9 +635,8 @@ export class RtcTransport implements ControllerTransport {
     }
   }
 
-  // handleControlMessage mirrors WsTransport.handleMessage byte for byte:
-  // the reliable control channel carries the current JSON protocol
-  // untouched (hello, welcome, layout, ping/pong, rumble, error, close).
+  // handleControlMessage carries the current JSON protocol untouched
+  // (hello, welcome, layout, ping/pong, rumble, error, close).
   private handleControlMessage(data: string): void {
     let parsed: unknown;
     try {
@@ -624,36 +645,8 @@ export class RtcTransport implements ControllerTransport {
       this.reportError('invalid_message', 'The host sent an invalid message.');
       return;
     }
-    if (!isRecord(parsed) || typeof parsed.type !== 'string') {
-      this.reportError('invalid_message', 'The host sent an invalid message.');
-      return;
-    }
-    if (isRecord(parsed) && parsed.type === 'publish.result') {
-      const result = parsed as unknown as PublishResult;
-      const validStatus = new Set([
-        'accepted',
-        'declined',
-        'expired',
-        'cancelled',
-      ]);
-      if (
-        typeof result.id === 'string' &&
-        typeof result.status === 'string' &&
-        validStatus.has(result.status)
-      ) {
-        this.options.onPublishResult?.(result);
-      } else {
-        this.reportError(
-          'invalid_message',
-          'The host sent an invalid publish result.',
-        );
-      }
-      return;
-    }
-    const message = parsed as ServerMessage;
-
-    switch (message.type) {
-      case 'welcome':
+    dispatchControlMessage(parsed, {
+      onWelcome: (message) => {
         if (this.receivedWelcome) {
           this.reportError(
             'invalid_message',
@@ -662,105 +655,46 @@ export class RtcTransport implements ControllerTransport {
           return;
         }
         this.handleWelcome(message);
-        return;
-      case 'layout':
-        this.handleLayout(message);
-        return;
-      case 'layouts':
-        this.handleLayouts(message as unknown as LayoutsMessage);
-        return;
-      case 'slot.update':
-        if (
-          Number.isInteger(message.slot) &&
-          message.slot >= 0 &&
-          message.slot < MAX_PLAYERS &&
-          typeof message.accent === 'string'
-        ) {
-          this.options.onSlotUpdate?.(message);
-        } else {
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid slot update.',
-          );
-        }
-        return;
-      case 'ping':
-        if (typeof message.id === 'string') {
-          if (typeof message.rttMs === 'number' && message.rttMs >= 0)
-            this.options.onPing?.(message.rttMs);
-          this.sendJSON({ type: 'pong', id: message.id });
-        } else
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid heartbeat.',
-          );
-        return;
-      case 'rumble':
-        if (
-          Number.isInteger(message.strong) &&
-          Number.isInteger(message.weak) &&
-          typeof message.active === 'boolean'
-        ) {
-          this.options.onRumble?.(message);
-        } else {
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid rumble message.',
-          );
-        }
-        return;
-      case 'error':
-        if (
-          typeof message.code !== 'string' ||
-          typeof message.message !== 'string'
-        ) {
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid error message.',
-          );
-          return;
-        }
-        this.handleError(message);
-        return;
-      case 'close':
+      },
+      onLayout: (message) => this.handleLayout(message),
+      onLayouts: (message) => this.handleLayouts(message),
+      onSlotUpdate: (slot, accent) =>
+        this.options.onSlotUpdate?.({ type: 'slot.update', slot, accent }),
+      onPing: (id, rttMs) => {
+        if (rttMs !== undefined) this.options.onPing?.(rttMs);
+        this.sendJSON({ type: 'pong', id });
+      },
+      onRumble: (strong, weak, active) =>
+        this.options.onRumble?.({ type: 'rumble', strong, weak, active }),
+      onControlError: (code, message) => this.handleError({ code, message }),
+      onClose: (reason) => {
         this.intentionalClose = true;
         this.allowReconnect = false;
-        if (message.reason === 'kicked' || message.reason === 'kick')
-          this.setState('kicked');
+        if (reason === 'kicked' || reason === 'kick') this.setState('kicked');
         else this.setState('closed');
         this.teardownPeer();
         this.closeSignaling();
-        return;
-      case 'session.reset':
+      },
+      onSessionReset: () => {
         this.resetReconnectId();
         this.intentionalClose = true;
         this.allowReconnect = false;
         this.setState('session-reset');
         this.teardownPeer();
         this.closeSignaling();
-        return;
-      default:
-        this.reportError(
-          'invalid_message',
-          'The host sent an unsupported message.',
-        );
-    }
+      },
+      onPublishResult: (id, status) =>
+        this.options.onPublishResult?.({
+          type: 'publish.result',
+          id,
+          status: status as 'accepted' | 'declined' | 'expired' | 'cancelled',
+        }),
+      reportError: (code, message) => this.reportError(code, message),
+    });
   }
 
   private handleWelcome(message: Welcome): void {
-    if (
-      message.protocolVersion !== PROTOCOL_VERSION ||
-      message.frameSize !== FRAME_SIZE ||
-      typeof message.reconnectId !== 'string' ||
-      typeof message.playerId !== 'string' ||
-      !Number.isInteger(message.slot) ||
-      message.slot < 0 ||
-      message.slot >= MAX_PLAYERS ||
-      !Number.isInteger(message.targetInputRate) ||
-      message.targetInputRate < 1 ||
-      typeof message.selectedLayout !== 'string' ||
-      !Array.isArray(message.availableLayouts)
-    ) {
+    if (!isValidWelcome(message)) {
       this.allowReconnect = false;
       this.setState('rejected');
       this.reportError(
@@ -772,6 +706,7 @@ export class RtcTransport implements ControllerTransport {
       return;
     }
     this.receivedWelcome = true;
+    this.clearJoinTimer();
     this.reconnectAttempts = 0;
     this.reconnectId = message.reconnectId;
     writeSessionValue(RECONNECT_ID_KEY, message.reconnectId);
@@ -787,29 +722,13 @@ export class RtcTransport implements ControllerTransport {
   }
 
   private handleLayouts(message: LayoutsMessage): void {
-    if (!Array.isArray(message.layouts)) {
+    const layouts = isValidLayouts(message);
+    if (layouts === undefined) {
       this.reportError(
         'invalid_message',
         'The host sent an invalid layouts update.',
       );
       return;
-    }
-    const layouts: LayoutSummary[] = [];
-    for (const entry of message.layouts) {
-      if (
-        !isRecord(entry) ||
-        typeof entry.id !== 'string' ||
-        typeof entry.name !== 'string' ||
-        !entry.id ||
-        entry.id.length > 64
-      ) {
-        this.reportError(
-          'invalid_message',
-          'The host sent an invalid layouts update.',
-        );
-        return;
-      }
-      layouts.push({ id: entry.id, name: entry.name });
     }
     this.options.onLayouts?.(layouts);
   }
@@ -887,32 +806,4 @@ function readIceServers(value: unknown): ICEServer[] {
     });
   }
   return servers.length > 0 ? servers : [...FALLBACK_ICE_SERVERS];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function readSessionValue(key: string): string | undefined {
-  try {
-    return sessionStorage.getItem(key) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function writeSessionValue(key: string, value: string): void {
-  try {
-    sessionStorage.setItem(key, value);
-  } catch {
-    // Private browsing storage failures do not prevent a fresh join.
-  }
-}
-
-function removeSessionValue(key: string): void {
-  try {
-    sessionStorage.removeItem(key);
-  } catch {
-    // Private browsing storage failures do not prevent the reset flow.
-  }
 }

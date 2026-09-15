@@ -56,9 +56,8 @@ func DecodeHello(data []byte) (Hello, error) {
 	if message.Type != MessageHello {
 		return message, fmt.Errorf("expected %q message", MessageHello)
 	}
-	// An empty code is allowed at this layer so no-code sessions can admit
-	// without one; Session.Admit still enforces the code when it is required.
-	// The wire field stays `sessionCode`; it carries the persistent room code.
+	// Empty codes admit only when the session allows; the wire field
+	// stays `sessionCode` and carries the persistent room code.
 	if message.SessionCode != "" {
 		if err := roomcode.Validate(message.SessionCode); err != nil {
 			return message, fmt.Errorf("invalid session code: %w", err)

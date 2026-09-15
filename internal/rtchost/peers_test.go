@@ -217,9 +217,6 @@ func sendHello(t *testing.T, phone *testPhone, code string) {
 	}
 }
 
-// TestOpenJoinAnswerFlowsInputsEndToEnd is the Phase 5 loopback gate:
-// phone offer in, host answer out, DTLS up, validation-only hello,
-// pre-built welcome, layout, and 20-byte inputs landing on the device.
 func TestOpenJoinAnswerFlowsInputsEndToEnd(t *testing.T) {
 	manager, sess, factory := newTestManager(t, false)
 	phone := dialTestPhone(t)

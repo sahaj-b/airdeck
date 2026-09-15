@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/sahaj-b/airdeck/internal/roomcode"
 )
@@ -31,8 +30,6 @@ type Config struct {
 }
 
 func Defaults() Config {
-	// Crypto failure here means the machine cannot do anything safe;
-	// panicking beats writing an identity-less config that self-bricks.
 	code, err := roomcode.Generate()
 	if err != nil {
 		panic(err)
@@ -47,9 +44,7 @@ func Defaults() Config {
 func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		// First run: generate identity once and persist it. Returning an
-		// unsaved in-memory identity would rotate the room code every
-		// restart and self-brick the relay claim (SPEC Q16).
+		// First run: generate identity once and persist it.
 		defaults := Defaults()
 		if err := Save(path, defaults); err != nil {
 			return Config{}, err
@@ -63,11 +58,9 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
-	// Canonicalize hand-edited codes (lowercase, dashes, spaces) so the
-	// stored identity matches what roomcode.Normalize produces everywhere.
 	cfg.RoomCode = roomcode.Normalize(cfg.RoomCode)
 	if err := Validate(cfg); err != nil {
-		if strings.Contains(err.Error(), "unsupported config") {
+		if errors.Is(err, ErrUnsupportedConfig) {
 			return Config{}, fmt.Errorf("%w: delete %s to regenerate", err, path)
 		}
 		return Config{}, err
@@ -75,18 +68,22 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
+// ErrUnsupportedConfig marks a pre-room-code config file; the fix is to
+// delete it and let first run regenerate.
+var ErrUnsupportedConfig = errors.New("unsupported config")
+
 func Validate(cfg Config) error {
 	if cfg.Version != CurrentVersion {
-		return fmt.Errorf("unsupported config version %d (expected %d)", cfg.Version, CurrentVersion)
+		return fmt.Errorf("%w: version %d (expected %d)", ErrUnsupportedConfig, cfg.Version, CurrentVersion)
 	}
 	if cfg.RoomCode == "" || cfg.InstallationKey == "" {
-		return errors.New("unsupported config: missing roomCode/installationKey (pre-room-code file)")
+		return fmt.Errorf("%w: missing roomCode/installationKey (pre-room-code file)", ErrUnsupportedConfig)
 	}
 	if err := roomcode.Validate(cfg.RoomCode); err != nil {
-		return fmt.Errorf("unsupported config: invalid roomCode: %w", err)
+		return fmt.Errorf("%w: invalid roomCode: %w", ErrUnsupportedConfig, err)
 	}
 	if key, err := hex.DecodeString(cfg.InstallationKey); err != nil || len(key) != 32 {
-		return errors.New("unsupported config: invalid installationKey (expected 64 hex chars)")
+		return fmt.Errorf("%w: invalid installationKey (expected 64 hex chars)", ErrUnsupportedConfig)
 	}
 	if cfg.Port < 0 || cfg.Port > 65535 || cfg.AdvertisedPort < 0 || cfg.AdvertisedPort > 65535 {
 		return errors.New("config ports must be between 0 and 65535")

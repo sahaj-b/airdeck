@@ -1,21 +1,11 @@
-// Package turn builds the STUN+TURN iceServer bundle the signal relay
-// serves in registered/joined/accepted (SPEC Q5, PLAN Phase 3).
-//
-// Credentials are throwaway 24h TTL mint responses fetched via the
-// Cloudflare HTTP mint API once per ~20h and cached in relay memory:
-// zero per-join API calls, no refresh flow. The mint endpoint below is the
-// verified shape from the Cloudflare TURN docs
-// (POST /v1/turn/keys/{id}/credentials/generate, Bearer secret,
-// {"ttl":86400}); PLAN's draft string said generate-ice-servers, the docs
-// say generate, docs win.
+// Package turn builds the STUN+TURN bundle the relay serves.
+// Credentials are 24h TTL mints fetched via the Cloudflare HTTP API
+// once per ~20h and cached; no per-join calls, no refresh flow.
 package turn
 
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -28,9 +18,7 @@ import (
 )
 
 const (
-	// STUNURL is always served alongside TURN: without STUN the phone
-	// gathers no srflx candidates and every open-mode join silently
-	// degrades to relayed.
+	// STUNURL is always served alongside TURN.
 	STUNURL = "stun:stun.cloudflare.com:3478"
 	// CredentialTTL is the requested credential lifetime in seconds (24h).
 	CredentialTTL = 86400
@@ -42,9 +30,7 @@ const (
 	MintTimeout = 10 * time.Second
 )
 
-// Provider serves the cached iceServer bundle. It never fails: a dead mint
-// API falls back to the stale cache, and a relay started without TURN
-// creds serves STUN-only so direct-LAN drills work with no internet.
+// Provider serves the cached bundle and never fails.
 type Provider struct {
 	mu             sync.Mutex
 	keyID          string
@@ -55,9 +41,7 @@ type Provider struct {
 	fetchedAt      time.Time
 }
 
-// New returns a provider for one Cloudflare TURN key. Empty keyID/secret
-// means STUN-only (local drills, tests); nothing dials out until Servers
-// finds the cache stale.
+// New returns a provider for one Cloudflare TURN key.
 func New(keyID, secret string) *Provider {
 	return &Provider{
 		keyID:          keyID,
@@ -67,34 +51,31 @@ func New(keyID, secret string) *Provider {
 	}
 }
 
-// Configured reports whether TURN minting is available. Unconfigured relays
-// still serve STUN so the direct path keeps working.
-func (p *Provider) Configured() bool {
-	return p.keyID != "" && p.secret != ""
-}
-
 // STUNOnly is the no-credential bundle: STUN with no TURN entry.
 func STUNOnly() []rtc.ICEServer {
 	return []rtc.ICEServer{{URLs: []string{STUNURL}}}
 }
 
-// Servers returns the bundle for registered/joined/accepted. It mints at
-// most once per RefreshInterval; concurrent joins share the cache.
+// Servers returns the bundle, minting at most once per RefreshInterval.
 func (p *Provider) Servers(ctx context.Context) []rtc.ICEServer {
 	p.mu.Lock()
 	fresh := !p.fetchedAt.IsZero() && time.Since(p.fetchedAt) < RefreshInterval
 	cached := p.cached
-	configured := p.Configured()
+	keyID, secret, endpoint, client := p.keyID, p.secret, p.endpointFormat, p.client
 	p.mu.Unlock()
 	if fresh && len(cached) > 0 {
 		return cloneServers(cached)
 	}
-	if !configured {
+	if keyID == "" || secret == "" {
 		return STUNOnly()
 	}
-	servers, err := MintCredentials(ctx, p.client, fmt.Sprintf(p.endpointFormat, p.keyID), p.secret, CredentialTTL)
+	servers, err := MintCredentials(ctx, client, fmt.Sprintf(endpoint, keyID), secret, CredentialTTL)
 	if err != nil {
-		log.Printf("relay: TURN mint failed, serving %s: %v", staleOrSTUN(cached), err)
+		fallback := "STUN-only"
+		if len(cached) > 0 {
+			fallback = "stale cache"
+		}
+		log.Printf("relay: TURN mint failed, serving %s: %v", fallback, err)
 		if len(cached) > 0 {
 			return cloneServers(cached)
 		}
@@ -105,13 +86,6 @@ func (p *Provider) Servers(ctx context.Context) []rtc.ICEServer {
 	p.fetchedAt = time.Now()
 	p.mu.Unlock()
 	return cloneServers(servers)
-}
-
-func staleOrSTUN(cached []rtc.ICEServer) string {
-	if len(cached) > 0 {
-		return "stale cache"
-	}
-	return "STUN-only"
 }
 
 func cloneServers(in []rtc.ICEServer) []rtc.ICEServer {
@@ -133,10 +107,7 @@ type mintResponse struct {
 	} `json:"iceServers"`
 }
 
-// MintCredentials fetches one 24h TURN bundle from the Cloudflare API and
-// splits the response into a STUN entry plus a TURN entry, matching the
-// browser RTCConfiguration and pion ICEServer shapes. STUN is always
-// present even if the response omits it.
+// MintCredentials fetches one 24h TURN bundle from the Cloudflare API.
 func MintCredentials(ctx context.Context, client *http.Client, endpoint, secret string, ttl int) ([]rtc.ICEServer, error) {
 	body, err := json.Marshal(map[string]int{"ttl": ttl})
 	if err != nil {
@@ -167,8 +138,6 @@ func MintCredentials(ctx context.Context, client *http.Client, endpoint, secret 
 }
 
 // SplitMinted splits one mint response URL list into a STUN-first bundle.
-// Classification is by scheme so future Cloudflare URL additions land in
-// the right entry without code changes.
 func SplitMinted(urls []string, username, credential string) []rtc.ICEServer {
 	var stun, turn []string
 	for _, url := range urls {
@@ -181,24 +150,11 @@ func SplitMinted(urls []string, username, credential string) []rtc.ICEServer {
 	if len(stun) == 0 {
 		stun = []string{STUNURL}
 	}
+	if len(turn) == 0 {
+		return []rtc.ICEServer{{URLs: stun}}
+	}
 	return []rtc.ICEServer{
 		{URLs: stun},
 		{URLs: turn, Username: username, Credential: credential},
 	}
-}
-
-// MintOfflineHMAC builds a TURN username/password pair locally per the
-// expired draft-uberti-behave-turn-rest scheme
-// (username "<expiry>:<keyID>", password base64(HMAC-SHA1(secret,
-// username))). This is the Phase 3 verification spike: if Cloudflare's
-// TURN fleet accepts self-minted passwords the relay can drop the HTTP
-// fetch entirely, wire unchanged either way. Until a live-credential test
-// proves acceptance, the cached-API path above stays authoritative and
-// this function is unused in production.
-func MintOfflineHMAC(keyID, secret string, ttlSeconds int64) (username, password string) {
-	expiry := time.Now().Unix() + ttlSeconds
-	username = fmt.Sprintf("%d:%s", expiry, keyID)
-	mac := hmac.New(sha1.New, []byte(secret))
-	_, _ = mac.Write([]byte(username))
-	return username, base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }

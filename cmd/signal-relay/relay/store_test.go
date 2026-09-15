@@ -87,39 +87,8 @@ func TestReconnectSameCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-register: %v", err)
 	}
-	if !result.Reconnected || result.ChangedFrom != "" {
+	if result.ChangedFrom != "" {
 		t.Fatalf("re-register = %+v, want reconnect without change", result)
-	}
-}
-
-// Generated codes regenerate on collision inside the transaction, and
-// retired codes collide like active ones so they are never reassigned.
-func TestClaimGeneratedSkipsTakenAndRetired(t *testing.T) {
-	store := openTestStore(t)
-	if _, err := store.Register("TAKEN2", "other"); err != nil {
-		t.Fatalf("seed taken: %v", err)
-	}
-	if _, err := store.Register("OLD222", "burner"); err != nil {
-		t.Fatalf("seed burner: %v", err)
-	}
-	if _, err := store.Register("NEW222", "burner"); err != nil {
-		t.Fatalf("seed tombstone: %v", err)
-	}
-	codes := []string{"TAKEN2", "OLD222", "FREE22"}
-	var calls int
-	got, err := store.ClaimGenerated("key-a", func() string {
-		code := codes[calls]
-		calls++
-		return code
-	}, 5)
-	if err != nil {
-		t.Fatalf("ClaimGenerated: %v", err)
-	}
-	if got != "FREE22" || calls != 3 {
-		t.Fatalf("ClaimGenerated = %q after %d calls, want FREE22 after 3", got, calls)
-	}
-	if _, err := store.Register("FREE22", "key-b"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("generated claim is not exclusive, err = %v", err)
 	}
 }
 

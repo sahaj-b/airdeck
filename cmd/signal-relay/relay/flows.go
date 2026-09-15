@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -12,10 +13,9 @@ import (
 	"github.com/sahaj-b/airdeck/internal/rtc"
 )
 
-// serveHost runs one /register socket: exactly one claim, then the
-// accept/reject/answer control channel for its pendings.
+// serveHost runs one /register socket.
 func (h *Hub) serveHost(conn *websocket.Conn, remoteIP string) {
-	host := newHostConn(h, conn)
+	host := newHostConn(conn)
 	armPongs(conn)
 	go pumpWriter(conn, host.send, host.done, host.finishClose)
 	go keepalive(conn, host.done)
@@ -48,11 +48,10 @@ func (h *Hub) serveHost(conn *websocket.Conn, remoteIP string) {
 	}
 }
 
-// serveGuest runs one /join socket. The socket may carry several join
-// flows in sequence (reject then immediate re-request), so the loop
-// handles join and offer frames until the guest goes away.
+// serveGuest runs one /join socket. One socket can carry several join
+// flows in sequence, so the loop handles join and offer frames.
 func (h *Hub) serveGuest(conn *websocket.Conn) {
-	guest := newGuestConn(h, conn)
+	guest := newGuestConn(conn)
 	armPongs(conn)
 	go pumpWriter(conn, guest.send, guest.done, guest.finishClose)
 	go keepalive(conn, guest.done)
@@ -80,9 +79,7 @@ func (h *Hub) serveGuest(conn *websocket.Conn) {
 	}
 }
 
-// handleRegister claims (or reclaims, or changes) one room code for the
-// registering host. It also runs for a second register on the same socket
-// so a dashboard code change needs no reconnect.
+// handleRegister claims, reclaims, or changes one room code for the host.
 func (h *Hub) handleRegister(host *hostConn, remoteIP string, data []byte) {
 	var register rtc.Register
 	if err := json.Unmarshal(data, &register); err != nil {
@@ -94,7 +91,6 @@ func (h *Hub) handleRegister(host *hostConn, remoteIP string, data []byte) {
 		host.enqueue(rtc.Conflict{Type: rtc.MessageConflict, Reason: "invalid room code"})
 		return
 	}
-	// Installation keys are compared, never logged.
 	if register.InstallationKey == "" {
 		host.enqueue(rtc.Conflict{Type: rtc.MessageConflict, Reason: "missing installation key"})
 		return
@@ -133,22 +129,19 @@ func (h *Hub) handleRegister(host *hostConn, remoteIP string, data []byte) {
 			log.Printf("relay: record code change failed: %v", err)
 		}
 		log.Printf("relay: code change %s -> %s tombstoned", result.ChangedFrom, code)
-		// The old code goes dark even if its socket lingers: drop any
-		// active mapping that still points at this host's old code.
+
 		h.mu.Lock()
 		if old, ok := h.hosts[result.ChangedFrom]; ok && old == host {
 			delete(h.hosts, result.ChangedFrom)
 		}
 		h.mu.Unlock()
 	}
-	host.key = register.InstallationKey
-	host.approvalRequired = register.ApprovalRequired
 	h.mu.Lock()
+	host.approvalRequired = register.ApprovalRequired
 	if old, ok := h.hosts[host.code]; ok && old == host && host.code != code {
 		delete(h.hosts, host.code)
 	}
 	if prev, ok := h.hosts[code]; ok && prev != host {
-		// Same-key restart with overlapping sockets: the new socket wins.
 		prev.finishClose()
 	}
 	host.code = code
@@ -157,13 +150,12 @@ func (h *Hub) handleRegister(host *hostConn, remoteIP string, data []byte) {
 	host.enqueue(rtc.Registered{
 		Type:       rtc.MessageRegistered,
 		RoomCode:   code,
-		ICEServers: h.turn.Servers(requestContext()),
+		ICEServers: h.turn.Servers(context.Background()),
 	})
 }
 
-// deadCode replies the single generic dead-code error. Unknown, retired,
-// and offline-host codes serialize byte-identically: one relay path, no
-// enumeration oracle.
+// deadCode replies the single generic error for unknown, retired, and
+// offline-host codes.
 func (g *guestConn) deadCode() {
 	g.enqueue(rtc.RoomNotFoundError())
 }
@@ -194,22 +186,21 @@ func (h *Hub) handleJoin(guest *guestConn, data []byte) {
 	}
 	h.mu.Lock()
 	host, ok := h.hosts[code]
+	approval := ok && host.approvalRequired
 	h.mu.Unlock()
 	if !ok {
 		guest.deadCode()
 		return
 	}
-	if !host.approvalRequired {
+	if !approval {
 		h.joinOpen(host, guest, join)
 		return
 	}
 	h.joinApproval(host, guest, join)
 }
 
-// joinOpen forwards an open-mode join plus its offer with a fresh
-// relay-assigned correlation id. A missing offer in open mode still gets
-// the generic dead-code error: a distinct error would turn the offer
-// check into a live-code oracle, and our phone always offers here.
+// joinOpen forwards an open-mode join plus its offer. A missing offer
+// still gets the generic error so the check cannot become a live-code oracle.
 func (h *Hub) joinOpen(host *hostConn, guest *guestConn, join rtc.Join) {
 	if join.Offer == "" {
 		guest.deadCode()
@@ -221,7 +212,7 @@ func (h *Hub) joinOpen(host *hostConn, guest *guestConn, join rtc.Join) {
 		return
 	}
 	h.mu.Lock()
-	h.routes[id] = &route{guest: guest, open: true}
+	h.routes[id] = &route{guest: guest, host: host, open: true}
 	h.mu.Unlock()
 	host.enqueue(rtc.Join{
 		Type:          rtc.MessageJoin,
@@ -233,8 +224,7 @@ func (h *Hub) joinOpen(host *hostConn, guest *guestConn, join rtc.Join) {
 	})
 }
 
-// joinApproval queues an offer-less join as a pending and notifies both
-// sides: the full entry to the host queue, the bare id to the guest.
+// joinApproval queues an offer-less join as a pending.
 func (h *Hub) joinApproval(host *hostConn, guest *guestConn, join rtc.Join) {
 	id, err := newID()
 	if err != nil {
@@ -265,8 +255,7 @@ func (h *Hub) joinApproval(host *hostConn, guest *guestConn, join rtc.Join) {
 	guest.enqueue(rtc.Pending{Type: rtc.MessagePending, PendingID: id})
 }
 
-// handleGuestOffer forwards a post-accept SDP offer with a fresh
-// correlation id the host echoes on its answer.
+// handleGuestOffer forwards a post-accept offer.
 func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 	var offer rtc.Offer
 	if err := json.Unmarshal(data, &offer); err != nil || offer.SDP == "" {
@@ -300,7 +289,7 @@ func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 		return
 	}
 	h.mu.Lock()
-	h.routes[id] = &route{guest: guest, pendingID: entry.id, open: false}
+	h.routes[id] = &route{guest: guest, host: entry.host, pendingID: entry.id, open: false}
 	h.mu.Unlock()
 	entry.host.enqueue(rtc.Offer{
 		Type:          rtc.MessageOffer,
@@ -310,8 +299,7 @@ func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 	})
 }
 
-// handleAccept releases one queued pending toward slot assignment: the
-// guest gets accepted plus TURN creds and answers with its offer.
+// handleAccept releases one queued pending toward slot assignment.
 func (h *Hub) handleAccept(host *hostConn, data []byte) {
 	var accept rtc.Accept
 	if err := json.Unmarshal(data, &accept); err != nil || accept.PendingID == "" {
@@ -326,12 +314,11 @@ func (h *Hub) handleAccept(host *hostConn, data []byte) {
 	}
 	entry.guest.enqueue(rtc.Accepted{
 		Type:       rtc.MessageAccepted,
-		ICEServers: h.turn.Servers(requestContext()),
+		ICEServers: h.turn.Servers(context.Background()),
 	})
 }
 
-// handleReject drops one queued pending. The guest returns to the join
-// screen and may immediately re-request on the same socket.
+// handleReject drops one queued pending.
 func (h *Hub) handleReject(host *hostConn, data []byte) {
 	var reject rtc.Reject
 	if err := json.Unmarshal(data, &reject); err != nil || reject.PendingID == "" {
@@ -339,24 +326,20 @@ func (h *Hub) handleReject(host *hostConn, data []byte) {
 	}
 	h.mu.Lock()
 	entry, ok := h.pendings[reject.PendingID]
-	if ok {
-		delete(h.pendings, reject.PendingID)
-	}
-	h.mu.Unlock()
 	if !ok || entry.host != host {
+		h.mu.Unlock()
 		host.enqueue(rtc.PendingGoneError())
 		return
 	}
+	delete(h.pendings, reject.PendingID)
+	h.mu.Unlock()
 	entry.guest.mu.Lock()
 	delete(entry.guest.pending, entry.id)
 	entry.guest.mu.Unlock()
 	entry.guest.enqueue(rtc.Rejected{Type: rtc.MessageRejected, Reason: reject.Reason})
 }
 
-// handleAnswer routes one SDP answer by its echoed correlation id. Open
-// flows complete as joined; approval flows complete as a forwarded answer
-// and evaporate the pending: signaling is done, the guest closes its
-// socket, and post-establishment state is the host PC's job.
+// handleAnswer routes one SDP answer by its echoed correlation id.
 func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 	var answer rtc.Answer
 	if err := json.Unmarshal(data, &answer); err != nil || answer.CorrelationID == "" || answer.SDP == "" {
@@ -364,25 +347,29 @@ func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 	}
 	h.mu.Lock()
 	found, ok := h.routes[answer.CorrelationID]
-	if ok {
-		delete(h.routes, answer.CorrelationID)
+	if !ok {
+		h.mu.Unlock()
+		return
 	}
+	if found.guest == nil || found.host == nil || found.host != host {
+		delete(h.routes, answer.CorrelationID)
+		h.mu.Unlock()
+		return
+	}
+	delete(h.routes, answer.CorrelationID)
 	var entry *pending
-	if ok && !found.open {
+	if !found.open {
 		entry, _ = h.pendings[found.pendingID]
 		if entry != nil {
 			delete(h.pendings, found.pendingID)
 		}
 	}
 	h.mu.Unlock()
-	if !ok {
-		return
-	}
 	if found.open {
 		found.guest.enqueue(rtc.Joined{
 			Type:       rtc.MessageJoined,
 			Answer:     answer.SDP,
-			ICEServers: h.turn.Servers(requestContext()),
+			ICEServers: h.turn.Servers(context.Background()),
 		})
 		return
 	}
@@ -398,10 +385,8 @@ func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 	}
 }
 
-// dropHost removes one host's live routing and tells its pre-establishment
-// pendings the peer is gone. Durable claims survive: a restart
-// re-registers the same code. Post-establishment guests never hear
-// peer.left; their signaling already completed.
+// dropHost removes one host's live routing and fails its pre-establishment
+// pendings. Durable claims survive; a restart re-registers the same code.
 func (h *Hub) dropHost(host *hostConn) {
 	h.mu.Lock()
 	if current, ok := h.hosts[host.code]; ok && current == host {
@@ -414,6 +399,11 @@ func (h *Hub) dropHost(host *hostConn) {
 			orphaned = append(orphaned, entry)
 		}
 	}
+	for id, found := range h.routes {
+		if found.host == host {
+			delete(h.routes, id)
+		}
+	}
 	h.mu.Unlock()
 	for _, entry := range orphaned {
 		entry.guest.mu.Lock()
@@ -423,9 +413,8 @@ func (h *Hub) dropHost(host *hostConn) {
 	}
 }
 
-// dropGuest evaporates one guest's pendings and routes with no host
-// notification. The host learns lazily: its next accept/reject for the
-// id gets pending_gone and the dashboard reconciles via admin state.
+// dropGuest evaporates one guest's pendings and routes. The host learns
+// lazily via pending_gone on its next accept/reject.
 func (h *Hub) dropGuest(guest *guestConn) {
 	guest.mu.Lock()
 	owned := make([]*pending, 0, len(guest.pending))

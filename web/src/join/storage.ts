@@ -1,9 +1,5 @@
-// Room-code helpers (SPEC v2a Q1). The Go canonical form lives in
-// internal/roomcode; this mirrors Normalize/Validate so the join page
-// validates before any socket opens and the transport sends canonical
-// codes. Generated codes are 6 chars, custom codes 4-24 chars, from the
-// Crockford-style alphabet (A-Z minus I/L/O plus 2-9). Normalization:
-// trim, uppercase, strip dashes and spaces.
+// Room-code helpers mirroring internal/roomcode for pre-socket validation.
+// Go Validate is canonical on drift.
 
 const ROOMCODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 

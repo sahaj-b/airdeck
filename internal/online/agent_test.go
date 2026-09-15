@@ -194,7 +194,6 @@ func newAgentFixture(t *testing.T, server *httptest.Server, approval bool) *agen
 	peers := rtchost.New(sess, handler, library, 60)
 	changes := make(chan struct{}, 16)
 	agent := New(Options{
-		RoomCode: "TEST22", InstallationKey: "test-key",
 		ApprovalRequired: approval, RelayURL: registerURL(server),
 		Session: sess, Peers: peers,
 		OnStateChange: func() {
@@ -481,8 +480,8 @@ func TestApprovalPendingAcceptOfferAnswer(t *testing.T) {
 
 	relay.send(t, rtc.Pending{Type: rtc.MessagePending, PendingID: "relay-pending-1", DisplayName: "Phone"})
 	waitFor(t, "session pending", func() bool { return len(fix.session.Pendings()) == 1 })
-	if fix.agent.PendingCount() != 1 {
-		t.Fatalf("agent pendings = %d, want 1", fix.agent.PendingCount())
+	if pendings := fix.agent.Pendings(); len(pendings) != 1 {
+		t.Fatalf("agent pendings = %d, want 1", len(pendings))
 	}
 
 	if err := fix.agent.AcceptPending("relay-pending-1"); err != nil {
@@ -532,8 +531,8 @@ func TestAgentRejectPending(t *testing.T) {
 	if pendings := fix.session.Pendings(); len(pendings) != 0 {
 		t.Fatalf("session pendings = %d after reject, want 0", len(pendings))
 	}
-	if fix.agent.PendingCount() != 0 {
-		t.Fatalf("agent pendings = %d after reject, want 0", fix.agent.PendingCount())
+	if pendings := fix.agent.Pendings(); len(pendings) != 0 {
+		t.Fatalf("agent pendings = %d after reject, want 0", len(pendings))
 	}
 }
 
@@ -547,8 +546,8 @@ func TestAgentPeerLeftEvaporates(t *testing.T) {
 	waitFor(t, "session pending", func() bool { return len(fix.session.Pendings()) == 1 })
 	relay.send(t, rtc.PeerLeft{Type: rtc.MessagePeerLeft, PendingID: "relay-pending-x"})
 	waitFor(t, "evaporate", func() bool { return len(fix.session.Pendings()) == 0 })
-	if fix.agent.PendingCount() != 0 {
-		t.Fatalf("agent pendings = %d after peer.left, want 0", fix.agent.PendingCount())
+	if pendings := fix.agent.Pendings(); len(pendings) != 0 {
+		t.Fatalf("agent pendings = %d after peer.left, want 0", len(pendings))
 	}
 }
 

@@ -68,10 +68,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 	}()
 	// runClient will populate playerIDForCleanup when admission succeeds.
-	s.runClient(r, client, &playerIDForCleanup)
+	s.runClient(client, &playerIDForCleanup)
 }
 
-func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *string) {
+func (s *Server) runClient(client *Client, playerIDForCleanup *string) {
 	client.conn.SetReadLimit(4 * 1024)
 	messageType, data, err := client.conn.ReadMessage()
 	if err != nil || messageType != websocket.TextMessage {
@@ -89,7 +89,7 @@ func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *
 			s.servePending(client, admission, playerIDForCleanup)
 			return
 		}
-		code, message := admissionError(err)
+		code, message := session.AdmissionError(err)
 		s.sendError(client, code, message, true)
 		return
 	}
@@ -120,15 +120,8 @@ func (s *Server) runClient(r *http.Request, client *Client, playerIDForCleanup *
 }
 
 // servePending parks an approval-gated LAN join with its socket open until
-// the host accepts, rejects, or the guest disconnects. No timers: the
-// pending lives exactly while this socket stays connected, mirroring the
-// relay evaporate rule.
-//
-// A single reader goroutine owns every socket read for the whole join flow.
-// Gorilla marks any read failure sticky on the conn (later reads fail
-// without touching the network), so the wait must never use read deadlines
-// to poll: a poll timeout would poison post-accept input. Disconnects and
-// cancels surface as read results racing the session outcome channel.
+// accept, reject, or disconnect. One reader goroutine owns every socket
+// read; the wait never uses read deadlines because gorilla reads are sticky.
 func (s *Server) servePending(client *Client, admission session.Admission, playerIDForCleanup *string) {
 	pendingID := admission.PendingID
 	wait := admission.PendingWait
@@ -354,13 +347,6 @@ func (s *Server) sendError(client *Client, code, message string, closeAfter ...b
 		return
 	}
 	_ = client.Send(errMsg)
-}
-
-// admissionError is the shared session mapping so the LAN socket and the
-// future WebRTC control channel reject with identical codes. Kept as a
-// wrapper so existing call sites stay put; /ws behavior is byte-identical.
-func admissionError(err error) (string, string) {
-	return session.AdmissionError(err)
 }
 
 func (s *Server) broadcastReset() {

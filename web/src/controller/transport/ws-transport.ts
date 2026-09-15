@@ -1,46 +1,37 @@
-import {
-  type ErrorMessage,
-  FRAME_SIZE,
-  type LayoutMessage,
-  type LayoutSummary,
-  type LayoutsMessage,
-  MAX_PLAYERS,
-  PROTOCOL_VERSION,
-  type PublishResult,
-  type ServerMessage,
-  type Welcome,
+import type {
+  ErrorMessage,
+  LayoutMessage,
+  LayoutsMessage,
+  Welcome,
 } from '../../shared/contracts';
 import { parseLayoutDocument } from '../../shared/layout';
-
-import type {
-  ConnectionState,
-  ControllerTransport,
-  ControllerTransportOptions,
+import {
+  dispatchControlMessage,
+  isValidLayouts,
+  isValidWelcome,
+  parseControlFrame,
+  readSessionValue,
+  removeSessionValue,
+  writeSessionValue,
+} from './guards';
+import {
+  type ConnectionState,
+  type ControllerTransport,
+  type ControllerTransportOptions,
+  RECONNECT_ID_KEY,
+  type SocketConnection,
 } from './types';
 
-export type { ConnectionState };
+export { RECONNECT_ID_KEY } from './types';
+export type { ConnectionState, SocketConnection };
 
-export const RECONNECT_ID_KEY = 'airdeck.reconnectId';
-export const SELECTED_LAYOUT_KEY = 'airdeck.selectedLayout';
-
-export interface SocketConnection {
-  readyState: number;
-  binaryType: string;
-  onopen: (() => void) | null;
-  onmessage: ((event: { data: unknown }) => void) | null;
-  onerror: (() => void) | null;
-  onclose: (() => void) | null;
-  send(data: string | Uint8Array): void;
-  close(): void;
-}
-
-export interface ControllerSocketOptions extends ControllerTransportOptions {
+export interface WsTransportOptions extends ControllerTransportOptions {
   url?: string;
   reconnectDelay?: number;
   socketFactory?: (url: string) => SocketConnection;
 }
 
-export class ControllerSocket implements ControllerTransport {
+export class WsTransport implements ControllerTransport {
   private socket: SocketConnection | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private stateValue: ConnectionState = 'closed';
@@ -49,9 +40,9 @@ export class ControllerSocket implements ControllerTransport {
   private allowReconnect = true;
   private receivedWelcome = false;
   private reconnectId: string | undefined;
-  private readonly options: ControllerSocketOptions;
+  private readonly options: WsTransportOptions;
 
-  constructor(options: ControllerSocketOptions) {
+  constructor(options: WsTransportOptions) {
     this.options = options;
     this.reconnectId = readSessionValue(RECONNECT_ID_KEY);
   }
@@ -153,45 +144,14 @@ export class ControllerSocket implements ControllerTransport {
   }
 
   private handleMessage(socket: SocketConnection, data: unknown): void {
-    if (socket !== this.socket || typeof data !== 'string') return;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(data) as unknown;
-    } catch {
+    if (socket !== this.socket) return;
+    const parsed = parseControlFrame(data);
+    if (parsed === undefined) {
       this.reportError('invalid_message', 'The host sent an invalid message.');
       return;
     }
-    if (!isRecord(parsed) || typeof parsed.type !== 'string') {
-      this.reportError('invalid_message', 'The host sent an invalid message.');
-      return;
-    }
-    // handle publish.result before ServerMessage narrowing (it is not in the hand-written ServerMessage union)
-    if (isRecord(parsed) && parsed.type === 'publish.result') {
-      const result = parsed as unknown as PublishResult;
-      const validStatus = new Set([
-        'accepted',
-        'declined',
-        'expired',
-        'cancelled',
-      ]);
-      if (
-        typeof result.id === 'string' &&
-        typeof result.status === 'string' &&
-        validStatus.has(result.status)
-      ) {
-        this.options.onPublishResult?.(result);
-      } else {
-        this.reportError(
-          'invalid_message',
-          'The host sent an invalid publish result.',
-        );
-      }
-      return;
-    }
-    const message = parsed as ServerMessage;
-
-    switch (message.type) {
-      case 'welcome':
+    dispatchControlMessage(parsed, {
+      onWelcome: (message) => {
         if (this.receivedWelcome) {
           this.reportError(
             'invalid_message',
@@ -200,103 +160,45 @@ export class ControllerSocket implements ControllerTransport {
           return;
         }
         this.handleWelcome(message);
-        return;
-      case 'layout':
-        this.handleLayout(message);
-        return;
-      case 'layouts':
-        this.handleLayouts(message as unknown as LayoutsMessage);
-        return;
-      case 'slot.update':
-        if (
-          Number.isInteger(message.slot) &&
-          message.slot >= 0 &&
-          message.slot < MAX_PLAYERS &&
-          typeof message.accent === 'string'
-        ) {
-          this.options.onSlotUpdate?.(message);
-        } else {
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid slot update.',
-          );
-        }
-        return;
-      case 'ping':
-        if (typeof message.id === 'string') {
-          if (typeof message.rttMs === 'number' && message.rttMs >= 0)
-            this.options.onPing?.(message.rttMs);
-          this.sendJSON({ type: 'pong', id: message.id });
-        } else
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid heartbeat.',
-          );
-        return;
-      case 'rumble':
-        if (
-          Number.isInteger(message.strong) &&
-          Number.isInteger(message.weak) &&
-          typeof message.active === 'boolean'
-        ) {
-          this.options.onRumble?.(message);
-        } else {
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid rumble message.',
-          );
-        }
-        return;
-      case 'error':
-        if (
-          typeof message.code !== 'string' ||
-          typeof message.message !== 'string'
-        ) {
-          this.reportError(
-            'invalid_message',
-            'The host sent an invalid error message.',
-          );
-          return;
-        }
-        this.handleError(message);
-        return;
-      case 'close':
+      },
+      onLayout: (message) => this.handleLayout(message),
+      onLayouts: (message) => this.handleLayouts(message),
+      onSlotUpdate: (slot, accent) =>
+        this.options.onSlotUpdate?.({ type: 'slot.update', slot, accent }),
+      onPing: (id, rttMs) => {
+        if (rttMs !== undefined) this.options.onPing?.(rttMs);
+        this.sendJSON({ type: 'pong', id });
+      },
+      onRumble: (strong, weak, active) =>
+        this.options.onRumble?.({ type: 'rumble', strong, weak, active }),
+      onControlError: (code, message) =>
+        this.handleError({ type: 'error', code, message }),
+      onClose: (reason) => {
         this.intentionalClose = true;
         this.allowReconnect = false;
-        if (message.reason === 'kicked' || message.reason === 'kick')
-          this.setState('kicked');
+        if (reason === 'kicked' || reason === 'kick') this.setState('kicked');
         else this.setState('closed');
         this.socket?.close();
-        return;
-      case 'session.reset':
+      },
+      onSessionReset: () => {
         this.resetReconnectId();
         this.intentionalClose = true;
         this.allowReconnect = false;
         this.setState('session-reset');
         this.socket?.close();
-        return;
-      default:
-        this.reportError(
-          'invalid_message',
-          'The host sent an unsupported message.',
-        );
-    }
+      },
+      onPublishResult: (id, status) =>
+        this.options.onPublishResult?.({
+          type: 'publish.result',
+          id,
+          status: status as 'accepted' | 'declined' | 'expired' | 'cancelled',
+        }),
+      reportError: (code, message) => this.reportError(code, message),
+    });
   }
 
   private handleWelcome(message: Welcome): void {
-    if (
-      message.protocolVersion !== PROTOCOL_VERSION ||
-      message.frameSize !== FRAME_SIZE ||
-      typeof message.reconnectId !== 'string' ||
-      typeof message.playerId !== 'string' ||
-      !Number.isInteger(message.slot) ||
-      message.slot < 0 ||
-      message.slot >= MAX_PLAYERS ||
-      !Number.isInteger(message.targetInputRate) ||
-      message.targetInputRate < 1 ||
-      typeof message.selectedLayout !== 'string' ||
-      !Array.isArray(message.availableLayouts)
-    ) {
+    if (!isValidWelcome(message)) {
       this.allowReconnect = false;
       this.setState('rejected');
       this.reportError(
@@ -321,29 +223,13 @@ export class ControllerSocket implements ControllerTransport {
   }
 
   private handleLayouts(message: LayoutsMessage): void {
-    if (!Array.isArray(message.layouts)) {
+    const layouts = isValidLayouts(message);
+    if (layouts === undefined) {
       this.reportError(
         'invalid_message',
         'The host sent an invalid layouts update.',
       );
       return;
-    }
-    const layouts: LayoutSummary[] = [];
-    for (const entry of message.layouts) {
-      if (
-        !isRecord(entry) ||
-        typeof entry.id !== 'string' ||
-        typeof entry.name !== 'string' ||
-        !entry.id ||
-        entry.id.length > 64
-      ) {
-        this.reportError(
-          'invalid_message',
-          'The host sent an invalid layouts update.',
-        );
-        return;
-      }
-      layouts.push({ id: entry.id, name: entry.name });
     }
     this.options.onLayouts?.(layouts);
   }
@@ -425,36 +311,3 @@ export function websocketURL(path: string): string {
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function readSessionValue(key: string): string | undefined {
-  try {
-    return sessionStorage.getItem(key) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function writeSessionValue(key: string, value: string): void {
-  try {
-    sessionStorage.setItem(key, value);
-  } catch {
-    // Private browsing storage failures do not prevent a fresh join.
-  }
-}
-
-function removeSessionValue(key: string): void {
-  try {
-    sessionStorage.removeItem(key);
-  } catch {
-    // Private browsing storage failures do not prevent the reset flow.
-  }
-}
-
-// WsTransport is the LAN WebSocket implementation of ControllerTransport.
-// It is the same class as ControllerSocket under its transport name;
-// ControllerSocket stays as the backwards-compatible alias.
-export { ControllerSocket as WsTransport };

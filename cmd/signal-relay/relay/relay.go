@@ -1,16 +1,6 @@
-// Package relay is the v2a signal relay: durable room-code claims plus
-// live join routing between hosts and phones (PLAN Phase 3).
-//
-// Wire endpoints (paths are relay-local, not part of the rtc contract):
-//
-//	GET  /health    liveness probe for the host reachability check
-//	WS   /register  host register loop (no Origin check, non-browser)
-//	WS   /join      guest joins (join-page Origin allowlist enforced)
-//
-// The host holds one outbound /register socket; each phone holds one /join
-// socket only until its SDP exchange completes, then closes it.
-// Post-establishment state lives in host PeerConnections, never in relay
-// messages.
+// Package relay holds the durable room-code claim database and routes SDP
+// between hosts and phones: GET /health for the host probe, WS /register
+// for hosts, WS /join for guests. Live input never flows through it.
 package relay
 
 import (

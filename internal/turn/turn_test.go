@@ -2,11 +2,7 @@ package turn
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -147,35 +143,5 @@ func TestSplitMintedKeepsSTUNAlongsideTURN(t *testing.T) {
 	}
 	if got := SplitMinted([]string{"turn:turn.cloudflare.com:3478"}, "u", "p"); got[0].URLs[0] != STUNURL {
 		t.Fatalf("missing STUN was not backfilled: %+v", got)
-	}
-}
-
-func TestMintOfflineHMACShape(t *testing.T) {
-	username, password := MintOfflineHMAC("key123", "secret", 86400)
-	parts := strings.SplitN(username, ":", 2)
-	if len(parts) != 2 || parts[1] != "key123" {
-		t.Fatalf("offline username = %q, want <expiry>:key123", username)
-	}
-	var expiry int64
-	if _, err := fmt.Sscanf(parts[0], "%d", &expiry); err != nil {
-		t.Fatalf("offline username expiry is not unix seconds: %v", err)
-	}
-	if delta := expiry - time.Now().Unix(); delta < 86390 || delta > 86410 {
-		t.Fatalf("offline username expiry delta = %d, want ~86400", delta)
-	}
-	raw, err := base64.StdEncoding.DecodeString(password)
-	if err != nil {
-		t.Fatalf("offline password is not base64: %v", err)
-	}
-	if len(raw) != 20 {
-		t.Fatalf("offline password decodes to %d bytes, want 20 (HMAC-SHA1)", len(raw))
-	}
-	mac := hmac.New(sha1.New, []byte("secret"))
-	_, _ = mac.Write([]byte(username))
-	if want := base64.StdEncoding.EncodeToString(mac.Sum(nil)); password != want {
-		t.Fatal("offline password does not match HMAC-SHA1(secret, username)")
-	}
-	if _, other := MintOfflineHMAC("key123", "different-secret", 86400); other == password {
-		t.Fatal("different secret minted the same password")
 	}
 }

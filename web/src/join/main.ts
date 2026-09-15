@@ -10,15 +10,14 @@ import {
   renderLayout,
 } from '../controller/layout-renderer';
 import type { StickPrefs } from '../controller/pointer-input';
-import {
-  ControllerSocket,
-  type ControllerSocketOptions,
-  SELECTED_LAYOUT_KEY,
-} from '../controller/socket';
 import { InputStateStore } from '../controller/state';
 import { bindTap } from '../controller/tap';
 import { RtcTransport } from '../controller/transport/rtc-transport';
-import type { ControllerTransport } from '../controller/transport/types';
+import type {
+  ControllerTransport,
+  ControllerTransportOptions,
+} from '../controller/transport/types';
+import { WsTransport } from '../controller/transport/ws-transport';
 import type { Welcome } from '../shared/contracts';
 import type { LayoutDocument } from '../shared/layout';
 import { DEFAULT_LAYOUT, validateLayout } from '../shared/layout';
@@ -29,6 +28,7 @@ import {
   DISPLAY_NAME_KEY,
   GEAR_ICON,
   PILL_LABELS,
+  SELECTED_LAYOUT_KEY,
   SPINNER_ICON,
   shortStatus,
   WAKE_LOCK_KEY,
@@ -907,7 +907,7 @@ function showController(options: {
     island?.unmount();
   };
 
-  const transportOptions: ControllerSocketOptions = {
+  const transportOptions: ControllerTransportOptions = {
     sessionCode: options.sessionCode,
     displayName: options.displayName,
     selectedLayout: (() => {
@@ -918,7 +918,7 @@ function showController(options: {
     capabilities: () => options.capabilities.capabilities,
     onStateChange: (nextState) => {
       cancelButton.hidden = nextState !== 'waiting';
-      updateStatus(nextState === 'active' ? null : null);
+      updateStatus(null);
       if (nextState === 'active') activeSender?.start();
       if (
         nextState === 'closed' ||
@@ -1069,7 +1069,7 @@ function showController(options: {
   // the raw WebSocket, Central pages ride the WebRTC DataChannels.
   const socket: ControllerTransport = shouldUseRtcTransport()
     ? new RtcTransport(transportOptions)
-    : new ControllerSocket(transportOptions);
+    : new WsTransport(transportOptions);
   activeSocket = socket;
   activeSender = new FrameSender(socket, state);
 

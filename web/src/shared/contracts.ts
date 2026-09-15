@@ -68,25 +68,25 @@ export type {
   SlotUpdate,
   Welcome,
 } from './generated/protocol';
-export type { LayoutDocument };
-// Re-export generated signaling contract (Go internal/rtc canonical, Phase 2)
+// Re-export generated signaling contract (Go internal/rtc canonical)
 export type {
   Accept,
   Accepted,
   Answer,
   Conflict,
+  ErrorMessage as RtcErrorMessage,
   ICEServer,
   Join,
   Joined,
   Offer,
-  Pending,
   PeerLeft,
+  Pending,
   Register,
   Registered,
   Reject,
   Rejected,
-  ErrorMessage as RtcErrorMessage,
 } from './generated/rtc';
+export type { LayoutDocument };
 
 export interface PendingPublishRequest {
   id: string;
@@ -110,8 +110,9 @@ export type ServerMessage =
   | import('./generated/protocol').Ping
   | import('./generated/protocol').ErrorMessage
   | import('./generated/protocol').Rumble
-  | { type: 'close'; reason?: string }
-  | { type: 'session.reset' };
+  | import('./generated/protocol').CloseMessage
+  | import('./generated/protocol').ResetMessage
+  | import('./generated/protocol').PublishResult;
 
 export type PlayerState =
   | 'active'

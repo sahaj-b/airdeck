@@ -46,10 +46,7 @@ type PlayerSnapshot struct {
 	RTT           int64       `json:"rttNanos"`
 	DeviceReason  string      `json:"deviceReason,omitempty"`
 	GraceDeadline time.Time   `json:"graceDeadline,omitempty"`
-	// Relayed is host-observed transport: true when the selected ICE
-	// candidate pair is TURN-relayed, false for direct (LAN ws or direct
-	// RTC). Set by httpserver from the PeerManager at snapshot time,
-	// never stored in the session.
+	// Relayed is host-observed transport set by httpserver at snapshot time.
 	Relayed bool `json:"relayed"`
 }
 

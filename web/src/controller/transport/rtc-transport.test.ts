@@ -6,7 +6,7 @@ import {
   RtcTransport,
   type RtcTransportOptions,
 } from './rtc-transport';
-import type { SocketConnection } from './ws-transport';
+import type { SocketConnection } from './types';
 
 const CAPABILITIES = {
   sound: false,
@@ -275,6 +275,48 @@ describe('RtcTransport open mode', () => {
     expect(states.at(-1)).toBe('rejected');
     expect(transport.sendBinary(new Uint8Array(20))).toBe(false);
   });
+
+  it('gives up on a silent open-mode host with the dead-code error', async () => {
+    const { transport, signals, states, errors } = setup({ joinTimeoutMs: 5 });
+    transport.connect();
+    signals[0].open();
+    await flush();
+    // No joined, no error, no pending: the host admitted nothing.
+    expect(states).toEqual(['connecting']);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    await flush();
+    expect(errors).toEqual([
+      { code: 'room_not_found', message: 'Room not found or host offline.' },
+    ]);
+    expect(states.at(-1)).toBe('rejected');
+    expect(signals[0].readyState).toBe(3);
+  });
+
+  it('gives up on a silent post-accept host without stranding the guest', async () => {
+    const { transport, signals, states, errors } = setup({ joinTimeoutMs: 10 });
+    transport.connect();
+    signals[0].open();
+    await flush();
+    signals[0].receive({ type: 'pending', pendingId: 'p1' });
+    await flush();
+    // Waiting on the host parks the timer: no error while queued.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await flush();
+    expect(states.at(-1)).toBe('waiting');
+    expect(errors).toEqual([]);
+    signals[0].receive({
+      type: 'accepted',
+      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
+    });
+    await flush();
+    // Accepted re-arms: silence after the post-accept offer rejects.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await flush();
+    expect(errors).toEqual([
+      { code: 'room_not_found', message: 'Room not found or host offline.' },
+    ]);
+    expect(states.at(-1)).toBe('rejected');
+  });
 });
 
 describe('RtcTransport approval mode', () => {
@@ -287,7 +329,7 @@ describe('RtcTransport approval mode', () => {
     signals[0].receive({ type: 'pending', pendingId: 'p1' });
     await flush();
     expect(states).toContain('waiting');
-    // The open-style pre-accept PC is discarded; the host burned nothing.
+    // The pre-accept PC is discarded; the real offer goes out post-accept.
     expect(pcs[0].closed).toBe(true);
 
     signals[0].receive({

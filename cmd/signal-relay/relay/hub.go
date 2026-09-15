@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"sync"
@@ -15,8 +14,7 @@ const (
 	// maxFrameBytes caps one signaling frame. SDP offers run a few KB;
 	// 64KB leaves headroom while bounding a malicious guest.
 	maxFrameBytes = 64 * 1024
-	// sendQueue mirrors the host transport.Client buffer: one slow phone
-	// must not stall the relay.
+	// sendQueue bounds one slow phone so it cannot stall the relay.
 	sendQueue = 128
 	// pingInterval keeps approval-mode waits alive through proxy idle
 	// timeouts; pongWait bounds a dead peer.
@@ -55,12 +53,12 @@ type pending struct {
 // otherwise it is a post-accept offer flow (guest expects answer).
 type route struct {
 	guest     *guestConn
+	host      *hostConn
 	pendingID string
 	open      bool
 }
 
-// NewHub wires a store to a TURN provider. A nil turn serves STUN-only;
-// a nil now uses wall-clock time.
+// NewHub wires a store to a TURN provider.
 func NewHub(store *Store, provider *turn.Provider, enforceLimits bool) *Hub {
 	if provider == nil {
 		provider = turn.New("", "")
@@ -77,8 +75,7 @@ func NewHub(store *Store, provider *turn.Provider, enforceLimits bool) *Hub {
 	}
 }
 
-// limited enforces one abuse-limit violation. With enforcement off (dev)
-// it logs and lets the caller proceed so testing never fights the limiter.
+// limited reports whether one abuse-limit violation blocks the caller.
 func (h *Hub) limited(reason string) bool {
 	if !h.enforceLimits {
 		log.Printf("relay: limit bypassed (enforce-limits off): %s", reason)
@@ -90,18 +87,15 @@ func (h *Hub) limited(reason string) bool {
 // hostConn is one /register socket. code tracks the current claim so a
 // second register on the same socket (dashboard code change) re-routes.
 type hostConn struct {
-	hub              *Hub
 	conn             *websocket.Conn
 	send             chan []byte
 	done             chan struct{}
 	closeOnce        sync.Once
 	code             string
-	key              string
 	approvalRequired bool
 }
 
 type guestConn struct {
-	hub       *Hub
 	conn      *websocket.Conn
 	send      chan []byte
 	done      chan struct{}
@@ -110,12 +104,12 @@ type guestConn struct {
 	pending   map[string]*pending
 }
 
-func newHostConn(hub *Hub, conn *websocket.Conn) *hostConn {
-	return &hostConn{hub: hub, conn: conn, send: make(chan []byte, sendQueue), done: make(chan struct{})}
+func newHostConn(conn *websocket.Conn) *hostConn {
+	return &hostConn{conn: conn, send: make(chan []byte, sendQueue), done: make(chan struct{})}
 }
 
-func newGuestConn(hub *Hub, conn *websocket.Conn) *guestConn {
-	return &guestConn{hub: hub, conn: conn, send: make(chan []byte, sendQueue), done: make(chan struct{}), pending: make(map[string]*pending)}
+func newGuestConn(conn *websocket.Conn) *guestConn {
+	return &guestConn{conn: conn, send: make(chan []byte, sendQueue), done: make(chan struct{}), pending: make(map[string]*pending)}
 }
 
 func writeJSON(value any) []byte {
@@ -155,8 +149,7 @@ func (c *guestConn) finishClose() {
 	c.closeOnce.Do(func() { close(c.done); _ = c.conn.Close() })
 }
 
-// pumpWriter drains one connection's queue on a single goroutine with a
-// write deadline per frame, mirroring the host transport.Client.
+// pumpWriter drains one connection queue on a single goroutine.
 func pumpWriter(conn *websocket.Conn, out <-chan []byte, done <-chan struct{}, finish func()) {
 	defer finish()
 	for {
@@ -197,11 +190,4 @@ func armPongs(conn *websocket.Conn) {
 		_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-}
-
-// requestContext scopes TURN mint calls behind Servers. The timeout
-// actually comes from the HTTP client's MintTimeout; this only provides
-// the context the mint API requires.
-func requestContext() context.Context {
-	return context.Background()
 }

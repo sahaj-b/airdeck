@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,14 +9,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Join-page origin allowed to open guest signaling sockets. Browsers do
-// not enforce same-origin on WebSocket, so without this check any web
-// page could script joins against a victim's relay.
+// Only this join-page origin may open guest signaling sockets.
 const prodGuestOrigin = "https://airdeck.sahaj.dev"
 
-// Server is the relay HTTP surface: /health plus the two signaling
-// sockets. Host registration skips the Origin check (no browser Origin);
-// guest joins enforce the join-page allowlist.
+// Server is /health plus the two signaling sockets.
 type Server struct {
 	hub            *Hub
 	allowLocalhost bool
@@ -25,9 +20,7 @@ type Server struct {
 	guestUpgrader  websocket.Upgrader
 }
 
-// NewServer builds the routes for one hub. allowLocalhost admits
-// http(s)://localhost, 127.0.0.1, and ::1 (any port) on /join for dev;
-// production serves the join page origin only.
+// NewServer builds the routes for one hub.
 func NewServer(hub *Hub, allowLocalhost bool) *Server {
 	s := &Server{hub: hub, allowLocalhost: allowLocalhost}
 	s.hostUpgrader = websocket.Upgrader{ReadBufferSize: 4096, WriteBufferSize: 4096}
@@ -38,9 +31,7 @@ func NewServer(hub *Hub, allowLocalhost bool) *Server {
 	return s
 }
 
-// checkGuestOrigin mirrors the host's SameOrigin pattern but against a
-// fixed allowlist: empty Origin (curl, tests, future origin-less native
-// clients) passes, browsers must match the join page.
+// checkGuestOrigin enforces the join-page allowlist; empty Origin passes.
 func (s *Server) checkGuestOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -64,15 +55,25 @@ func (s *Server) checkGuestOrigin(r *http.Request) bool {
 }
 
 // Routes exposes /health, /register, and /join.
+func allowGet(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	return true
+}
+
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if !allowGet(w, r) {
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		if !allowGet(w, r) {
 			return
 		}
 		conn, err := s.hostUpgrader.Upgrade(w, r, nil)
@@ -82,8 +83,7 @@ func (s *Server) Routes() http.Handler {
 		s.hub.serveHost(conn, remoteIP(r.RemoteAddr))
 	})
 	mux.HandleFunc("/join", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		if !allowGet(w, r) {
 			return
 		}
 		conn, err := s.guestUpgrader.Upgrade(w, r, nil)

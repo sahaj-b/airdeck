@@ -1,7 +1,6 @@
 // Package online keeps the host registered on the central relay: the
 // outbound register loop, the reachability probe driving the QR flip, and
-// the relay-side routing of joins into the session plus PeerManager
-// (PLAN Phase 5).
+// the relay-side routing of joins into the session plus PeerManager.
 //
 // Established DataChannels never depend on this socket: a relay outage
 // freezes only new remote joins while TURN allocations on Cloudflare and
@@ -43,7 +42,7 @@ const (
 	// one check so a dead network never stalls the loop.
 	probeInterval = 30 * time.Second
 	probeTimeout  = 3 * time.Second
-	// sendQueue mirrors the relay hub: one slow socket never stalls answers.
+	// sendQueue bounds one slow socket so it never stalls answers.
 	sendQueue = 128
 	// writeTimeout bounds one signaling write.
 	writeTimeout = 5 * time.Second
@@ -52,17 +51,11 @@ const (
 	backoffMax   = 30 * time.Second
 )
 
-// offerWaitTimeout bounds accept-to-offer: an accepted admission whose
-// post-accept offer never arrives (guest vanished after accepted, so no
-// peer.left fires) would leak an Active slot with no PC. Fresh ghosts
-// are kicked, reclaims drop back to grace. A var so tests shrink it.
+// offerWaitTimeout bounds accept-to-offer; a var so tests shrink it.
 var offerWaitTimeout = 30 * time.Second
 
-// Options configures one agent. Session and Peers are shared with the rest
-// of the host process; OnStateChange fires (without holding agent locks)
-// whenever reachable/conflict flips so the dashboard and logs update.
+// Options configures one agent. The session owns the room code.
 type Options struct {
-	RoomCode         string
 	InstallationKey  string
 	ApprovalRequired bool
 	LanOnly          bool
@@ -75,7 +68,6 @@ type Options struct {
 // Agent owns the host relay socket and the reachability probe.
 type Agent struct {
 	mu               sync.Mutex
-	roomCode         string
 	installationKey  string
 	approvalRequired bool
 	lanOnly          bool
@@ -118,7 +110,6 @@ func New(opts Options) *Agent {
 		relayURL = DefaultRelayURL
 	}
 	return &Agent{
-		roomCode:         opts.RoomCode,
 		installationKey:  opts.InstallationKey,
 		approvalRequired: opts.ApprovalRequired,
 		lanOnly:          opts.LanOnly,
@@ -130,9 +121,6 @@ func New(opts Options) *Agent {
 		retryCh:          make(chan struct{}, 1),
 	}
 }
-
-// RelayURL reports the configured register endpoint (tests and logs).
-func (a *Agent) RelayURL() string { return a.relayURL }
 
 // Reachable reports the last probe outcome. Live sessions never consult
 // it; only new remote joins and the advertised URL do.
@@ -188,19 +176,17 @@ func (a *Agent) Retry() {
 func (a *Agent) SetCode(roomCode string, approvalRequired bool) {
 	normalized := roomcode.Normalize(roomCode)
 	a.mu.Lock()
-	a.roomCode = normalized
 	a.approvalRequired = approvalRequired
 	a.conflict = ""
 	a.mu.Unlock()
 	a.session.SetCode(normalized)
+	a.session.SetApprovalRequired(approvalRequired)
 	a.notify()
 	a.closeConn()
 	a.Retry()
 }
 
-// SetApprovalRequired mirrors the dashboard toggle onto future registers
-// and re-registers at once so relay routing flips with it. Live PCs are
-// untouched: re-register only swaps the routing flag and refreshes TURN.
+// SetApprovalRequired mirrors the dashboard toggle onto future registers.
 func (a *Agent) SetApprovalRequired(value bool) {
 	a.mu.Lock()
 	if a.approvalRequired == value {
@@ -209,8 +195,6 @@ func (a *Agent) SetApprovalRequired(value bool) {
 	}
 	a.approvalRequired = value
 	a.mu.Unlock()
-	// The session admits by its own flag: update it together so the
-	// relay routing and the admit gate never disagree.
 	a.session.SetApprovalRequired(value)
 	a.closeConn()
 	a.Retry()
@@ -591,7 +575,7 @@ func (a *Agent) handleConflict(data []byte) {
 // join itself through the PeerManager. Admit failures (full, closed)
 // never answer: the relay has no host-to-guest error path for open
 // flows, so the guest PC stays connecting until the phone-side join
-// timeout fires (Phase 6 web owns that timer); answering anyway would
+// timeout fires (the phone owns that timer); answering anyway would
 // establish media against no player, which is worse than a slow no.
 func (a *Agent) handleRelayJoin(data []byte) {
 	var join rtc.Join
@@ -608,16 +592,12 @@ func (a *Agent) handleRelayJoin(data []byte) {
 	}()
 }
 
-// handleRelayPending queues an approval-mode join in the session, except
-// an in-grace reclaimer which skips the queue: accept goes out at once
-// and the stored admission waits for its post-accept offer.
+// handleRelayPending queues an approval-mode join in the session.
 func (a *Agent) handleRelayPending(data []byte) {
 	var pending rtc.Pending
 	if err := json.Unmarshal(data, &pending); err != nil || pending.PendingID == "" {
 		return
 	}
-	// The session owns the code: LAN validation and relay routing read
-	// one source, so a dashboard resolve can never split them.
 	admission, err := a.session.Admit(a.session.Code(), pending.DisplayName, pending.ReconnectID, "", nil, nil)
 	if err != nil {
 		if errors.Is(err, session.ErrApprovalPending) {
@@ -631,16 +611,8 @@ func (a *Agent) handleRelayPending(data []byte) {
 		a.send(rtc.Reject{Type: rtc.MessageReject, PendingID: pending.PendingID, Reason: rejectReason(err)})
 		return
 	}
-	if admission.Reconnected {
-		a.mu.Lock()
-		a.approvals[pending.PendingID] = &approval{admission: admission, accepted: true}
-		a.mu.Unlock()
-		a.send(rtc.Accept{Type: rtc.MessageAccept, PendingID: pending.PendingID})
-		a.armOfferTimeout(pending.PendingID, admission)
-		return
-	}
-	// Approval off but relay queued (flag skew across re-register): accept
-	// server-side at once, mirroring shipment-1 auto-accept.
+	// Admitted at once: either an in-grace reclaimer skipping the queue,
+	// or approval off while the relay queued (flag skew across re-register).
 	a.mu.Lock()
 	a.approvals[pending.PendingID] = &approval{admission: admission, accepted: true}
 	a.mu.Unlock()
@@ -688,34 +660,17 @@ func (a *Agent) handleRelayOffer(data []byte) {
 			// The slot is already freed by the PeerManager; drop the
 			// dead admission so a retried offer cannot attach to a
 			// kicked player and the dashboard counts stay truthful.
-			if pendingID != "" {
-				a.mu.Lock()
-				if current := a.approvals[pendingID]; current == entry {
-					delete(a.approvals, pendingID)
-				}
-				a.mu.Unlock()
-			}
+			a.forgetApproval(pendingID, entry)
 			return
 		}
 		// One-shot: a retransmitted offer after a successful answer is
 		// ignored instead of double-answering a second PC.
-		if pendingID != "" {
-			a.mu.Lock()
-			if current := a.approvals[pendingID]; current == entry {
-				delete(a.approvals, pendingID)
-			}
-			a.mu.Unlock()
-		}
+		a.forgetApproval(pendingID, entry)
 		a.send(rtc.Answer{Type: rtc.MessageAnswer, CorrelationID: offer.CorrelationID, SDP: answer})
 	}()
 }
 
-// handlePeerLeft evaporates a pre-establishment session pending whose
-// guest went away. An already-accepted admission frees its slot the same
-// way a failed answer does (reclaim back to grace, fresh kicked at
-// once); without this an accept-then-vanish leaks an Active slot with no
-// transport and no expiry. Post-establishment disconnects never arrive
-// here; the host PeerConnection owns those.
+// handlePeerLeft evaporates a pre-establishment pending whose guest went away.
 func (a *Agent) handlePeerLeft(data []byte) {
 	var left rtc.PeerLeft
 	if err := json.Unmarshal(data, &left); err != nil || left.PendingID == "" {
@@ -732,19 +687,15 @@ func (a *Agent) handlePeerLeft(data []byte) {
 	}
 	if entry.sessionPending != "" {
 		a.session.RemovePending(entry.sessionPending)
-	} else if entry.accepted && entry.admission.Player.ID != "" {
-		if entry.admission.Reconnected {
-			_ = a.session.Disconnect(entry.admission.Player.ID, entry.admission.Player.Generation)
-		} else {
-			_ = a.session.Kick(entry.admission.Player.ID)
-		}
+	} else if entry.accepted {
+		a.dropAdmission(entry.admission)
 	}
 	a.notify()
 }
 
 // AcceptPending continues one queued approval join toward slot assignment
-// and releases the guest to offer. The dashboard (Phase 7) calls this;
-// a full session keeps the pending queued and reports the error.
+// and releases the guest to offer; a full session keeps the pending queued
+// and reports the error.
 func (a *Agent) AcceptPending(relayPendingID string) error {
 	a.mu.Lock()
 	entry := a.approvals[relayPendingID]
@@ -799,44 +750,39 @@ func (a *Agent) armOfferTimeout(relayPendingID string, admission session.Admissi
 		}
 		delete(a.approvals, relayPendingID)
 		a.mu.Unlock()
-		if admission.Player.ID == "" {
-			return
-		}
-		if admission.Reconnected {
-			_ = a.session.Disconnect(admission.Player.ID, admission.Player.Generation)
-		} else {
-			_ = a.session.Kick(admission.Player.ID)
-		}
+		a.dropAdmission(admission)
 		a.notify()
 	})
 }
 
-// IsRelayed reports the dashboard transport badge for one player: true
-// when the selected ICE pair is TURN-relayed, false for direct or LAN.
-func (a *Agent) IsRelayed(playerID string) bool {
-	if a == nil {
-		return false
-	}
+// forgetApproval drops one relay approval only if it still maps to entry.
+func (a *Agent) forgetApproval(pendingID string, entry *approval) {
 	a.mu.Lock()
-	peers := a.peers
-	a.mu.Unlock()
-	if peers == nil {
-		return false
+	if current := a.approvals[pendingID]; current == entry {
+		delete(a.approvals, pendingID)
 	}
-	return peers.IsRelayed(playerID)
+	a.mu.Unlock()
 }
 
-// PendingCount reports queued relay approvals (dashboard badge).
-func (a *Agent) PendingCount() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	n := 0
-	for _, entry := range a.approvals {
-		if !entry.accepted {
-			n++
-		}
+// dropAdmission frees one accepted slot: reclaims drop back to grace,
+// fresh admissions kick at once.
+func (a *Agent) dropAdmission(admission session.Admission) {
+	if admission.Player.ID == "" {
+		return
 	}
-	return n
+	if admission.Reconnected {
+		_ = a.session.Disconnect(admission.Player.ID, admission.Player.Generation)
+	} else {
+		_ = a.session.Kick(admission.Player.ID)
+	}
+}
+
+// IsRelayed reports the dashboard transport badge for one player.
+func (a *Agent) IsRelayed(playerID string) bool {
+	if a == nil || a.peers == nil {
+		return false
+	}
+	return a.peers.IsRelayed(playerID)
 }
 
 // Pendings returns the queued relay approvals for the dashboard queue.

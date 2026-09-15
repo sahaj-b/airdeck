@@ -1,24 +1,24 @@
-// Package roomcode implements the persistent room-code format from SPEC v2a.
-//
-// Generated codes are 6 chars from a Crockford-style alphabet (A-Z/2-9
-// minus ambiguous 0/O, 1/I/L). Custom codes are 4-24 chars from the same
-// alphabet plus dash. Normalization before lookup and claiming: trim,
-// uppercase, strip dashes and spaces.
+// Package roomcode implements the persistent room-code format.
 package roomcode
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"math/big"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
-// alphabet is A-Z minus I/L/O plus 2-9 (0 and 1 excluded as ambiguous).
-// 23 letters + 8 digits = 31 chars.
 const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+// validChar is an O(1) lookup for Validate; alphabet is ASCII-only.
+var validChar = func() [128]bool {
+	var t [128]bool
+	for i := 0; i < len(alphabet); i++ {
+		t[alphabet[i]] = true
+	}
+	return t
+}()
 
 // GeneratedLength is the length of auto-generated room codes.
 const GeneratedLength = 6
@@ -29,13 +29,10 @@ const (
 	MaxLength = 24
 )
 
-// Normalize folds a user-entered code to its canonical lookup form:
-// trim, uppercase, strip dashes and spaces.
+// Normalize folds a user-entered code to its canonical lookup form.
 func Normalize(code string) string {
 	code = strings.TrimSpace(code)
 	code = strings.ToUpper(code)
-	// Strip dashes and whitespace (spaces, tabs, etc.) so "ab-cd 12"
-	// and "ABCD12" claim the same room.
 	return strings.Map(func(r rune) rune {
 		if r == '-' || unicode.IsSpace(r) {
 			return -1
@@ -44,17 +41,15 @@ func Normalize(code string) string {
 	}, code)
 }
 
-// Validate rejects anything that is not 4-24 chars from the room-code
-// alphabet after normalization. Dashes, spaces, and lowercase are accepted
-// pre-normalization; ambiguous 0/O/1/I/L never validate.
+// Validate rejects anything outside the room-code alphabet after normalization.
 func Validate(code string) error {
 	normalized := Normalize(code)
-	length := utf8.RuneCountInString(normalized)
-	if length < MinLength || length > MaxLength {
-		return fmt.Errorf("room code must be %d-%d characters after normalization, got %d", MinLength, MaxLength, length)
+	runes := []rune(normalized)
+	if len(runes) < MinLength || len(runes) > MaxLength {
+		return fmt.Errorf("room code must be %d-%d characters after normalization, got %d", MinLength, MaxLength, len(runes))
 	}
-	for _, r := range normalized {
-		if !strings.ContainsRune(alphabet, r) {
+	for _, r := range runes {
+		if r >= 128 || !validChar[r] {
 			return fmt.Errorf("room code contains invalid character %q (allowed: A-Z except I/L/O, 2-9, dash)", r)
 		}
 	}
@@ -64,19 +59,27 @@ func Validate(code string) error {
 // Generate returns a random 6-char code from the room-code alphabet.
 func Generate() (string, error) {
 	out := make([]byte, GeneratedLength)
-	max := big.NewInt(int64(len(alphabet)))
-	for i := range out {
-		n, err := rand.Int(rand.Reader, max)
-		if err != nil {
+	// 31 symbols; reject bytes >= 248 so the pick stays uniform.
+	var buf [16]byte
+	filled := 0
+	for filled < GeneratedLength {
+		if _, err := rand.Read(buf[:]); err != nil {
 			return "", fmt.Errorf("generate room code: %w", err)
 		}
-		out[i] = alphabet[n.Int64()]
+		for _, b := range buf {
+			if b < 248 {
+				out[filled] = alphabet[int(b)%len(alphabet)]
+				filled++
+				if filled == GeneratedLength {
+					break
+				}
+			}
+		}
 	}
 	return string(out), nil
 }
 
-// GenerateInstallationKey returns a random 32-byte hex key proving ownership
-// of a room-code claim. It is stored 0600 in host config and never logged.
+// GenerateInstallationKey returns a random 32-byte hex ownership key.
 func GenerateInstallationKey() (string, error) {
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {

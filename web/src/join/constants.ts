@@ -1,7 +1,8 @@
-import type { ConnectionState } from '../controller/socket';
+import type { ConnectionState } from '../controller/transport/types';
 import { MAX_PLAYERS } from '../shared/contracts';
 
 export const DISPLAY_NAME_KEY = 'airdeck.displayName';
+export const SELECTED_LAYOUT_KEY = 'airdeck.selectedLayout';
 export const WAKE_LOCK_KEY = 'airdeck.wakeLock';
 export const DEFAULT_NAME_PATTERN = /^player(?: \d{1,2})?$/i;
 

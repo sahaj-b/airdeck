@@ -68,7 +68,7 @@ func flipAgent(t *testing.T, sess *session.Session, relay *httptest.Server, lanO
 	handler := input.NewHandler(sess)
 	peers := rtchost.New(sess, handler, freshLayouts(t), 60)
 	agent := online.New(online.Options{
-		RoomCode: sess.Code(), InstallationKey: "test-key", LanOnly: lanOnly,
+		InstallationKey: "test-key", LanOnly: lanOnly,
 		RelayURL: "ws" + strings.TrimPrefix(relay.URL, "http") + "/register",
 		Session:  sess, Peers: peers,
 	})
@@ -88,9 +88,6 @@ func waitAgent(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-// TestAdvertisedJoinURLFlipsOnlineWhenReachable is the Phase 5 QR gate:
-// offline hosts advertise the LAN URL with the persistent code;
-// reachable owners advertise the join page.
 func TestAdvertisedJoinURLFlipsOnlineWhenReachable(t *testing.T) {
 	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
 	defer sess.Close()

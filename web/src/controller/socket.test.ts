@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import xboxDefault from '../layouts/xbox-default.json';
 import { MAX_PLAYERS } from '../shared/contracts';
-import { ControllerSocket, type SocketConnection } from './socket';
+import type { SocketConnection } from './transport/types';
+import { WsTransport } from './transport/ws-transport';
 
 class FakeSocket implements SocketConnection {
   readyState = 0;
@@ -31,11 +32,11 @@ class FakeSocket implements SocketConnection {
   }
 }
 
-describe('ControllerSocket', () => {
+describe('WsTransport', () => {
   it('sends hello, answers heartbeat, and activates after a valid layout', () => {
     const fake = new FakeSocket();
     const states: string[] = [];
-    const socket = new ControllerSocket({
+    const socket = new WsTransport({
       sessionCode: '4821',
       displayName: 'Ada',
       capabilities: {
@@ -94,7 +95,7 @@ describe('ControllerSocket', () => {
   it('reports heartbeat RTT and still replies with a pong', () => {
     const fake = new FakeSocket();
     const pings: number[] = [];
-    new ControllerSocket({
+    new WsTransport({
       sessionCode: '4821',
       capabilities: {
         sound: false,
@@ -120,7 +121,7 @@ describe('ControllerSocket', () => {
     const fake = new FakeSocket();
     const updates: Array<{ slot: number; accent: string }> = [];
     const errors: string[] = [];
-    const socket = new ControllerSocket({
+    const socket = new WsTransport({
       sessionCode: '4821',
       capabilities: {
         sound: false,
@@ -151,7 +152,7 @@ describe('ControllerSocket', () => {
     const fake = new FakeSocket();
     const seen: Array<Array<{ id: string; name: string }>> = [];
     const errors: string[] = [];
-    new ControllerSocket({
+    new WsTransport({
       sessionCode: '4821',
       capabilities: {
         sound: false,
@@ -187,7 +188,7 @@ describe('ControllerSocket', () => {
   it('rejects the connection after a pre-welcome admission error', () => {
     const fake = new FakeSocket();
     const states: string[] = [];
-    const socket = new ControllerSocket({
+    const socket = new WsTransport({
       sessionCode: '0000',
       capabilities: {
         sound: false,

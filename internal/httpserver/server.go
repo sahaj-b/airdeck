@@ -190,9 +190,6 @@ func (s *Server) AdvertisedJoinURL() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	code := s.options.Session.Code()
-	// Online when central is reachable and the claim is ours; otherwise
-	// the same persistent code over LAN. Established DataChannels never
-	// consult this: only new joins do.
 	if s.options.Online != nil && s.options.Online.Reachable() && s.options.Online.Conflict() == "" {
 		return online.OnlineJoinURL(code)
 	}
@@ -207,16 +204,14 @@ func (s *Server) AdvertisedJoinURL() string {
 	return advertisedURL(host, port, code)
 }
 
-// OnlineJoinURL always builds the join-page URL for the current code,
-// regardless of reachability, so the dashboard can show both targets.
+// OnlineJoinURL builds the join-page URL for the current code.
 func (s *Server) OnlineJoinURL() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return online.OnlineJoinURL(s.options.Session.Code())
 }
 
-// SetOnline installs the central agent after construction (app wires it
-// once; tests leave it nil for offline LAN behavior).
+// SetOnline installs the central agent after construction.
 func (s *Server) SetOnline(agent *online.Agent) {
 	s.mu.Lock()
 	s.options.Online = agent
@@ -364,15 +359,8 @@ func (s *Server) broadcastAdmin(value any) {
 	s.mu.Unlock()
 }
 
-func (s *Server) broadcastAdminState() {
+func (s *Server) BroadcastAdminState() {
 	s.broadcastAdmin(s.currentState())
-}
-
-// BroadcastState pushes the current admin snapshot to dashboard sockets.
-// The online agent calls it when central reachability or claim conflict
-// flips so banners and the QR update without a dashboard reload.
-func (s *Server) BroadcastState() {
-	s.broadcastAdminState()
 }
 
 // broadcastPhoneLayouts pushes the layout catalogue to all connected phones.

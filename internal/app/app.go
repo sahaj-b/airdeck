@@ -62,14 +62,12 @@ func New(cfg config.Config, configPath string) (*App, error) {
 		return config.Save(configPath, updated)
 	}})
 	agent := online.New(online.Options{
-		RoomCode: cfg.RoomCode, InstallationKey: cfg.InstallationKey,
+		InstallationKey:  cfg.InstallationKey,
 		ApprovalRequired: cfg.ApprovalRequired, LanOnly: cfg.LanOnly,
 		Session: sess, Peers: peers,
 		OnStateChange: func() {
-			httpServer.BroadcastState()
-			// Reprint so the terminal tracks the dashboard: startup always
-			// prints LAN (the probe has not run yet), then the flip lands
-			// here. TTY-gated and rare, never spam.
+			httpServer.BroadcastAdminState()
+			// Reprint so the terminal tracks the dashboard QR flip.
 			joinURL := httpServer.AdvertisedJoinURL()
 			log.Printf("join URL %s", joinURL)
 			printJoinQR(joinURL)

@@ -63,7 +63,6 @@ type Pending struct {
 	ID             string
 	DisplayName    string
 	fallbackName   bool
-	ReconnectID    string
 	SelectedLayout string
 	WaitingSince   time.Time
 	Send           func(any) error
@@ -115,9 +114,7 @@ func New(layouts *layout.Library, devices *device.Manager, gracePeriod time.Dura
 	return &Session{code: code, codeRequired: true, acceptingJoins: true, players: make(map[string]*Player), pendings: make(map[string]*Pending), layouts: layouts, defaultLayout: layouts.Default().ID, devices: devices, gracePeriod: gracePeriod}, nil
 }
 
-// newCode generates a room-code-alphabet code so a fresh Session passes
-// protocol.DecodeHello before app.New overwrites it with the persistent
-// config room code. NewSession never rotates; the code lives in config.
+// newCode generates a boot code overwritten by app.New with the config code.
 func newCode() (string, error) {
 	return roomcode.Generate()
 }
@@ -128,6 +125,19 @@ func newID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes[:]), nil
+}
+
+// sanitizeDisplayName trims and caps the player label; empty becomes a
+// slot fallback at admit time.
+func sanitizeDisplayName(displayName string) (name string, fallback bool) {
+	name = strings.TrimSpace(displayName)
+	if runes := []rune(name); len(runes) > 40 {
+		name = string(runes[:40])
+	}
+	if name == "" {
+		return "Player", true
+	}
+	return name, false
 }
 
 func (s *Session) Code() string {
@@ -149,24 +159,21 @@ func (s *Session) SetAcceptingJoins(value bool) {
 	s.emit(Event{Type: "joins"})
 }
 
-// SetCodeRequired(false) lets clients admit with an empty session code,
-// trading the LAN room guard for a frictionless drop-in join.
+// SetCodeRequired toggles the LAN room guard.
 func (s *Session) SetCodeRequired(value bool) {
 	s.mu.Lock()
 	s.codeRequired = value
 	s.mu.Unlock()
 }
 
-// SetCode installs the persistent config room code. app.New calls this
-// right after New so the random boot code never serves a join.
+// SetCode installs the persistent config room code.
 func (s *Session) SetCode(code string) {
 	s.mu.Lock()
 	s.code = roomcode.Normalize(code)
 	s.mu.Unlock()
 }
 
-// SetApprovalRequired toggles the admission gate. Off (default) admits
-// immediately; on parks new joins as pendings until AcceptPending.
+// SetApprovalRequired toggles the admission gate.
 func (s *Session) SetApprovalRequired(value bool) {
 	s.mu.Lock()
 	s.approvalRequired = value
@@ -180,7 +187,7 @@ func (s *Session) ApprovalRequired() bool {
 	return s.approvalRequired
 }
 
-// Pendings lists queued approval joins oldest-first for the dashboard.
+// Pendings lists queued approval joins oldest-first.
 func (s *Session) Pendings() []PendingSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -192,10 +199,8 @@ func (s *Session) Pendings() []PendingSnapshot {
 	return out
 }
 
-// CheckCode validates a room code without admitting. The RTC
-// control-channel hello calls this: admit already happened at
-// join-forward (open) or accept (approval), so hello must never mint a
-// second player.
+// CheckCode validates a room code without admitting; hello must never
+// mint a second player.
 func (s *Session) CheckCode(sessionCode string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -206,10 +211,7 @@ func (s *Session) CheckCode(sessionCode string) error {
 }
 
 // AttachTransport installs the live transport callbacks for an admitted
-// player. The RTC path admits at join-forward time before any DataChannel
-// exists, so the control channel calls this when its validation-only
-// hello succeeds. It swaps senders only: slot, generation, and reconnect
-// identity are untouched, and it can never mint a second player.
+// player without touching slot, generation, or reconnect identity.
 func (s *Session) AttachTransport(id string, generation uint64, send func(any) error, close func()) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -297,36 +299,15 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 		return Admission{}, ErrSessionFull
 	}
 	// Approval gate: reclaim already returned above and skips re-approval.
-	// Expired/stale reconnect IDs fall through and queue as new. Shipment 1
-	// leaves the toggle off so this branch never runs until the dashboard
-	// ships it; the /ws caller handles ErrApprovalPending without closing.
 	if s.approvalRequired {
 		id, err := newID()
 		if err != nil {
 			s.mu.Unlock()
 			return Admission{}, fmt.Errorf("generate pending id: %w", err)
 		}
-		for {
-			if _, exists := s.pendings[id]; !exists {
-				break
-			}
-			id, err = newID()
-			if err != nil {
-				s.mu.Unlock()
-				return Admission{}, fmt.Errorf("generate pending id: %w", err)
-			}
-		}
-		name := strings.TrimSpace(displayName)
-		if runes := []rune(name); len(runes) > 40 {
-			name = string(runes[:40])
-		}
-		fallback := false
-		if name == "" {
-			name = "Player"
-			fallback = true
-		}
+		name, fallback := sanitizeDisplayName(displayName)
 		pending := &Pending{
-			ID: id, DisplayName: name, fallbackName: fallback, ReconnectID: reconnectID,
+			ID: id, DisplayName: name, fallbackName: fallback,
 			SelectedLayout: selectedLayout, WaitingSince: time.Now(),
 			Send: send, Close: close, wait: make(chan PendingOutcome, 1),
 		}
@@ -353,11 +334,8 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	if _, ok := s.layouts.Get(selectedLayout); !ok {
 		selectedLayout = s.defaultLayout
 	}
-	name := strings.TrimSpace(displayName)
-	if runes := []rune(name); len(runes) > 40 {
-		name = string(runes[:40])
-	}
-	if name == "" {
+	name, fallback := sanitizeDisplayName(displayName)
+	if fallback {
 		name = fmt.Sprintf("Player %d", slot+1)
 	}
 	player := &Player{ID: id, Slot: slot, Name: name, Accent: slotAccents[slot], State: StateActive, LayoutID: selectedLayout, Generation: 1, ReconnectID: reconnect, Send: send, Close: close}
@@ -376,11 +354,7 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	return Admission{Player: snapshot}, nil
 }
 
-// AcceptPending promotes one queued join to a player: slot assign plus
-// device create, holding the same lifecycleMu-then-state order as Admit so
-// apply-after-destroy is impossible. It returns the Admission for the
-// caller to build the welcome; a /ws waiter also receives it on the
-// pending channel. A full session keeps the pending queued for retry.
+// AcceptPending promotes one queued join to a player.
 func (s *Session) AcceptPending(id string) (Admission, error) {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
@@ -390,6 +364,9 @@ func (s *Session) AcceptPending(id string) (Admission, error) {
 		s.mu.Unlock()
 		return Admission{}, ErrPendingNotFound
 	}
+	// LifecycleMu blocks RemovePending, RejectPending, and NewSession for
+	// the whole call, so the pending cannot evaporate mid-create. No
+	// recheck after device I/O: per-slot locks would need to bring one back.
 	slot := firstFree(s.slots)
 	if slot < 0 {
 		s.mu.Unlock()
@@ -423,11 +400,6 @@ func (s *Session) AcceptPending(id string) (Admission, error) {
 		return Admission{}, fmt.Errorf("create virtual device for slot %d: %w", slot, err)
 	}
 	s.mu.Lock()
-	if _, ok := s.pendings[id]; !ok {
-		s.mu.Unlock()
-		_ = s.devices.Destroy(slot)
-		return Admission{}, ErrPendingNotFound
-	}
 	delete(s.pendings, id)
 	s.players[player.ID] = player
 	s.slots[slot] = player
@@ -444,9 +416,7 @@ func (s *Session) AcceptPending(id string) (Admission, error) {
 	return admission, nil
 }
 
-// RejectPending drops one queued join. The /ws waiter sends the declined
-// wire message itself; the relay path notifies the guest via accept/reject
-// on its own socket. Session only evaporates and wakes the waiter.
+// RejectPending drops one queued join.
 func (s *Session) RejectPending(id, reason string) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
@@ -469,8 +439,6 @@ func (s *Session) RejectPending(id, reason string) error {
 }
 
 // RemovePending evaporates one queued join when its guest disconnects.
-// No timers: a pending lives exactly while the guest stays connected.
-// No-op when the id is already gone (accept/reject won the race).
 func (s *Session) RemovePending(id string) {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
@@ -490,11 +458,14 @@ func (s *Session) RemovePending(id string) {
 	s.emit(Event{Type: "pending.left", Message: id})
 }
 
-// BuildWelcome renders the pre-built welcome for an admitted player. The
-// RTC control-channel hello calls this after CheckCode instead of Admit,
-// so one join can never mint two players.
+// BuildWelcome renders the welcome for an admitted player.
 func BuildWelcome(player PlayerSnapshot, layouts *layout.Library, targetInputRate int) protocol.Welcome {
-	welcome := protocol.Welcome{Type: protocol.MessageWelcome, PlayerID: player.ID, Slot: player.Slot, DisplayName: player.Name, Accent: player.Accent, ReconnectID: player.ReconnectID, ProtocolVersion: protocol.Version, FrameSize: protocol.FrameSize, TargetInputRate: targetInputRate, SelectedLayout: player.LayoutID}
+	welcome := protocol.Welcome{
+		Type: protocol.MessageWelcome, PlayerID: player.ID, Slot: player.Slot,
+		DisplayName: player.Name, Accent: player.Accent, ReconnectID: player.ReconnectID,
+		ProtocolVersion: protocol.Version, FrameSize: protocol.FrameSize,
+		TargetInputRate: targetInputRate, SelectedLayout: player.LayoutID,
+	}
 	welcome.AvailableLayouts = make([]protocol.LayoutSummary, 0)
 	for _, summary := range layouts.Summaries() {
 		welcome.AvailableLayouts = append(welcome.AvailableLayouts, protocol.LayoutSummary{ID: summary.ID, Name: summary.Name})
@@ -502,10 +473,7 @@ func BuildWelcome(player PlayerSnapshot, layouts *layout.Library, targetInputRat
 	return welcome
 }
 
-// AdmissionError maps session failures to stable wire codes shared by the
-// LAN socket and the future WebRTC control channel. Existing codes are
-// byte-identical; pending_gone mirrors the relay evaporate signal and
-// room_not_found mirrors the relay generic dead-code error.
+// AdmissionError maps session failures to stable wire codes.
 func AdmissionError(err error) (string, string) {
 	switch {
 	case errors.Is(err, ErrInvalidCode):

@@ -9,27 +9,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// ErrConflict reports a claim that loses: the code is active under another
-// installation key, or it is tombstoned (retired codes burn permanently
-// and are never reassigned, not even to the installation that burned
-// them).
+// ErrConflict reports a claim lost to another key or a tombstoned code.
 var ErrConflict = errors.New("room code is claimed by another installation")
 
-// ErrNotOwner reports a code change whose old code is not actively owned
-// by the calling installation key.
-var ErrNotOwner = errors.New("old room code is not owned by this installation")
-
-// Claim is one durable row: the normalized code, the owning installation
-// key, and whether the code is tombstoned.
+// Claim is one durable row.
 type Claim struct {
 	RoomCode        string
 	InstallationKey string
 	Retired         bool
 }
 
-// Store is the durable claim database. Rows are hundreds of bytes and the
-// relay writes on register only, so a single serialized connection is
-// plenty (and it keeps :memory: databases correct in tests).
+// Store is the durable claim database.
 type Store struct {
 	db *sql.DB
 }
@@ -54,7 +44,8 @@ CREATE TABLE IF NOT EXISTS code_changes(
 	day TEXT NOT NULL,
 	count INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY(installation_key, day)
-);`
+);
+CREATE INDEX IF NOT EXISTS idx_claims_key ON claims(installation_key, retired);`
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate claim database: %w", err)
@@ -67,8 +58,7 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// Lookup returns the durable row for one normalized code, or
-// sql.ErrNoRows when the code was never claimed.
+// Lookup returns the durable row for one normalized code.
 func (s *Store) Lookup(code string) (Claim, error) {
 	var claim Claim
 	var retired int
@@ -82,8 +72,7 @@ func (s *Store) Lookup(code string) (Claim, error) {
 	return claim, nil
 }
 
-// ActiveForKey returns the currently active (non-retired) code owned by
-// one installation key, or "" when it owns nothing.
+// ActiveForKey returns the active code owned by one key, or empty.
 func (s *Store) ActiveForKey(key string) (string, error) {
 	var code string
 	err := s.db.QueryRow(
@@ -99,15 +88,10 @@ func (s *Store) ActiveForKey(key string) (string, error) {
 type RegisterResult struct {
 	// ChangedFrom is the tombstoned old code when the host moved codes.
 	ChangedFrom string
-	// Reconnected is true when the host re-registered its own active code.
-	Reconnected bool
 }
 
-// Register atomically claims code for key: unclaimed inserts, same-key
-// active touches updated_at (host restart re-register), anything else
-// conflicts. A same-key register for a different code is a code change:
-// the old row tombstones (retired=1, key kept) and the new row claims in
-// the same transaction, so a crash never orphans or double-owns a code.
+// Register atomically claims code for key; a same-key move tombstones
+// the old row and claims the new one in the same transaction.
 func (s *Store) Register(code, key string) (RegisterResult, error) {
 	now := time.Now().UnixMilli()
 	tx, err := s.db.Begin()
@@ -138,7 +122,6 @@ func (s *Store) Register(code, key string) (RegisterResult, error) {
 		if err := tx.Commit(); err != nil {
 			return RegisterResult{}, fmt.Errorf("commit claim: %w", err)
 		}
-		result.Reconnected = true
 		return result, nil
 	}
 
@@ -151,19 +134,6 @@ func (s *Store) Register(code, key string) (RegisterResult, error) {
 		// First claim for this installation.
 	case err != nil:
 		return RegisterResult{}, fmt.Errorf("lookup active claim: %w", err)
-	case active == code:
-		// Same-key active row the SELECT above somehow missed; treat as
-		// reconnect rather than erroring a live host.
-		if _, err := tx.Exec(
-			`UPDATE claims SET updated_at = ? WHERE room_code = ?`, now, code,
-		); err != nil {
-			return RegisterResult{}, fmt.Errorf("touch claim: %w", err)
-		}
-		if err := tx.Commit(); err != nil {
-			return RegisterResult{}, fmt.Errorf("commit claim: %w", err)
-		}
-		result.Reconnected = true
-		return result, nil
 	default:
 		if _, err := tx.Exec(
 			`UPDATE claims SET retired = 1, updated_at = ? WHERE room_code = ?`, now, active,
@@ -185,48 +155,7 @@ func (s *Store) Register(code, key string) (RegisterResult, error) {
 	return result, nil
 }
 
-// ClaimGenerated claims a fresh generated code for key, regenerating on
-// collision inside the same transaction. A tombstoned code never gets
-// reused: retired rows collide like active ones and force a retry.
-//
-// TODO(phase-7): no caller yet. Unlike Register it does not tombstone the
-// key's existing active code, so the dashboard "Generate new code" path
-// must either call Register (which owns the single-active invariant) or
-// gain tombstoning here before use.
-func (s *Store) ClaimGenerated(key string, generate func() string, tries int) (string, error) {
-	if tries <= 0 {
-		tries = 10
-	}
-	now := time.Now().UnixMilli()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return "", fmt.Errorf("begin generated claim: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	for i := 0; i < tries; i++ {
-		code := generate()
-		res, err := tx.Exec(
-			`INSERT OR IGNORE INTO claims(room_code, installation_key, retired, created_at, updated_at) VALUES(?, ?, 0, ?, ?)`,
-			code, key, now, now,
-		)
-		if err != nil {
-			return "", fmt.Errorf("insert generated claim: %w", err)
-		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			return "", fmt.Errorf("generated claim rows: %w", err)
-		}
-		if affected == 1 {
-			if err := tx.Commit(); err != nil {
-				return "", fmt.Errorf("commit generated claim: %w", err)
-			}
-			return code, nil
-		}
-	}
-	return "", fmt.Errorf("generated %d colliding codes in a row: %w", tries, ErrConflict)
-}
-
-// ChangeCount returns how many code changes key already burned today (UTC).
+// ChangeCount returns how many code changes key burned today.
 func (s *Store) ChangeCount(key, day string) (int, error) {
 	var count int
 	err := s.db.QueryRow(

@@ -1,10 +1,5 @@
-// Command signal-relay is the v2a central signaling relay: it holds the
-// durable room-code claim database, routes SDP between hosts and phones,
-// and mints cached Cloudflare TURN credentials for both sides.
-//
-// Hosts dial wss://<relay>/register and phones dial wss://<relay>/join.
-// Live input frames never flow through this binary: after the SDP
-// exchange the DataChannels run phone-to-host directly (or via TURN).
+// Command signal-relay holds the room-code claim database and routes
+// SDP between hosts and phones.
 package main
 
 import (
@@ -52,7 +47,7 @@ func run(args []string) error {
 	}
 	defer func() { _ = store.Close() }()
 	provider := turn.New(*turnKeyID, *turnSecret)
-	if !provider.Configured() {
+	if *turnKeyID == "" || *turnSecret == "" {
 		log.Printf("signal-relay: no TURN credentials, serving STUN-only iceServers")
 	}
 	hub := relay.NewHub(store, provider, *enforceLimits)

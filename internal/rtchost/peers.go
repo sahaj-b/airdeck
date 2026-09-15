@@ -1,6 +1,6 @@
 // Package rtchost answers WebRTC phones on the host: one pion
 // PeerConnection per phone, DataChannel dispatch, and the same
-// session/input contract the LAN socket uses (PLAN Phase 5).
+// session/input contract the LAN socket uses.
 //
 // Signaling (offer in, answer out) rides the relay socket owned by
 // internal/online; media runs phone-to-host directly or via Cloudflare
@@ -33,14 +33,14 @@ const (
 	// ControlLabel is the reliable-ordered channel carrying the JSON
 	// protocol. InputsLabel is the unreliable-unordered channel carrying
 	// 20-byte frames. Both are created by the phone; the host only
-	// handles ondatachannel. Labels and protocol match SPEC exactly.
+	// handles ondatachannel.
 	ControlLabel = "control"
 	InputsLabel  = "inputs"
 	// DataChannelProtocol tags both channels so a mislabeled future
 	// channel fails loudly instead of being misdispatched.
 	DataChannelProtocol = "airdeck-v1"
-	// maxBufferedBytes mirrors the SPEC drop rule: frames queueing past
-	// this on the host control channel are dropped, never blocking input.
+	// maxBufferedBytes caps queued control-channel frames; overflow drops,
+	// never blocks input.
 	maxBufferedBytes = 1024
 	// maxControlBytes caps one control-channel JSON frame, mirroring the
 	// LAN socket read limit.
@@ -150,20 +150,11 @@ func toPion(servers []rtc.ICEServer) []webrtc.ICEServer {
 	return out
 }
 
-// HandleJoin admits an open-mode join and answers its offer. Admit rides
-// the join itself (reclaim inside grace bumps the generation and skips
-// approval, exactly like the LAN path); the control-channel hello later
-// only validates and receives the pre-built welcome. A replacement join
-// for a known player closes the previous PeerConnection first so only one
-// PC drives a slot.
+// HandleJoin admits an open-mode join and answers its offer.
 func (m *PeerManager) HandleJoin(join rtc.Join) (string, session.Admission, error) {
 	if join.Offer == "" {
 		return "", session.Admission{}, errors.New("open-mode join carries no offer")
 	}
-	m.mu.Lock()
-	iceServers := append([]rtc.ICEServer(nil), m.iceServers...)
-	turnOnly := m.turnOnly
-	m.mu.Unlock()
 	admission, err := m.session.Admit(m.session.Code(), join.DisplayName, join.ReconnectID, "", nil, nil)
 	if err != nil {
 		// Flag skew (relay still open while the dashboard already
@@ -176,18 +167,14 @@ func (m *PeerManager) HandleJoin(join rtc.Join) (string, session.Admission, erro
 		}
 		return "", session.Admission{}, err
 	}
-	answer, pc, err := m.answerOffer(join.Offer, iceServers, turnOnly)
+	answer, err := m.answerAndAttach(join.Offer, admission)
 	if err != nil {
-		m.abandon(admission)
 		return "", session.Admission{}, err
 	}
-	m.attach(admission, pc)
 	return answer, admission, nil
 }
 
-// HandleOffer answers a post-accept approval offer for an already
-// admitted player. The admission comes from the accept the agent stored;
-// this never runs Admit and so can never mint a second player.
+// HandleOffer answers a post-accept approval offer for an admitted player.
 func (m *PeerManager) HandleOffer(offer rtc.Offer, admission session.Admission) (string, error) {
 	if offer.SDP == "" {
 		return "", errors.New("approval offer carries no sdp")
@@ -195,11 +182,21 @@ func (m *PeerManager) HandleOffer(offer rtc.Offer, admission session.Admission) 
 	if admission.Player.ID == "" {
 		return "", errors.New("approval offer has no admitted player")
 	}
+	answer, err := m.answerAndAttach(offer.SDP, admission)
+	if err != nil {
+		return "", err
+	}
+	return answer, nil
+}
+
+// answerAndAttach answers one offer and wires the PC to its admission,
+// freeing the slot when the answer never goes out.
+func (m *PeerManager) answerAndAttach(offerSDP string, admission session.Admission) (string, error) {
 	m.mu.Lock()
 	iceServers := append([]rtc.ICEServer(nil), m.iceServers...)
 	turnOnly := m.turnOnly
 	m.mu.Unlock()
-	answer, pc, err := m.answerOffer(offer.SDP, iceServers, turnOnly)
+	answer, pc, err := m.answerOffer(offerSDP, iceServers, turnOnly)
 	if err != nil {
 		m.abandon(admission)
 		return "", err
@@ -208,10 +205,7 @@ func (m *PeerManager) HandleOffer(offer rtc.Offer, admission session.Admission) 
 	return answer, nil
 }
 
-// abandon frees a slot whose answer never went out (bad SDP, failed PC).
-// A fresh player is kicked at once; a reclaimed player drops back to
-// reconnect grace so a retry can still reclaim it. Without this a failed
-// answer leaks an Active slot with no transport and no expiry.
+// abandon frees a slot whose answer never went out.
 func (m *PeerManager) abandon(admission session.Admission) {
 	if admission.Reconnected {
 		_ = m.input.Disconnect(admission.Player.ID, admission.Player.Generation)
@@ -220,10 +214,7 @@ func (m *PeerManager) abandon(admission session.Admission) {
 	_ = m.session.Kick(admission.Player.ID)
 }
 
-// answerOffer builds one PeerConnection, applies the remote offer, and
-// returns the gathered answer SDP. Non-trickle v1: gather completes (or
-// times out to host candidates) before the reply goes out, one relay
-// round-trip per direction.
+// answerOffer builds one PeerConnection and returns the gathered answer.
 func (m *PeerManager) answerOffer(offerSDP string, iceServers []rtc.ICEServer, turnOnly bool) (string, *webrtc.PeerConnection, error) {
 	config := webrtc.Configuration{ICEServers: toPion(iceServers)}
 	if turnOnly {
@@ -262,8 +253,7 @@ func (m *PeerManager) answerOffer(offerSDP string, iceServers []rtc.ICEServer, t
 	return description.SDP, pc, nil
 }
 
-// attach wires datachannel dispatch plus connection-state teardown to one
-// admitted player, replacing any previous PeerConnection for that player.
+// attach wires dispatch plus teardown to one admitted player.
 func (m *PeerManager) attach(admission session.Admission, pc *webrtc.PeerConnection) {
 	p := &peer{
 		pc:         pc,
@@ -354,7 +344,7 @@ func (p *peer) serveControl(channel *webrtc.DataChannel) {
 			return
 		}
 		p.controlMu.Lock()
-		attached := p.controlAttachedLocked()
+		attached := p.control != nil && p.attached
 		p.controlMu.Unlock()
 		if !attached {
 			p.handleHello(message.Data)
@@ -364,15 +354,7 @@ func (p *peer) serveControl(channel *webrtc.DataChannel) {
 	})
 }
 
-// controlAttachedLocked reports whether the validation-only hello already
-// installed this channel as the player's sender.
-func (p *peer) controlAttachedLocked() bool {
-	return p.control != nil && p.attached
-}
-
-// handleHello validates the first control message and attaches the live
-// channel to the admitted player. Parity with transport.runClient up to
-// the Admit call, which already happened at join-forward or accept.
+// handleHello validates the first control message and attaches the channel.
 func (p *peer) handleHello(data []byte) {
 	m := p.manager
 	hello, err := protocol.DecodeHello(data)
@@ -385,7 +367,7 @@ func (p *peer) handleHello(data []byte) {
 		p.sendErrorAndClose(code, message)
 		return
 	}
-	if err := m.session.AttachTransport(p.playerID, p.generation, p.sendJSON, p.closeFromPhone); err != nil {
+	if err := m.session.AttachTransport(p.playerID, p.generation, p.sendValue, p.closePC); err != nil {
 		code, message := session.AdmissionError(err)
 		p.sendErrorAndClose(code, message)
 		return
@@ -393,9 +375,6 @@ func (p *peer) handleHello(data []byte) {
 	p.controlMu.Lock()
 	p.attached = true
 	p.controlMu.Unlock()
-	// The join carries no layout choice, but the hello does: apply the
-	// phone's stored selection exactly like Admit would (unknown ids fall
-	// back to the session default by staying put).
 	if hello.SelectedLayout != "" && hello.SelectedLayout != p.admission.Player.LayoutID {
 		if _, ok := m.layouts.Get(hello.SelectedLayout); ok {
 			_ = m.session.SetLayout(p.playerID, hello.SelectedLayout)
@@ -474,14 +453,6 @@ func (p *peer) serveInputs(channel *webrtc.DataChannel) {
 	})
 }
 
-// sendJSON is the Session.Send transport: JSON over the control channel
-// with the SPEC drop rule. A full buffer drops the message (rumble under
-// pressure) instead of stalling input; welcome/layout/heartbeat are
-// low-rate and never trip it on a fresh channel.
-func (p *peer) sendJSON(value any) error {
-	return p.sendValue(value)
-}
-
 func (p *peer) sendValue(value any) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -503,12 +474,8 @@ func (p *peer) sendValue(value any) error {
 		return errors.New("rtc control channel is congested")
 	}
 	if _, isClose := value.(protocol.CloseMessage); isClose {
-		// Flush the farewell before tearing down: SCTP drops queued
-		// sends on immediate PC close, unlike the TCP writer queue.
 		defer p.closeSoon()
 	}
-	// JSON rides the control channel as text, exactly like the LAN
-	// socket's text frames; binary is reserved for input snapshots.
 	return channel.SendText(string(payload))
 }
 
@@ -518,9 +485,7 @@ func (p *peer) sendError(code, message string) {
 	_ = p.sendValue(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
 }
 
-// sendErrorAndClose queues the final error before tearing down, mirroring
-// the LAN socket sendAndClose path. The close is delayed one flush
-// interval so the error actually reaches the phone.
+// sendErrorAndClose queues the final error before tearing down.
 func (p *peer) sendErrorAndClose(code, message string) {
 	payload, err := json.Marshal(protocol.ErrorMessage{Type: protocol.MessageError, Code: code, Message: message})
 	if err != nil {
@@ -539,14 +504,11 @@ func (p *peer) sendErrorAndClose(code, message string) {
 }
 
 // closeSoon tears down after a flush interval for farewell/error paths.
-// closePC stays immediate for teardown and shutdown, where no message
-// is owed. Both are idempotent through the same once-guard.
 func (p *peer) closeSoon() {
 	time.AfterFunc(200*time.Millisecond, p.closePC)
 }
 
-// heartbeat mirrors transport.Server.heartbeat: 1s pings carrying the
-// last measured RTT, pongs feeding Session.SetPong.
+// heartbeat sends 1s pings carrying the last measured RTT.
 func (p *peer) heartbeat() {
 	go func() {
 		ticker := time.NewTicker(heartbeatInterval)
@@ -596,17 +558,7 @@ func (p *peer) takePing(id string) (time.Time, bool) {
 	return sent, ok
 }
 
-// closeFromPhone is the Session.Close transport: the player left or was
-// kicked, so the PC goes down with it.
-func (p *peer) closeFromPhone() {
-	p.closePC()
-}
-
-// teardown runs on Failed/Closed: the authoritative disconnect path now
-// that the guest signaling socket closed at establishment. It mirrors the
-// LAN socket defer (Input.Disconnect into reconnect grace) exactly, but
-// only when this peer still owns the slot: a replaced loser closing late
-// must never bump the winner's generation.
+// teardown runs on Failed/Closed, only when this peer still owns the slot.
 func (p *peer) teardown() {
 	m := p.manager
 	m.mu.Lock()
@@ -630,15 +582,14 @@ func (p *peer) closePC() {
 	})
 }
 
-// PeerCount reports live PeerConnections (diagnostics and tests).
+// PeerCount reports live PeerConnections.
 func (m *PeerManager) PeerCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.peers)
 }
 
-// Has reports whether one player currently owns a PeerConnection.
-// The dashboard uses it to separate RTC players from LAN ws players.
+// Has reports whether one player owns a PeerConnection.
 func (m *PeerManager) Has(playerID string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -646,10 +597,7 @@ func (m *PeerManager) Has(playerID string) bool {
 	return ok
 }
 
-// IsRelayed collapses the host-observed selected ICE candidate pair to
-// the dashboard boolean: true when either side of the selected pair is
-// TURN-relayed, false for direct (host/srflx) or not yet connected.
-// LAN ws players have no peer and always report false.
+// IsRelayed reports whether the selected ICE pair is TURN-relayed.
 func (m *PeerManager) IsRelayed(playerID string) bool {
 	m.mu.Lock()
 	p, ok := m.peers[playerID]
@@ -682,8 +630,7 @@ func (m *PeerManager) IsRelayed(playerID string) bool {
 	return false
 }
 
-// Close tears down every PeerConnection. Shutdown order in app calls this
-// alongside Transport.Close: data paths stop together, then devices.
+// Close tears down every PeerConnection.
 func (m *PeerManager) Close() {
 	m.mu.Lock()
 	peers := make([]*peer, 0, len(m.peers))

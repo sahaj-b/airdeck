@@ -9,10 +9,7 @@ import type {
 } from '../../shared/contracts';
 import type { LayoutDocument } from '../../shared/layout';
 
-// ConnectionState is the player-visible lifecycle shared by both
-// transports. The WS path never emits waiting/declined; the RTC path
-// enters waiting while an approval-mode join sits in the host queue and
-// declined when the host rejects it.
+// ConnectionState is the player-visible lifecycle shared by both transports.
 export type ConnectionState =
   | 'connecting'
   | 'hello-sent'
@@ -25,6 +22,20 @@ export type ConnectionState =
   | 'kicked'
   | 'session-reset'
   | 'closed';
+
+// RECONNECT_ID_KEY persists the session-scoped reclaim id across reloads.
+export const RECONNECT_ID_KEY = 'airdeck.reconnectId';
+
+export interface SocketConnection {
+  readyState: number;
+  binaryType: string;
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: unknown }) => void) | null;
+  onerror: (() => void) | null;
+  onclose: (() => void) | null;
+  send(data: string | Uint8Array): void;
+  close(): void;
+}
 
 export interface ControllerTransportOptions {
   sessionCode: string;
@@ -45,10 +56,8 @@ export interface ControllerTransportOptions {
   onClose?: () => void;
 }
 
-// ControllerTransport is the phone-side seam abstracting the wire
-// (LORE). WsTransport wraps the LAN WebSocket, RtcTransport wraps the
-// reliable control plus unreliable inputs DataChannel pair. Session logic
-// above it (FrameSender, join page) never knows which wire it rides.
+// ControllerTransport abstracts the wire; session logic never knows which
+// transport it rides.
 export interface ControllerTransport {
   readonly state: ConnectionState;
   connect(): void;

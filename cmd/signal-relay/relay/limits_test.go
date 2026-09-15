@@ -43,6 +43,6 @@ func TestDayStringIsUTCDate(t *testing.T) {
 		t.Fatalf("DayString = %q, want 2026-09-12", got)
 	}
 	if MaxCodeChangesPerDay < 1 || MaxCodeChangesPerDay > 9 {
-		t.Fatalf("MaxCodeChangesPerDay = %d, SPEC demands single digits", MaxCodeChangesPerDay)
+		t.Fatalf("MaxCodeChangesPerDay = %d, want 1-9", MaxCodeChangesPerDay)
 	}
 }

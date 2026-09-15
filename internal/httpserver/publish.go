@@ -291,7 +291,7 @@ func (s *Server) handlePublishAccept(w http.ResponseWriter, r *http.Request) {
 	_ = s.sendPublishResult(entry.PhoneID, id, "accepted")
 	s.options.Session.ReconcileLayouts()
 	s.broadcastPhoneLayouts()
-	s.broadcastAdminState()
+	s.BroadcastAdminState()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "accepted", "id": id})
 }
 

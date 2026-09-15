@@ -3,15 +3,8 @@
 //////////
 // source: rtc.go
 /*
-Package rtc is the Go-canonical shared signaling contract for the v2a
-online path (SPEC Q4/Q5/Q18, PLAN Phase 2).
-
-The relay, the host, and the join page compile the same message types:
-TypeScript is derived via tygo codegen, never hand-duplicated. The
-relay routes by normalized room code, answers correlate by
-relay-assigned correlation id echoed from the forwarded join, never by
-connection identity. Unknown, retired, and offline-host codes all
-produce one generic error so the relay exposes no enumeration oracle.
+Package rtc is the shared signaling contract for the online path.
+TypeScript is derived via tygo codegen, never hand-duplicated.
 */
 
 /**
@@ -72,31 +65,23 @@ export const MessageError = "error";
 export const MessagePeerLeft = "peer.left";
 /**
  * Relay error codes. RoomNotFound is the single generic code for unknown,
- * retired, and offline-host codes: one relay path, no enumeration oracle.
- * PendingGone reports an accept/reject for a pending that already
- * evaporated (guest signaling socket dropped); the host no-ops and
- * reconciles via admin state.
+ * retired, and offline-host codes.
  */
 export const ErrorRoomNotFound = "room_not_found";
 /**
  * Relay error codes. RoomNotFound is the single generic code for unknown,
- * retired, and offline-host codes: one relay path, no enumeration oracle.
- * PendingGone reports an accept/reject for a pending that already
- * evaporated (guest signaling socket dropped); the host no-ops and
- * reconciles via admin state.
+ * retired, and offline-host codes.
  */
 export const ErrorPendingGone = "pending_gone";
 /**
- * Envelope carries only the discriminator, mirroring internal/protocol.
+ * Envelope carries only the discriminator.
  */
 export interface Envelope {
   type: string;
 }
 /**
  * ICEServer matches browser RTCIceServer and pion ICEServer shapes.
- * Relay deliveries always include STUN alongside TURN: without STUN the
- * phone gathers no srflx candidates and every open-mode join silently
- * degrades to relayed.
+ * Relay deliveries always include STUN alongside TURN.
  */
 export interface ICEServer {
   urls: string[];
@@ -104,8 +89,7 @@ export interface ICEServer {
   credential?: string;
 }
 /**
- * Register binds one host connection to one room code. The installation
- * key proves ownership of the durable claim and is never logged.
+ * Register binds one host connection to one room code.
  */
 export interface Register {
   type: 'register';
@@ -114,8 +98,7 @@ export interface Register {
   approvalRequired: boolean;
 }
 /**
- * Registered confirms the durable claim and delivers the TURN credential
- * bundle (STUN + TURN, 24h TTL, no refresh flow).
+ * Registered confirms the durable claim and delivers the ICE bundle.
  */
 export interface Registered {
   type: 'registered';
@@ -123,9 +106,7 @@ export interface Registered {
   iceServers: ICEServer[];
 }
 /**
- * Conflict tells a registering host its desired code is claimed or retired
- * under another installation key. LAN keeps serving the local code;
- * remote stays dark until the owner resolves via the dashboard.
+ * Conflict tells a registering host its desired code lost.
  */
 export interface Conflict {
   type: 'conflict';
@@ -133,14 +114,10 @@ export interface Conflict {
 }
 /**
  * Join covers both directions of the join flow under one type. The phone
- * sends roomCode plus displayName (plus a fresh SDP offer in the `offer`
- * field in open mode, offer-less in approval mode, plus the stored
- * sends roomCode plus displayName (plus a fresh SDP offer in open mode,
- * offer-less in approval mode, plus the stored reconnect id on rejoin).
- * The relay forwards it to the host with a fresh relay-assigned
- * correlationId (and the approval pendingId once queued); the host never
- * correlates by connection identity because one guest socket can carry
- * several join flows across rejects.
+ * sends roomCode plus displayName, plus a fresh SDP offer in the offer
+ * field in open mode and offer-less in approval mode, plus the stored
+ * reconnect id on rejoin. The relay forwards it with a fresh relay-assigned
+ * correlationId; the host never correlates by connection identity.
  */
 export interface Join {
   type: 'join';
@@ -152,9 +129,7 @@ export interface Join {
   offer?: string;
 }
 /**
- * Joined answers an open-mode phone: the SDP answer plus the iceServer
- * bundle (arrives post-offer, so it serves spec symmetry and approval
- * mode, never an open-mode re-gather).
+ * Joined answers an open-mode phone with the SDP answer plus ICE servers.
  */
 export interface Joined {
   type: 'joined';
@@ -162,10 +137,8 @@ export interface Joined {
   iceServers: ICEServer[];
 }
 /**
- * Pending covers both directions under one type. The relay sends the full
- * entry to the host (queue display) and the bare id to the waiting guest.
- * A pending lives exactly while the guest stays connected; socket close
- * evaporates it, no expiry timers.
+ * Pending covers both directions under one type. A pending lives exactly
+ * while the guest stays connected.
  */
 export interface Pending {
   type: 'pending';
@@ -178,20 +151,14 @@ export interface Pending {
   waitingSince?: number /* int64 */;
 }
 /**
- * Accepted releases an approval-mode phone to offer: it carries the
- * iceServer bundle the open-mode phone already had at construction, so
- * the post-accept offer gathers with TURN from the start.
+ * Accepted releases an approval-mode phone to offer.
  */
 export interface Accepted {
   type: 'accepted';
   iceServers: ICEServer[];
 }
 /**
- * Offer carries a post-accept SDP offer in its `sdp` field (contrast
- * Join.Offer, which carries the open-mode offer under the `offer` key).
- * The guest sends bare SDP; the
- * relay forwards it with the approval pendingId and a fresh
- * relay-assigned correlationId the host echoes on its answer.
+ * Offer carries a post-accept SDP offer in its sdp field.
  */
 export interface Offer {
   type: 'offer';
@@ -200,10 +167,7 @@ export interface Offer {
   sdp: string;
 }
 /**
- * Answer carries an SDP answer in its `sdp` field (contrast
- * Joined.Answer, which carries the open-mode answer under the `answer`
- * key). It correlates by the echoed correlationId
- * from the forwarded join or offer, never by connection.
+ * Answer carries an SDP answer. It correlates by the echoed correlationId.
  */
 export interface Answer {
   type: 'answer';
@@ -218,8 +182,7 @@ export interface Accept {
   pendingId: string;
 }
 /**
- * Reject drops a queued pending. The guest returns to the join screen with
- * a declined message and may immediately re-request on the same socket.
+ * Reject drops a queued pending.
  */
 export interface Reject {
   type: 'reject';
@@ -234,7 +197,7 @@ export interface Rejected {
   reason?: string;
 }
 /**
- * ErrorMessage is the single generic failure envelope toward the guest.
+ * ErrorMessage is the generic failure envelope toward the guest.
  */
 export interface ErrorMessage {
   type: 'error';
@@ -242,9 +205,7 @@ export interface ErrorMessage {
   message: string;
 }
 /**
- * PeerLeft is scoped to pre-establishment only: a pending guest whose host
- * connection drops before signaling completes. After establishment the
- * host PeerConnection state is authoritative and no peer.left exists.
+ * PeerLeft is pre-establishment only.
  */
 export interface PeerLeft {
   type: 'peer.left';

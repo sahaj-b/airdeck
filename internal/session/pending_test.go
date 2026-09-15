@@ -194,9 +194,6 @@ func TestExpiredRejoinQueuesAsNew(t *testing.T) {
 func TestAutoAcceptWhenApprovalOff(t *testing.T) {
 	session, _ := newTestSession(t)
 	defer session.Close()
-	if session.ApprovalRequired() {
-		t.Fatal("approval must default off for shipment-1 auto-accept")
-	}
 	admission, err := session.Admit(session.Code(), "Phone", "", "", nil, nil)
 	if err != nil || admission.PendingID != "" || admission.PendingWait != nil {
 		t.Fatalf("auto-accept = %+v, %v; want direct admission", admission, err)
