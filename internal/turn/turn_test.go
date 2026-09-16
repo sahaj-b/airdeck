@@ -145,3 +145,70 @@ func TestSplitMintedKeepsSTUNAlongsideTURN(t *testing.T) {
 		t.Fatalf("missing STUN was not backfilled: %+v", got)
 	}
 }
+
+func TestStaticRoundTrip(t *testing.T) {
+	now := time.Now()
+	username, password, err := MintStatic("shared-secret", now, time.Duration(CredentialTTL)*time.Second)
+	if err != nil {
+		t.Fatalf("MintStatic: %v", err)
+	}
+	if err := VerifyStatic("shared-secret", username, password, now); err != nil {
+		t.Fatalf("VerifyStatic fresh: %v", err)
+	}
+	// Wrong secret fails, so a relay/coturn secret mismatch surfaces here
+	// instead of as silent relayed-path breakage.
+	if err := VerifyStatic("other-secret", username, password, now); err == nil {
+		t.Fatal("VerifyStatic accepted a wrong secret")
+	}
+	// Expiry is enforced: a credential outliving its TTL is rejected.
+	if err := VerifyStatic("shared-secret", username, password, now.Add(time.Duration(CredentialTTL+1)*time.Second)); err == nil {
+		t.Fatal("VerifyStatic accepted an expired credential")
+	}
+	// Garbage usernames fail instead of panicking the mint path.
+	for _, bad := range []string{"", "no-colon", "abc:def"} {
+		if err := VerifyStatic("shared-secret", bad, password, now); err == nil {
+			t.Fatalf("VerifyStatic accepted username %q", bad)
+		}
+	}
+	if _, _, err := MintStatic("", now, time.Hour); err == nil {
+		t.Fatal("MintStatic accepted an empty secret")
+	}
+}
+
+func TestStaticServersBundle(t *testing.T) {
+	urls := []string{"turn:signal.example:3478?transport=udp", "turn:signal.example:3478?transport=tcp"}
+	servers := staticServers("shared-secret", urls, time.Now())
+	if len(servers) != 2 {
+		t.Fatalf("static bundle = %+v, want STUN + TURN entries", servers)
+	}
+	hasSTUN(t, servers)
+	if servers[1].Username == "" || servers[1].Credential == "" {
+		t.Fatalf("TURN entry carries no credentials: %+v", servers[1])
+	}
+	if err := VerifyStatic("shared-secret", servers[1].Username, servers[1].Credential, time.Now()); err != nil {
+		t.Fatalf("bundle credential does not verify: %v", err)
+	}
+	// Usernames are unique per call so two joins never share a credential.
+	other := staticServers("shared-secret", urls, time.Now())
+	if servers[1].Username == other[1].Username {
+		t.Fatal("consecutive static mints share a username")
+	}
+}
+
+func TestStaticPreferredWithoutCloudflare(t *testing.T) {
+	p := NewStatic("shared-secret", []string{"turn:signal.example:3478?transport=udp"})
+	got := p.Servers(context.Background())
+	if len(got) != 2 || got[1].Username == "" {
+		t.Fatalf("static serve = %+v, want STUN + TURN entries", got)
+	}
+	// SetStatic wires the same backend onto a Cloudflare provider without
+	// touching New call sites.
+	cloud := New("id", "secret")
+	cloud.endpointFormat = "http://127.0.0.1:1/%s"
+	cloud.client = &http.Client{Timeout: 100 * time.Millisecond}
+	cloud.SetStatic("shared-secret", []string{"turn:signal.example:3478?transport=udp"})
+	got = cloud.Servers(context.Background())
+	if len(got) != 2 || got[1].Username == "" {
+		t.Fatalf("cloudflare-down serve = %+v, want self-hosted fallback", got)
+	}
+}
