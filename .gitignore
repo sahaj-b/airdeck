@@ -10,3 +10,4 @@ benchmarks/
 Caddyfile
 node_modules/
 web/dist/
+/signal-relay

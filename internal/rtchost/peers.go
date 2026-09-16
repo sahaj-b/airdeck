@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,6 +58,10 @@ const (
 	// TurnOnlyEnv forces relay-only candidates so the TURN path is
 	// reproducible on demand (web side mirrors with iceTransportPolicy).
 	TurnOnlyEnv = "AIRDECK_TURN_ONLY"
+	// IceDebugEnv enables verbose ICE logging: local candidates carried by
+	// answers, connection state transitions, and the selected pair. Off
+	// by default; local IPs land in the host log when on.
+	IceDebugEnv = "AIRDECK_ICE_DEBUG"
 )
 
 // helloWaitTimeout bounds attach-to-hello: a PC whose control channel
@@ -77,6 +82,7 @@ type PeerManager struct {
 	peers      map[string]*peer // playerID -> peer
 	iceServers []rtc.ICEServer
 	turnOnly   bool
+	iceDebug   bool
 }
 
 type peer struct {
@@ -109,6 +115,7 @@ func New(sess *session.Session, handler *input.Handler, layouts *layout.Library,
 		peers:           make(map[string]*peer),
 		iceServers:      turn.STUNOnly(),
 		turnOnly:        os.Getenv(TurnOnlyEnv) == "1",
+		iceDebug:        os.Getenv(IceDebugEnv) == "1",
 	}
 }
 
@@ -195,8 +202,24 @@ func (m *PeerManager) answerAndAttach(offerSDP string, admission session.Admissi
 	m.mu.Lock()
 	iceServers := append([]rtc.ICEServer(nil), m.iceServers...)
 	turnOnly := m.turnOnly
+	iceDebug := m.iceDebug
 	m.mu.Unlock()
-	answer, pc, err := m.answerOffer(offerSDP, iceServers, turnOnly)
+	// One line per join so a dead relayed path is distinguishable from a
+	// dead direct path: server count, TURN presence, and policy.
+	hasTURN := false
+	for _, server := range iceServers {
+		for _, url := range server.URLs {
+			if len(url) >= 5 && (url[:5] == "turn:" || (len(url) >= 6 && url[:6] == "turns:")) {
+				hasTURN = true
+				break
+			}
+		}
+		if hasTURN {
+			break
+		}
+	}
+	log.Printf("rtchost: answering with %d ice servers (turn=%v policy=%s)", len(iceServers), hasTURN, map[bool]string{true: "relay-only", false: "all"}[turnOnly])
+	answer, pc, err := m.answerOffer(offerSDP, iceServers, turnOnly, iceDebug)
 	if err != nil {
 		m.abandon(admission)
 		return "", err
@@ -215,7 +238,7 @@ func (m *PeerManager) abandon(admission session.Admission) {
 }
 
 // answerOffer builds one PeerConnection and returns the gathered answer.
-func (m *PeerManager) answerOffer(offerSDP string, iceServers []rtc.ICEServer, turnOnly bool) (string, *webrtc.PeerConnection, error) {
+func (m *PeerManager) answerOffer(offerSDP string, iceServers []rtc.ICEServer, turnOnly, iceDebug bool) (string, *webrtc.PeerConnection, error) {
 	config := webrtc.Configuration{ICEServers: toPion(iceServers)}
 	if turnOnly {
 		config.ICETransportPolicy = webrtc.ICETransportPolicyRelay
@@ -243,14 +266,37 @@ func (m *PeerManager) answerOffer(offerSDP string, iceServers []rtc.ICEServer, t
 	select {
 	case <-webrtc.GatheringCompletePromise(pc):
 	case <-time.After(gatherTimeout):
-		log.Printf("rtchost: ICE gathering timed out, answering with host candidates")
+		// Timeout answers with whatever was gathered so far (usually
+		// host+srflx+relay already); only a fully empty gather truly
+		// strands the guest.
+		log.Printf("rtchost: ICE gathering timed out, answering with gathered candidates")
 	}
 	description := pc.LocalDescription()
 	if description == nil {
 		return "", nil, errors.New("peer connection has no local description after answer")
 	}
+	if iceDebug {
+		log.Printf("rtchost: answer carries %d bytes of SDP", len(description.SDP))
+		for _, line := range localCandidateLines(description.SDP) {
+			log.Printf("rtchost: local candidate %s", line)
+		}
+	}
 	failed = false
 	return description.SDP, pc, nil
+}
+
+// localCandidateLines extracts the a=candidate lines from gathered SDP
+// for debug logging. IPs are host-private in practice; the flag exists
+// precisely to surface them when the relayed path misbehaves.
+func localCandidateLines(sdp string) []string {
+	var out []string
+	for _, line := range strings.Split(sdp, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "a=candidate:") {
+			out = append(out, strings.TrimPrefix(line, "a="))
+		}
+	}
+	return out
 }
 
 // attach wires dispatch plus teardown to one admitted player.
@@ -265,6 +311,13 @@ func (m *PeerManager) attach(admission session.Admission, pc *webrtc.PeerConnect
 		pings:      make(map[string]time.Time),
 	}
 	pc.OnDataChannel(p.onDataChannel)
+	// Change detection only: the debug flag exists to watch pair
+	// formation on failing joins, teardown ownership stays in teardown.
+	if m.iceDebug {
+		pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+			log.Printf("rtchost: player %s ICE state %s", admission.Player.ID, state.String())
+		})
+	}
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
 			p.teardown()
@@ -313,6 +366,7 @@ func (m *PeerManager) armHelloTimeout(p *peer) {
 // onDataChannel dispatches the phone-created channels by label. Unknown
 // labels are ignored, never misdispatched.
 func (p *peer) onDataChannel(channel *webrtc.DataChannel) {
+	log.Printf("rtchost: player %s data channel %q protocol %q", p.playerID, channel.Label(), channel.Protocol())
 	switch channel.Label() {
 	case ControlLabel:
 		p.serveControl(channel)
@@ -330,6 +384,7 @@ func (p *peer) onDataChannel(channel *webrtc.DataChannel) {
 // the pre-built welcome.
 func (p *peer) serveControl(channel *webrtc.DataChannel) {
 	channel.OnOpen(func() {
+		log.Printf("rtchost: player %s control channel open", p.playerID)
 		p.controlMu.Lock()
 		p.control = channel
 		p.controlMu.Unlock()
@@ -355,23 +410,29 @@ func (p *peer) serveControl(channel *webrtc.DataChannel) {
 }
 
 // handleHello validates the first control message and attaches the channel.
+// Every rejection is logged: the guest only sees the error code, so a
+// silent close here would be undebuggable from the phone side.
 func (p *peer) handleHello(data []byte) {
 	m := p.manager
 	hello, err := protocol.DecodeHello(data)
 	if err != nil || hello.ClientVersion == "" {
+		log.Printf("rtchost: player %s bad hello (%v), closing", p.playerID, err)
 		p.sendErrorAndClose("invalid_hello", "the first message must be a valid hello")
 		return
 	}
 	if err := m.session.CheckCode(hello.SessionCode); err != nil {
 		code, message := session.AdmissionError(err)
+		log.Printf("rtchost: player %s hello code %q rejected (%s)", p.playerID, hello.SessionCode, code)
 		p.sendErrorAndClose(code, message)
 		return
 	}
 	if err := m.session.AttachTransport(p.playerID, p.generation, p.sendValue, p.closePC); err != nil {
 		code, message := session.AdmissionError(err)
+		log.Printf("rtchost: player %s hello attach failed (%s: %v)", p.playerID, code, err)
 		p.sendErrorAndClose(code, message)
 		return
 	}
+	log.Printf("rtchost: player %s hello ok layout=%q", p.playerID, hello.SelectedLayout)
 	p.controlMu.Lock()
 	p.attached = true
 	p.controlMu.Unlock()

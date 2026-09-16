@@ -1,6 +1,7 @@
 import '@/index.css';
 import '../controller/controller.css';
 import { CapabilityManager } from '../controller/capabilities';
+import { CONTROLLER_DEBUG, debugLog } from '../controller/debug';
 import { FeedbackController } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
 import { buildFullscreenButton } from '../controller/fullscreen-button';
@@ -1067,9 +1068,40 @@ function showController(options: {
   };
   // Session logic above the seam never knows the wire: LAN pages ride
   // the raw WebSocket, Central pages ride the WebRTC DataChannels.
+  debugLog('transport pick', {
+    rtc: shouldUseRtcTransport(),
+    host: window.location.hostname,
+    query: window.location.search,
+  });
   const socket: ControllerTransport = shouldUseRtcTransport()
     ? new RtcTransport(transportOptions)
     : new WsTransport(transportOptions);
+  if (CONTROLLER_DEBUG) {
+    const inner = transportOptions.onStateChange;
+    transportOptions.onStateChange = (nextState) => {
+      debugLog('state -> ' + nextState);
+      inner?.(nextState);
+    };
+    const innerError = transportOptions.onError;
+    transportOptions.onError = (message) => {
+      debugLog('error', message);
+      innerError?.(message);
+    };
+    const innerWelcome = transportOptions.onWelcome;
+    transportOptions.onWelcome = (welcome) => {
+      debugLog('welcome', {
+        playerId: welcome.playerId,
+        slot: welcome.slot,
+        layout: welcome.selectedLayout,
+      });
+      innerWelcome?.(welcome);
+    };
+    const innerLayout = transportOptions.onLayout;
+    transportOptions.onLayout = (layout, diagnostic) => {
+      debugLog('layout', { id: (layout as { id?: string }).id });
+      innerLayout?.(layout, diagnostic);
+    };
+  }
   activeSocket = socket;
   activeSender = new FrameSender(socket, state);
 

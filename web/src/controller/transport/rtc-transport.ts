@@ -6,6 +6,7 @@ import type {
   Welcome,
 } from '../../shared/contracts';
 import { parseLayoutDocument } from '../../shared/layout';
+import { CONTROLLER_DEBUG, debugLog } from '../debug';
 import {
   dispatchControlMessage,
   isRecord,
@@ -92,6 +93,7 @@ export interface RtcDataChannelLike {
 
 export interface RtcPeerConnectionLike {
   readonly iceGatheringState: string;
+  readonly connectionState?: string;
   onicegatheringstatechange: (() => void) | null;
   onconnectionstatechange: (() => void) | null;
   createDataChannel(
@@ -350,11 +352,13 @@ export class RtcTransport implements ControllerTransport {
       this.handleAttemptFailed(seq);
       return;
     }
+    this.dumpOfferCandidates(offerSdp);
     this.sendSignaling(send(offerSdp));
   }
 
   private wirePeerConnection(pc: RtcPeerConnectionLike, seq: number): void {
     pc.onconnectionstatechange = () => {
+      debugLog('pc connection state', pc.connectionState ?? 'unknown');
       if (pc !== this.pc || seq !== this.joinSeq) return;
       if (this.intentionalClose || !this.allowReconnect) return;
       // While the signaling wss is still open the signaling flow owns
@@ -373,6 +377,7 @@ export class RtcTransport implements ControllerTransport {
 
   private wireControlChannel(control: RtcDataChannelLike): void {
     control.onopen = () => {
+      debugLog('control channel open');
       if (control !== this.control) return;
       if (this.intentionalClose || !this.allowReconnect) return;
       this.sendHello();
@@ -393,6 +398,7 @@ export class RtcTransport implements ControllerTransport {
   }
 
   private sendHello(): void {
+    debugLog('sending hello');
     const capabilities =
       typeof this.options.capabilities === 'function'
         ? this.options.capabilities()
@@ -413,6 +419,18 @@ export class RtcTransport implements ControllerTransport {
     this.receivedWelcome = false;
     if (this.stateValue !== 'active' && this.stateValue !== 'welcome-received')
       this.setState('hello-sent');
+  }
+
+  // dumpOfferCandidates logs the phone-side gathered candidates behind the
+  // debug flag: the offer leaves before joined arrives, so if the phone
+  // gathered nothing, pairing is dead before the host even answers.
+  private dumpOfferCandidates(sdp: string): void {
+    if (!CONTROLLER_DEBUG) return;
+    for (const line of sdp.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('a=candidate:'))
+        debugLog('offer candidate', trimmed.slice(2));
+    }
   }
 
   private async handleSignalingMessage(
@@ -519,6 +537,7 @@ export class RtcTransport implements ControllerTransport {
   }
 
   private async applyRemoteAnswer(sdp: string, seq: number): Promise<void> {
+    debugLog('answer received', { bytes: sdp.length });
     const pc = this.pc;
     if (!pc || seq !== this.joinSeq) return;
     try {
