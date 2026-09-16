@@ -102,13 +102,32 @@ export function PlayerRow({
             >
               {labelForState(player.state)}
             </Badge>
-            {player.relayed ? (
+            {/* Transport badge: relayed and direct both render; unknown
+                (connecting, LAN socket, gone) renders pending instead of
+                lying with direct. */}
+            {player.relayState === 'relayed' || player.relayed ? (
               <Badge
                 className="rounded-full border-sky-500/20 bg-sky-500/10 px-2 py-0 text-[11px] font-medium leading-none text-sky-700 dark:text-sky-300"
                 variant="secondary"
                 title="Joined over the online relay"
               >
                 relay
+              </Badge>
+            ) : player.relayState === 'direct' ? (
+              <Badge
+                className="rounded-full border-emerald-500/20 bg-emerald-500/10 px-2 py-0 text-[11px] font-medium leading-none text-emerald-700 dark:text-emerald-300"
+                variant="secondary"
+                title="Direct peer-to-peer connection"
+              >
+                direct
+              </Badge>
+            ) : player.relayState === 'unknown' ? (
+              <Badge
+                className="rounded-full border-border bg-muted px-2 py-0 text-[11px] font-medium leading-none text-muted-foreground"
+                variant="secondary"
+                title="Transport not determined yet"
+              >
+                …
               </Badge>
             ) : null}
             {player.graceDeadline && player.state === 'disconnected-grace' && (

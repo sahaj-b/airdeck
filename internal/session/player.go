@@ -48,6 +48,10 @@ type PlayerSnapshot struct {
 	GraceDeadline time.Time   `json:"graceDeadline,omitempty"`
 	// Relayed is host-observed transport set by httpserver at snapshot time.
 	Relayed bool `json:"relayed"`
+	// RelayState is the dashboard badge: direct, relayed, or unknown
+	// (connecting, gone, or LAN socket). Unknown renders as pending, not
+	// direct, so the badge never lies during ICE setup.
+	RelayState string `json:"relayState"`
 }
 
 func (p *Player) Snapshot() PlayerSnapshot {

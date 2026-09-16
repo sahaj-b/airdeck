@@ -93,6 +93,13 @@ func (s *Server) currentState() adminState {
 	if agent != nil {
 		for i := range players {
 			players[i].Relayed = agent.IsRelayed(players[i].ID)
+			players[i].RelayState = string(agent.RelayTransport(players[i].ID))
+		}
+	} else {
+		// No agent (LAN-only tests): mark explicitly so the badge shows
+		// pending instead of silently omitting the field.
+		for i := range players {
+			players[i].RelayState = "unknown"
 		}
 	}
 	var pendings []session.PendingSnapshot

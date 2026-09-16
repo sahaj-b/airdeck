@@ -659,36 +659,39 @@ func (m *PeerManager) Has(playerID string) bool {
 }
 
 // IsRelayed reports whether the selected ICE pair is TURN-relayed.
-func (m *PeerManager) IsRelayed(playerID string) bool {
+// It reports (relayed, known): known is false when no pair is selected
+// yet (connecting) or the PC is gone, so callers can show "…" instead
+// of lying with "direct".
+func (m *PeerManager) IsRelayed(playerID string) (bool, bool) {
 	m.mu.Lock()
 	p, ok := m.peers[playerID]
 	m.mu.Unlock()
 	if !ok || p == nil || p.pc == nil {
-		return false
+		return false, false
 	}
 	sctp := p.pc.SCTP()
 	if sctp == nil {
-		return false
+		return false, false
 	}
 	dtls := sctp.Transport()
 	if dtls == nil {
-		return false
+		return false, false
 	}
 	iceTransport := dtls.ICETransport()
 	if iceTransport == nil {
-		return false
+		return false, false
 	}
 	pair, err := iceTransport.GetSelectedCandidatePair()
 	if err != nil || pair == nil {
-		return false
+		return false, false
 	}
 	if pair.Local != nil && pair.Local.Typ == webrtc.ICECandidateTypeRelay {
-		return true
+		return true, true
 	}
 	if pair.Remote != nil && pair.Remote.Typ == webrtc.ICECandidateTypeRelay {
-		return true
+		return true, true
 	}
-	return false
+	return false, true
 }
 
 // Close tears down every PeerConnection.

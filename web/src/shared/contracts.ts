@@ -133,6 +133,7 @@ export interface PlayerSnapshot {
   deviceReason?: string;
   graceDeadline?: string;
   relayed?: boolean;
+  relayState?: 'direct' | 'relayed' | 'unknown';
 }
 export interface PendingJoin {
   id: string;

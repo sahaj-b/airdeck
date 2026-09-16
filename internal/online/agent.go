@@ -777,13 +777,42 @@ func (a *Agent) dropAdmission(admission session.Admission) {
 	}
 }
 
-// IsRelayed reports the dashboard transport badge for one player.
+// RelayState is the dashboard transport badge for one player: relayed,
+// direct, or unknown (still connecting, PC gone, or LAN socket player).
+type RelayState string
+
+const (
+	RelayUnknown RelayState = "unknown"
+	RelayDirect  RelayState = "direct"
+	RelayRelayed RelayState = "relayed"
+)
+
+// RelayTransport reports the dashboard transport badge for one player.
 func (a *Agent) IsRelayed(playerID string) bool {
 	if a == nil || a.peers == nil {
 		return false
 	}
-	return a.peers.IsRelayed(playerID)
+	relayed, _ := a.peers.IsRelayed(playerID)
+	return relayed
 }
+
+// RelayTransport reports direct/relayed/unknown so the dashboard can
+// show a pending state instead of lying with direct while ICE connects.
+func (a *Agent) RelayTransport(playerID string) RelayState {
+	if a == nil || a.peers == nil {
+		return RelayUnknown
+	}
+	relayed, known := a.peers.IsRelayed(playerID)
+	if !known {
+		return RelayUnknown
+	}
+	if relayed {
+		return RelayRelayed
+	}
+	return RelayDirect
+}
+
+// show a pending state instead of lying with direct while ICE connects.
 
 // Pendings returns the queued relay approvals for the dashboard queue.
 // Each entry carries the relay pending id (the dashboard accept/reject

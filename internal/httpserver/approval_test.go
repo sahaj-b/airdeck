@@ -217,7 +217,7 @@ func TestAdminStatePendingsNeverNull(t *testing.T) {
 }
 
 // TestPlayerRelayedDefaultsFalse pins the new badge field: LAN players
-// report direct until a PeerManager observes a relayed pair.
+// report unknown (never direct) until a PeerManager observes a pair.
 func TestPlayerRelayedDefaultsFalse(t *testing.T) {
 	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
 	defer sess.Close()
@@ -232,7 +232,10 @@ func TestPlayerRelayedDefaultsFalse(t *testing.T) {
 		t.Fatalf("players = %d, want 1", len(state.Players))
 	}
 	if state.Players[0].Relayed {
-		t.Fatal("LAN player reports relayed, want direct")
+		t.Fatal("LAN player reports relayed, want not relayed")
+	}
+	if state.Players[0].RelayState != "unknown" {
+		t.Fatalf("LAN player relayState = %q, want unknown", state.Players[0].RelayState)
 	}
 }
 

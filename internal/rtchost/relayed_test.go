@@ -10,7 +10,8 @@ import (
 )
 
 // TestIsRelayedDefaultsFalse pins the dashboard badge default: unknown
-// players and freshly admitted LAN players (no peer) report direct.
+// players and freshly admitted LAN players (no peer) report unknown,
+// never direct. The badge must not lie during ICE setup.
 func TestIsRelayedDefaultsFalse(t *testing.T) {
 	library, err := layout.LoadDefault("", "xbox-default")
 	if err != nil {
@@ -27,8 +28,8 @@ func TestIsRelayedDefaultsFalse(t *testing.T) {
 	if manager.Has("nope") {
 		t.Fatal("Has(nope) = true, want false")
 	}
-	if manager.IsRelayed("nope") {
-		t.Fatal("IsRelayed(nope) = true, want direct")
+	if relayed, known := manager.IsRelayed("nope"); relayed || known {
+		t.Fatalf("IsRelayed(nope) = (%v, %v), want (false, false)", relayed, known)
 	}
 
 	admission, err := sess.Admit(sess.Code(), "Phone", "", "", nil, nil)
@@ -38,7 +39,7 @@ func TestIsRelayedDefaultsFalse(t *testing.T) {
 	if manager.Has(admission.Player.ID) {
 		t.Fatal("LAN player Has = true, want false (no peer)")
 	}
-	if manager.IsRelayed(admission.Player.ID) {
-		t.Fatal("LAN player IsRelayed = true, want direct")
+	if relayed, known := manager.IsRelayed(admission.Player.ID); relayed || known {
+		t.Fatalf("LAN player IsRelayed = (%v, %v), want (false, false)", relayed, known)
 	}
 }
