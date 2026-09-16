@@ -361,6 +361,20 @@ export class RtcTransport implements ControllerTransport {
       debugLog('pc connection state', pc.connectionState ?? 'unknown');
       if (pc !== this.pc || seq !== this.joinSeq) return;
       if (this.intentionalClose || !this.allowReconnect) return;
+      // Post-answer DTLS states are noise, not signal: connecting means
+      // checks are running, connected/completed mean the path works and
+      // the control channel owns the rest. Only failed/disconnected/closed
+      // rejoin; bare connecting must never tear down a live handshake.
+      // FakePeerConnection in tests has no connectionState (undefined),
+      // which means unknown, which means act like the old code.
+      const pcState = pc.connectionState;
+      if (
+        pcState !== undefined &&
+        pcState !== 'failed' &&
+        pcState !== 'disconnected' &&
+        pcState !== 'closed'
+      )
+        return;
       // While the signaling wss is still open the signaling flow owns
       // recovery (the relay reply still lands). Once it closed after the
       // answer, a dead PC rejoins fresh: DTLS failure or a control
