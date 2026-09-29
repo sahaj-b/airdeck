@@ -9,3 +9,8 @@ benchmarks/
 .DS_Store
 Caddyfile
 node_modules/
+# Windows release binaries (see third_party/vigem/README.md)
+ViGEmClient.dll
+ViGEmBus_*.exe
+dist-windows/
+airdeck-windows.zip

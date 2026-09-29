@@ -106,3 +106,12 @@ func (m *Manager) DestroyAll() error {
 	}
 	return errors.Join(errs...)
 }
+
+func (m *Manager) Close() error {
+	destroyErr := m.DestroyAll()
+	closer, ok := m.factory.(interface{ Close() error })
+	if !ok {
+		return destroyErr
+	}
+	return errors.Join(destroyErr, closer.Close())
+}

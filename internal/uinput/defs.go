@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package uinput creates Xbox 360-style virtual gamepads through the Linux
 // uinput kernel interface. It is shaped around airdeck's 20-byte input
 // snapshot frame: a canonical digital button bitset, four signed i16 stick

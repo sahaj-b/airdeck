@@ -770,7 +770,7 @@ func (s *Session) Close() error {
 			player.Close()
 		}
 	}
-	return s.devices.DestroyAll()
+	return s.devices.Close()
 }
 
 func (s *Session) emit(event Event) {
