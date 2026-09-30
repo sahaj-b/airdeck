@@ -3,6 +3,7 @@ package transport
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,15 +20,26 @@ type outbound struct {
 
 const maxPendingPings = 8
 
+// rumbleRefreshInterval coalesces identical rumble repeats inside this
+// window. Games often re-set an unchanged vibration state every frame; the
+// phone already holds it, so resending only pressures the queue. Repeats
+// after the window still pass through, which re-arms the phone's clamped
+// vibration pattern and keeps legit long rumbles alive.
+const rumbleRefreshInterval = 1500 * time.Millisecond
+
 type Client struct {
-	conn       *websocket.Conn
-	out        chan outbound
-	done       chan struct{}
-	closeOnce  sync.Once
-	writerOnce sync.Once
-	closing    atomic.Bool
-	pingMu     sync.Mutex
-	pending    map[string]time.Time
+	conn         *websocket.Conn
+	out          chan outbound
+	done         chan struct{}
+	closeOnce    sync.Once
+	writerOnce   sync.Once
+	closing      atomic.Bool
+	pingMu       sync.Mutex
+	pending      map[string]time.Time
+	rumbleMu     sync.Mutex
+	lastRumble   protocol.Rumble
+	hasRumble    bool
+	lastRumbleAt time.Time
 }
 
 func newClient(conn *websocket.Conn) *Client {
@@ -100,17 +112,66 @@ func (c *Client) enqueue(value any) error {
 	if err != nil {
 		return err
 	}
+	if rumble, ok := value.(protocol.Rumble); ok {
+		return c.enqueueRumble(rumble, payload)
+	}
 	select {
 	case <-c.done:
 		return errors.New("client connection is closed")
 	case c.out <- outbound{messageType: websocket.TextMessage, payload: payload}:
 		return nil
 	default:
-		if _, isRumble := value.(protocol.Rumble); !isRumble {
-			c.finishClose()
-		}
+		c.finishClose()
 		return errors.New("client outbound queue is full")
 	}
+}
+
+// enqueueRumble coalesces duplicate rumble spam and never silently drops a
+// STOP. A delivered START with a lost STOP leaves the phone buzzing until
+// its vibration clamp expires (~10s), so on a full queue a STOP evicts the
+// oldest pending message (stale START spam) to make room for itself.
+func (c *Client) enqueueRumble(rumble protocol.Rumble, payload []byte) error {
+	c.rumbleMu.Lock()
+	if c.hasRumble && c.lastRumble == rumble && time.Since(c.lastRumbleAt) < rumbleRefreshInterval {
+		c.rumbleMu.Unlock()
+		return nil
+	}
+	c.rumbleMu.Unlock()
+	message := outbound{messageType: websocket.TextMessage, payload: payload}
+	select {
+	case <-c.done:
+		return errors.New("client connection is closed")
+	case c.out <- message:
+		c.noteRumbleSent(rumble)
+		return nil
+	default:
+	}
+	if rumble.Active {
+		log.Printf("ff: START dropped, outbound queue full (mag=%d:%d)", rumble.Strong, rumble.Weak)
+		return errors.New("client outbound queue is full")
+	}
+	log.Printf("ff: queue full, evicting oldest to make room for STOP")
+	select {
+	case <-c.out:
+	default:
+	}
+	select {
+	case <-c.done:
+		return errors.New("client connection is closed")
+	case c.out <- message:
+		c.noteRumbleSent(rumble)
+		return nil
+	default:
+		return errors.New("client outbound queue is full")
+	}
+}
+
+func (c *Client) noteRumbleSent(rumble protocol.Rumble) {
+	c.rumbleMu.Lock()
+	c.lastRumble = rumble
+	c.hasRumble = true
+	c.lastRumbleAt = time.Now()
+	c.rumbleMu.Unlock()
 }
 
 func (c *Client) sendAndClose(value any) error {

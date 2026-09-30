@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,9 @@ func newCode() (string, error) {
 	}
 	return fmt.Sprintf("%04d", n.Int64()), nil
 }
+
+// ffDebugLog mirrors AIRDECK_FF_DEBUG for the rumble dispatch path.
+var ffDebugLog = os.Getenv("AIRDECK_FF_DEBUG") != ""
 
 func newID() (string, error) {
 	var bytes [16]byte
@@ -226,14 +230,22 @@ func (s *Session) dispatchRumble(id string, strong, weak uint16) {
 	s.mu.RLock()
 	player := s.players[id]
 	var send func(any) error
+	slot := -1
 	if player != nil {
 		send = player.Send
+		slot = player.Slot
 	}
 	s.mu.RUnlock()
 	if send == nil {
 		return
 	}
-	_ = send(protocol.Rumble{Type: protocol.MessageRumble, Strong: strong, Weak: weak, Active: strong != 0 || weak != 0})
+	active := strong != 0 || weak != 0
+	if ffDebugLog {
+		log.Printf("ff: dispatch slot=%d strong=%d weak=%d active=%v", slot, strong, weak, active)
+	}
+	if err := send(protocol.Rumble{Type: protocol.MessageRumble, Strong: strong, Weak: weak, Active: active}); err != nil {
+		log.Printf("ff: dispatch slot=%d failed: %v", slot, err)
+	}
 }
 
 func (s *Session) Player(id string) (PlayerSnapshot, bool) {

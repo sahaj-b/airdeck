@@ -1,7 +1,7 @@
 import '@/index.css';
 import '../controller/controller.css';
 import { CapabilityManager } from '../controller/capabilities';
-import { FeedbackController } from '../controller/feedback';
+import { FeedbackController, ffTrace } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
 import { buildFullscreenButton } from '../controller/fullscreen-button';
 import { GyroController } from '../controller/gyro/controller';
@@ -1013,7 +1013,12 @@ function showController(options: {
       }
       updateStatus(message.message);
     },
-    onRumble: (message) => feedback.rumble(message),
+    onRumble: (message) => {
+      ffTrace(
+        `[ff] rumble msg active=${message.active} strong=${message.strong} weak=${message.weak} t=${Math.round(performance.now())}`,
+      );
+      feedback.rumble(message);
+    },
     onPing: (rttMs) => {
       updatePing(`${Math.round(rttMs)} ms`);
     },

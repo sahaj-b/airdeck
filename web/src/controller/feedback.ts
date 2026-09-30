@@ -43,9 +43,46 @@ export interface FeedbackOptions {
   };
 }
 
-// Browsers clamp a single vibration well below a game-length rumble, so hold
-// the pattern for the whole START..STOP span instead of timing out locally.
-const RUMBLE_ON_PATTERN = 999999;
+// On-page FF trace overlay, enabled with ?ffdebug=1. It mirrors the [ff]
+// console lines onto the phone screen itself, so the rumble path can be
+// read with no USB debugging.
+const ffOverlayEnabled =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('ffdebug') === '1';
+
+let ffOverlay: HTMLElement | undefined;
+
+function ffOverlayLine(text: string): void {
+  if (!ffOverlayEnabled || typeof document === 'undefined') return;
+  if (!ffOverlay) {
+    ffOverlay = document.createElement('div');
+    ffOverlay.id = 'ff-debug-overlay';
+    ffOverlay.style.cssText =
+      'position:fixed;left:8px;bottom:8px;z-index:99999;max-width:92vw;max-height:38vh;overflow:hidden;pointer-events:none;background:rgba(0,0,0,.82);color:#7CFC98;font:11px/1.5 monospace;white-space:pre-wrap;padding:8px 10px;border-radius:8px;';
+    document.documentElement.append(ffOverlay);
+  }
+  const line = document.createElement('div');
+  line.textContent = text;
+  ffOverlay.append(line);
+  while (ffOverlay.children.length > 14) ffOverlay.firstChild?.remove();
+}
+
+export function ffTrace(text: string): void {
+  console.log(text);
+  ffOverlayLine(text);
+}
+
+// Game rumble is held in short chunks, never one giant vibration. A huge
+// single duration (previously 999999) gets clamped by the OS to ~10s on
+// some browsers, and vibrate(0) then fails to cancel it even while
+// returning true. Chunks bound the damage: a broken cancel overruns by one
+// chunk (~1s) instead of the full clamp, and the re-arm keeps legit long
+// rumbles alive past any per-call clamp.
+export const RUMBLE_CHUNK_MS = 500;
+export const RUMBLE_REARM_MS = 400;
+// Failsafe so a lost STOP can never wedge the motor forever. Refreshed by
+// every repeated START, which the host keeps sending for held rumbles.
+export const RUMBLE_MAX_HOLD_MS = 30_000;
 export const JOYSTICK_EDGE_VIBRATION_MS = 35;
 
 export class FeedbackController {
@@ -54,6 +91,9 @@ export class FeedbackController {
   private preferences: FeedbackPreferences;
   private audio: AudioContextLike | undefined;
   private rumbleActive = false;
+
+  private rumbleTimer: ReturnType<typeof setInterval> | undefined;
+  private rumbleSince = 0;
 
   constructor(preferences: FeedbackPreferences, options: FeedbackOptions = {}) {
     this.currentNavigator = options.navigator ?? navigator;
@@ -111,21 +151,55 @@ export class FeedbackController {
   }
 
   rumble(message: Rumble): void {
+    ffTrace(
+      `[ff] rumble() active=${message.active} pref=${this.preferences.rumble} haptics=${this.hapticsAvailable} alreadyActive=${this.rumbleActive}`,
+    );
     if (!this.preferences.rumble || !this.hapticsAvailable) return;
     if (!message.active) {
       this.stopRumble();
       return;
     }
-    // Re-arm on every START so the buzz survives browsers that clamp a single
-    // vibration call; STOP (or zero magnitudes) cancels it.
+    // Re-arm immediately on every START and refresh the failsafe clock.
+    // The interval below keeps the chunks coming while held.
     this.rumbleActive = true;
-    this.vibrate(RUMBLE_ON_PATTERN);
+    this.rumbleSince = Date.now();
+    this.vibrate(RUMBLE_CHUNK_MS);
+    this.ensureRumbleTimer();
   }
 
   stopRumble(): void {
-    if (!this.rumbleActive) return;
+    ffTrace(`[ff] stopRumble() wasActive=${this.rumbleActive}`);
+    if (!this.rumbleActive) {
+      this.clearRumbleTimer();
+      return;
+    }
     this.rumbleActive = false;
+    this.clearRumbleTimer();
+    // Best-effort precise cancel. On browsers where cancel is broken the
+    // motor still ends with the last chunk instead of a clamped 10s buzz.
     this.vibrate(0);
+  }
+
+  private ensureRumbleTimer(): void {
+    if (this.rumbleTimer !== undefined) return;
+    this.rumbleTimer = setInterval(() => {
+      if (!this.rumbleActive) {
+        this.clearRumbleTimer();
+        return;
+      }
+      if (Date.now() - this.rumbleSince > RUMBLE_MAX_HOLD_MS) {
+        this.stopRumble();
+        return;
+      }
+      this.vibrate(RUMBLE_CHUNK_MS);
+    }, RUMBLE_REARM_MS);
+  }
+
+  private clearRumbleTimer(): void {
+    if (this.rumbleTimer !== undefined) {
+      clearInterval(this.rumbleTimer);
+      this.rumbleTimer = undefined;
+    }
   }
 
   destroy(): void {
@@ -134,10 +208,15 @@ export class FeedbackController {
   }
 
   private vibrate(pattern: number): void {
-    if (!this.hapticsAvailable) return;
+    if (!this.hapticsAvailable) {
+      ffTrace(`[ff] vibrate(${pattern}) skipped, no haptics`);
+      return;
+    }
     try {
-      this.currentNavigator.vibrate?.(pattern);
-    } catch {
+      const ok = this.currentNavigator.vibrate?.(pattern);
+      ffTrace(`[ff] vibrate(${pattern}) -> ${ok}`);
+    } catch (err) {
+      ffTrace(`[ff] vibrate(${pattern}) threw ${String(err)}`);
       // Browser feedback must never enter the input failure path.
     }
   }

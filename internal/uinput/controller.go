@@ -8,12 +8,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"sync"
 	"syscall"
 	"time"
 	"unsafe"
 )
+
+// ffDebug enables verbose force-feedback logging via AIRDECK_FF_DEBUG=1.
+// Upload/play/stop/timeout/erase are rare (unlike input frames), so this is
+// safe to leave on during a repro session.
+var ffDebug = os.Getenv("AIRDECK_FF_DEBUG") != ""
+
+func ffLog(format string, args ...any) {
+	if ffDebug {
+		log.Printf("ff: "+format, args...)
+	}
+}
 
 var buttonCodes = []struct {
 	mask uint32
@@ -42,13 +54,45 @@ type Config struct {
 	// Rumble is called from an internal goroutine when a game starts or
 	// stops a rumble effect. Zero magnitudes mean stop. It must not block;
 	// slow callbacks delay the device's event loop.
+	//
+	// Finite-length effects auto-stop: games routinely upload an effect with
+	// replay length/delay and play it N times without ever writing an
+	// explicit stop, and the kernel stops it internally without notifying
+	// the creator. The controller synthesizes the stop from the uploaded
+	// timing so those effects do not buzz forever.
 	Rumble func(strong, weak uint16)
 }
 
+// effectInfo is the host-side copy of an uploaded rumble effect. Replay
+// carries the effect's own timing: delay before it kicks in plus length per
+// play. Without it a finite pulse looks identical to a held rumble.
+type effectInfo struct {
+	strong uint16
+	weak   uint16
+	length uint16
+	delay  uint16
+}
+
+// maxTimedEffectMs bounds synthesized rumble stops. Absurd play counts
+// (SDL_HAPTIC_INFINITY arrives as a negative value) and overlong totals
+// mean "hold until an explicit stop", same as an infinite-length effect.
+const maxTimedEffectMs = 5 * 60 * 1000
+
 type Controller struct {
-	file    *os.File
-	rumble  func(strong, weak uint16)
-	effects map[int16]ffRumbleEffect
+	file   *os.File
+	rumble func(strong, weak uint16)
+
+	effects map[int16]effectInfo
+	// playing is the set of effect ids currently held, each with the
+	// generation of the play that started it, so a stale auto-stop timer
+	// cannot kill a newer play of the same id.
+	playing map[int16]uint64
+	timers  map[int16]*time.Timer
+	gen     uint64
+	// lastStrong/lastWeak is the last pair forwarded to rumble, so effect
+	// replays and overlapping effects only emit on actual change.
+	lastStrong uint16
+	lastWeak   uint16
 
 	mu        sync.Mutex
 	writeMu   sync.Mutex
@@ -92,7 +136,9 @@ func newController(f *os.File, rumble func(strong, weak uint16)) *Controller {
 	return &Controller{
 		file:     f,
 		rumble:   rumble,
-		effects:  make(map[int16]ffRumbleEffect),
+		effects:  make(map[int16]effectInfo),
+		playing:  make(map[int16]uint64),
+		timers:   make(map[int16]*time.Timer),
 		loopDone: make(chan struct{}),
 	}
 }
@@ -403,8 +449,26 @@ func (c *Controller) handleUinput(code uint16, requestID int32) {
 			up.Retval = -22 // EINVAL: only rumble effects are registered
 		} else {
 			c.mu.Lock()
-			c.effects[up.Effect.ID] = up.Effect.Rumble
+			_, wasPlaying := c.playing[up.Effect.ID]
+			ffLog("upload id=%d mag=%d:%d len=%d delay=%d wasPlaying=%v", up.Effect.ID, up.Effect.Rumble.StrongMagnitude, up.Effect.Rumble.WeakMagnitude, up.Effect.Replay.Length, up.Effect.Replay.Delay, wasPlaying)
+			c.effects[up.Effect.ID] = effectInfo{
+				strong: up.Effect.Rumble.StrongMagnitude,
+				weak:   up.Effect.Rumble.WeakMagnitude,
+				length: up.Effect.Replay.Length,
+				delay:  up.Effect.Replay.Delay,
+			}
+			var strong, weak uint16
+			var changed bool
+			if _, ok := c.playing[up.Effect.ID]; ok && c.rumble != nil {
+				// Dynamic update of a playing effect: refresh magnitudes
+				// and re-arm the synthesized stop against the new timing.
+				strong, weak, changed = c.refreshLocked(up.Effect.ID, 1)
+			}
+			cb := c.rumble
 			c.mu.Unlock()
+			if changed && cb != nil {
+				cb(strong, weak)
+			}
 		}
 		_ = ioctl(c.file, uiEndFFUpload, uintptr(unsafe.Pointer(&up)))
 	case uiFFErase:
@@ -414,25 +478,167 @@ func (c *Controller) handleUinput(code uint16, requestID int32) {
 			return
 		}
 		er.Retval = 0
-		c.mu.Lock()
-		delete(c.effects, int16(er.EffectID))
-		c.mu.Unlock()
+		c.eraseEffect(int16(er.EffectID))
 		_ = ioctl(c.file, uiEndFFErase, uintptr(unsafe.Pointer(&er)))
 	}
 }
 
 func (c *Controller) fireEffect(id int16, value int32) {
-	c.mu.Lock()
-	effect, ok := c.effects[id]
-	c.mu.Unlock()
-	if !ok || c.rumble == nil {
-		return
-	}
 	if value == 0 {
-		c.rumble(0, 0)
+		c.stopEffect(id)
 		return
 	}
-	c.rumble(effect.StrongMagnitude, effect.WeakMagnitude)
+	c.startEffect(id, value)
+}
+
+// startEffect marks id playing, forwards the combined magnitudes of the
+// playing set, and arms a synthesized stop when the effect carries finite
+// timing. count is the kernel play count (EV_FF value): total hold is
+// delay + length*count. Infinite effects (zero length, absurd count) hold
+// until an explicit stop or erase.
+func (c *Controller) startEffect(id int16, count int32) {
+	c.mu.Lock()
+	eff, ok := c.effects[id]
+	if !ok || c.rumble == nil {
+		ffLog("play id=%d count=%d ignored (known=%v)", id, count, ok)
+		c.mu.Unlock()
+		return
+	}
+	ms := effectDurationMs(eff, count)
+	ffLog("play id=%d count=%d mag=%d:%d len=%d delay=%d autoStopMs=%d", id, count, eff.strong, eff.weak, eff.length, eff.delay, ms)
+	strong, weak, changed := c.refreshLocked(id, count)
+	cb := c.rumble
+	c.mu.Unlock()
+	if changed {
+		cb(strong, weak)
+	}
+}
+
+// stopEffect drops id from the playing set and forwards the remainder (or
+// zero when nothing is left). Stops for unknown or already-stopped ids are
+// no-ops beyond killing a stray timer.
+func (c *Controller) stopEffect(id int16) {
+	c.mu.Lock()
+	_, wasPlaying := c.playing[id]
+	ffLog("stop id=%d wasPlaying=%v", id, wasPlaying)
+	if !wasPlaying {
+		c.stopTimerLocked(id)
+		c.mu.Unlock()
+		return
+	}
+	strong, weak, changed := c.unplayLocked(id)
+	cb := c.rumble
+	c.mu.Unlock()
+	if changed && cb != nil {
+		cb(strong, weak)
+	}
+}
+
+// eraseEffect forgets id. Removing an effect stops it if it was playing
+// (per the FF docs), and the kernel sends no stop event for that, so the
+// remainder is forwarded here instead of leaving the phone buzzing.
+func (c *Controller) eraseEffect(id int16) {
+	c.mu.Lock()
+	_, wasPlaying := c.playing[id]
+	ffLog("erase id=%d wasPlaying=%v", id, wasPlaying)
+	delete(c.effects, id)
+	var strong, weak uint16
+	changed := false
+	if _, ok := c.playing[id]; ok {
+		strong, weak, changed = c.unplayLocked(id)
+	} else {
+		c.stopTimerLocked(id)
+	}
+	cb := c.rumble
+	c.mu.Unlock()
+	if changed && cb != nil {
+		cb(strong, weak)
+	}
+}
+
+// refreshLocked (re)starts id in the playing set with the given play count
+// and re-arms its synthesized stop. Caller must hold c.mu.
+func (c *Controller) refreshLocked(id int16, count int32) (uint16, uint16, bool) {
+	c.stopTimerLocked(id)
+	c.gen++
+	c.playing[id] = c.gen
+	gen := c.gen
+	if ms := effectDurationMs(c.effects[id], count); ms > 0 {
+		c.timers[id] = time.AfterFunc(time.Duration(ms)*time.Millisecond, func() {
+			c.onEffectTimeout(id, gen)
+		})
+	}
+	strong, weak, changed := c.combinedLocked()
+	if changed {
+		c.lastStrong, c.lastWeak = strong, weak
+	}
+	return strong, weak, changed
+}
+
+// unplayLocked drops id from the playing set. Caller must hold c.mu.
+func (c *Controller) unplayLocked(id int16) (uint16, uint16, bool) {
+	delete(c.playing, id)
+	c.stopTimerLocked(id)
+	strong, weak, changed := c.combinedLocked()
+	if changed {
+		c.lastStrong, c.lastWeak = strong, weak
+	}
+	return strong, weak, changed
+}
+
+// combinedLocked returns the max magnitudes across the playing set, so
+// overlapping effects (left/right motors as separate uploads) hold until
+// the last one ends instead of first-stop-wins. Caller must hold c.mu.
+func (c *Controller) combinedLocked() (strong, weak uint16, changed bool) {
+	for id := range c.playing {
+		if eff, ok := c.effects[id]; ok {
+			if eff.strong > strong {
+				strong = eff.strong
+			}
+			if eff.weak > weak {
+				weak = eff.weak
+			}
+		}
+	}
+	return strong, weak, strong != c.lastStrong || weak != c.lastWeak
+}
+
+func (c *Controller) stopTimerLocked(id int16) {
+	if t, ok := c.timers[id]; ok {
+		t.Stop()
+		delete(c.timers, id)
+	}
+}
+
+// onEffectTimeout ends a finite play whose stop the kernel handled
+// internally. The generation check drops stale timers after a re-play.
+func (c *Controller) onEffectTimeout(id int16, gen uint64) {
+	c.mu.Lock()
+	ffLog("timeout id=%d gen=%d current=%d destroyed=%v", id, gen, c.playing[id], c.destroyed)
+	if c.destroyed || c.playing[id] != gen {
+		c.mu.Unlock()
+		return
+	}
+	strong, weak, changed := c.unplayLocked(id)
+	cb := c.rumble
+	c.mu.Unlock()
+	if changed && cb != nil {
+		cb(strong, weak)
+	}
+}
+
+// effectDurationMs converts an effect's finite timing into a hold duration
+// in milliseconds. Zero length, non-positive or absurd play counts, and
+// overlong totals return 0: hold until an explicit stop or erase.
+func effectDurationMs(eff effectInfo, count int32) uint64 {
+	if eff.length == 0 || count < 1 || count > 1024 {
+		return 0
+	}
+	total := uint64(eff.delay) + uint64(eff.length)*uint64(count)
+	if total == 0 || total > maxTimedEffectMs {
+		return 0
+	}
+	return total
 }
 
 // Destroy removes the virtual device and releases the file descriptor. It is
@@ -444,6 +650,11 @@ func (c *Controller) Destroy() error {
 	c.destroy.Do(func() {
 		c.mu.Lock()
 		c.destroyed = true
+		for id, t := range c.timers {
+			t.Stop()
+			delete(c.timers, id)
+		}
+		clear(c.playing)
 		c.mu.Unlock()
 
 		// Keep device writes serialized with uiDevDestroy. Apply checks
