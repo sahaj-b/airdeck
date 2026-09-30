@@ -4,18 +4,31 @@ package vigem
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// defaultDLLPath is the ViGEmClient.dll shipped next to airdeck.exe. DLL
-// search order puts the exe dir first, so this just works.
-const defaultDLLPath = "ViGEmClient.dll"
+// dllName is the ViGEmClient.dll shipped next to airdeck.exe.
+const dllName = "ViGEmClient.dll"
+
+// defaultDLLPath resolves the DLL beside the running exe. Windows searches
+// the exe dir first so the bare name would usually work, but an absolute
+// path removes CWD and PATH ambiguity plus DLL-hijack surprises when
+// airdeck is launched from a shortcut or a different working dir.
+func defaultDLLPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return dllName
+	}
+	return filepath.Join(filepath.Dir(exe), dllName)
+}
 
 func loadDLL(path string) (*dllAPI, error) {
 	if path == "" {
-		path = defaultDLLPath
+		path = defaultDLLPath()
 	}
 	dll := windows.NewLazyDLL(path)
 	names := []string{

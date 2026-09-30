@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/sahaj-b/airdeck/internal/app"
 	"github.com/sahaj-b/airdeck/internal/config"
@@ -97,6 +98,8 @@ func runServe(args []string) error {
 	gracePeriod := flags.Int("grace-period", 0, "reconnect grace period override in seconds")
 	noCode := flags.Bool("no-code", false, "let clients join /join without entering a session code")
 	flags.BoolVar(noCode, "n", false, "shorthand for --no-code")
+	defaultOpen := runtime.GOOS == "windows"
+	open := flags.Bool("open", defaultOpen, "open dashboard in browser on serve (pass --open=false to disable)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -143,6 +146,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	application.OpenBrowser = *open
 	ctx, stop := signalTrap()
 	defer stop()
 	return application.Run(ctx)
