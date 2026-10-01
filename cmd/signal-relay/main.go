@@ -33,6 +33,8 @@ func run(args []string) error {
 	turnSecret := flags.String("turn-secret", "", "Cloudflare TURN key secret (or AIRDECK_TURN_KEY_SECRET)")
 	turnStaticSecret := flags.String("turn-static-secret", "", "self-hosted coturn static-auth-secret (or AIRDECK_TURN_STATIC_SECRET)")
 	turnURLs := flags.String("turn-urls", "", "self-hosted TURN urls, comma-separated, e.g. turn:signal.airdeck.sahaj.dev:3478?transport=udp (or AIRDECK_TURN_URLS)")
+	turnUsername := flags.String("turn-username", "", "verbatim TURN username for one-shot alternate-relay tests, served as-is with --turn-urls (or AIRDECK_TURN_USERNAME)")
+	turnCredential := flags.String("turn-credential", "", "verbatim TURN credential for one-shot alternate-relay tests (or AIRDECK_TURN_CREDENTIAL)")
 	enforceLimits := flags.Bool("enforce-limits", false, "enforce registration rate limits, code-change caps, and the reserved list (off for dev, on in prod)")
 	dev := flags.Bool("dev", false, "allow localhost guest origins for local drills")
 	if err := flags.Parse(args); err != nil {
@@ -50,6 +52,12 @@ func run(args []string) error {
 	if *turnURLs == "" {
 		*turnURLs = os.Getenv("AIRDECK_TURN_URLS")
 	}
+	if *turnUsername == "" {
+		*turnUsername = os.Getenv("AIRDECK_TURN_USERNAME")
+	}
+	if *turnCredential == "" {
+		*turnCredential = os.Getenv("AIRDECK_TURN_CREDENTIAL")
+	}
 	store, err := relay.Open(*dbPath)
 	if err != nil {
 		return err
@@ -58,6 +66,12 @@ func run(args []string) error {
 	provider := turn.New(*turnKeyID, *turnSecret)
 	staticURLs := splitTurnURLs(*turnURLs)
 	provider.SetStatic(*turnStaticSecret, staticURLs)
+	if *turnUsername != "" && *turnCredential != "" && len(staticURLs) > 0 {
+		provider.SetPassthrough(*turnUsername, *turnCredential, staticURLs)
+		log.Printf("signal-relay: using verbatim TURN creds for test (%d urls, user %q)", len(staticURLs), *turnUsername)
+	} else if *turnUsername != "" || *turnCredential != "" {
+		log.Printf("signal-relay: turn-username without both credential and urls, ignoring passthrough")
+	}
 	if *turnKeyID == "" || *turnSecret == "" {
 		if *turnStaticSecret != "" && len(staticURLs) > 0 {
 			log.Printf("signal-relay: using self-hosted TURN (%d urls)", len(staticURLs))

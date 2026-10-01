@@ -58,6 +58,9 @@ type Provider struct {
 	client         *http.Client
 	staticSecret   string
 	staticURLs     []string
+	passUser       string
+	passCred       string
+	passURLs       []string
 	cached         []rtc.ICEServer
 	fetchedAt      time.Time
 }
@@ -94,6 +97,20 @@ func (p *Provider) SetStatic(secret string, urls []string) {
 	p.mu.Unlock()
 }
 
+// SetPassthrough installs (or clears) verbatim TURN credentials for testing.
+// Unlike the HMAC backends it mints nothing: Servers returns passURLs with
+// exactly this username/credential. It exists so a one-shot alternate relay
+// (Metered OpenRelay API creds, ExpressTurn static creds, Xirsys trial)
+// can be A/B tested without teaching the relay that vendor's mint protocol.
+// Creds from time-limited APIs expire; refresh means resetting the flags.
+func (p *Provider) SetPassthrough(username, credential string, urls []string) {
+	p.mu.Lock()
+	p.passUser = username
+	p.passCred = credential
+	p.passURLs = append([]string(nil), urls...)
+	p.mu.Unlock()
+}
+
 // STUNOnly is the no-credential bundle: STUN with no TURN entry.
 func STUNOnly() []rtc.ICEServer {
 	return []rtc.ICEServer{{URLs: []string{STUNURL}}}
@@ -108,7 +125,12 @@ func (p *Provider) Servers(ctx context.Context) []rtc.ICEServer {
 	cached := p.cached
 	keyID, secret, endpoint, client := p.keyID, p.secret, p.endpointFormat, p.client
 	staticSecret, staticURLs := p.staticSecret, append([]string(nil), p.staticURLs...)
+	passUser, passCred, passURLs := p.passUser, p.passCred, append([]string(nil), p.passURLs...)
 	p.mu.Unlock()
+	// Explicit operator override for A/B tests: serve verbatim, mint nothing.
+	if passUser != "" && passCred != "" && len(passURLs) > 0 {
+		return SplitMinted(passURLs, passUser, passCred)
+	}
 	hasStatic := staticSecret != "" && len(staticURLs) > 0
 	if keyID != "" && secret != "" {
 		if fresh && len(cached) > 0 {
