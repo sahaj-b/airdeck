@@ -2,7 +2,7 @@ SHELL := /bin/sh
 
 GO_FILES := $(shell find cmd internal tools -type f -name '*.go' | sort)
 
-.PHONY: sync-contracts web-build build relay dev test lint fmt bench
+.PHONY: sync-contracts web-build build relay build-windows vet-windows release-windows dev test lint fmt bench
 
 sync-contracts:
 	node scripts/sync-contracts.mjs
@@ -17,6 +17,25 @@ build: web-build
 
 relay:
 	go build -o signal-relay ./cmd/signal-relay
+
+build-windows: web-build
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o dist-windows/airdeck.exe ./cmd
+
+vet-windows:
+	GOOS=windows GOARCH=amd64 go vet ./...
+
+release-windows: build-windows
+	@set -eu; \
+		test -f ViGEmClient.dll || { echo "missing ViGEmClient.dll" >&2; exit 1; }; \
+		set -- Drivers/ViGEmBus_*.exe; \
+		test -f "$$1" || { echo "missing Drivers/ViGEmBus_*.exe" >&2; exit 1; }; \
+		test "$$(printf '%s\n' "$$@" | wc -l)" -eq 1 || { echo "multiple ViGEmBus installers found" >&2; exit 1; }; \
+		find dist-windows -mindepth 1 -maxdepth 1 ! -name airdeck.exe -exec rm -rf {} +; \
+		mkdir -p dist-windows/Drivers; \
+		cp ViGEmClient.dll dist-windows/; \
+		cp "$$1" dist-windows/Drivers/; \
+		cp third_party/vigem/README.md dist-windows/Drivers/; \
+		(cd dist-windows && zip -qr ../airdeck-windows.zip .)
 
 test:
 	go test ./...

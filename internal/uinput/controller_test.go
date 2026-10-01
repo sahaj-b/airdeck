@@ -1,7 +1,11 @@
+//go:build linux
+
 package uinput
 
 import (
+	"fmt"
 	"os"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -39,6 +43,156 @@ func TestDestroyUnblocksParkedReadLoop(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Destroy did not return while the read loop was parked without events")
+	}
+}
+
+type rumbleRec struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (r *rumbleRec) callback(strong, weak uint16) {
+	r.mu.Lock()
+	r.calls = append(r.calls, fmt.Sprintf("%d:%d", strong, weak))
+	r.mu.Unlock()
+}
+
+func (r *rumbleRec) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string{}, r.calls...)
+}
+
+func (r *rumbleRec) saw(want string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.calls {
+		if c == want {
+			return true
+		}
+	}
+	return false
+}
+
+func waitForRumble(t *testing.T, rec *rumbleRec, want string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if rec.saw(want) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for rumble %q, got %v", want, rec.snapshot())
+}
+
+func newRumbleTestController(rec *rumbleRec) *Controller {
+	// No read loop, no fd use: these tests drive the effect state machine
+	// directly. Never call Destroy here (it ioctls the nil file).
+	return newController(nil, rec.callback)
+}
+
+// Finite-length effects must synthesize their own stop: games upload
+// replay length/delay and play N times without an explicit stop, and the
+// kernel stops internally without notifying the creator.
+func TestTimedEffectAutoStops(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.effects[7] = effectInfo{strong: 1000, weak: 2000, length: 30}
+	c.fireEffect(7, 1)
+	waitForRumble(t, rec, "1000:2000")
+	waitForRumble(t, rec, "0:0")
+}
+
+// delay + length*count defines the hold: delay 20 + 30*2 = 80ms.
+func TestTimedEffectUsesDelayAndPlayCount(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.effects[7] = effectInfo{strong: 100, weak: 100, length: 30, delay: 20}
+	c.fireEffect(7, 2)
+	waitForRumble(t, rec, "100:100")
+	time.Sleep(40 * time.Millisecond)
+	if rec.saw("0:0") {
+		t.Fatalf("stopped early, got %v", rec.snapshot())
+	}
+	waitForRumble(t, rec, "0:0")
+}
+
+// Zero length means infinite: hold until an explicit stop.
+func TestInfiniteEffectHoldsUntilExplicitStop(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.effects[7] = effectInfo{strong: 500, weak: 600}
+	c.fireEffect(7, 1)
+	waitForRumble(t, rec, "500:600")
+	time.Sleep(100 * time.Millisecond)
+	if rec.saw("0:0") {
+		t.Fatalf("infinite effect stopped itself, got %v", rec.snapshot())
+	}
+	c.fireEffect(7, 0)
+	waitForRumble(t, rec, "0:0")
+}
+
+// Removing an effect stops it if it was playing; the kernel sends no stop
+// event for that, so erase must forward the remainder itself.
+func TestErasePlayingEffectStops(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.effects[5] = effectInfo{strong: 900, weak: 100}
+	c.fireEffect(5, 1)
+	waitForRumble(t, rec, "900:100")
+	c.eraseEffect(5)
+	waitForRumble(t, rec, "0:0")
+	if _, ok := c.effects[5]; ok {
+		t.Fatal("erased effect still registered")
+	}
+}
+
+// Overlapping effects combine by max and hold until the last one ends.
+func TestOverlappingEffectsCombine(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.effects[1] = effectInfo{strong: 5000}
+	c.effects[2] = effectInfo{weak: 3000}
+	c.fireEffect(1, 1)
+	waitForRumble(t, rec, "5000:0")
+	c.fireEffect(2, 1)
+	waitForRumble(t, rec, "5000:3000")
+	c.fireEffect(1, 0)
+	waitForRumble(t, rec, "0:3000")
+	if rec.saw("0:0") {
+		t.Fatalf("first stop killed the survivor, got %v", rec.snapshot())
+	}
+	c.fireEffect(2, 0)
+	waitForRumble(t, rec, "0:0")
+}
+
+// Re-playing re-arms the auto-stop instead of letting the stale timer cut
+// the new play short.
+func TestReplayRearmsAutoStop(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.effects[7] = effectInfo{strong: 100, weak: 0, length: 100}
+	c.fireEffect(7, 1)
+	waitForRumble(t, rec, "100:0")
+	time.Sleep(50 * time.Millisecond)
+	c.fireEffect(7, 1)
+	time.Sleep(70 * time.Millisecond) // past the first deadline, before the second
+	if rec.saw("0:0") {
+		t.Fatalf("stale timer cut the replay short, got %v", rec.snapshot())
+	}
+	waitForRumble(t, rec, "0:0")
+}
+
+func TestUnknownEffectIsIgnored(t *testing.T) {
+	rec := &rumbleRec{}
+	c := newRumbleTestController(rec)
+	c.fireEffect(99, 1)
+	c.fireEffect(99, 0)
+	c.eraseEffect(99)
+	time.Sleep(50 * time.Millisecond)
+	if got := rec.snapshot(); len(got) != 0 {
+		t.Fatalf("unknown effect emitted %v", got)
 	}
 }
 

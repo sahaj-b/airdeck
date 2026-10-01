@@ -1,13 +1,13 @@
 # Lingo
 
-- **Host:** The Linux machine running airdeck. It serves clients and creates native virtual controller devices.
+- **Host:** The machine running airdeck (Linux or Windows). It serves clients and creates native virtual controller devices.
 - **Client:** A phone browser or future native client connected to the host.
 - **Session:** One running airdeck instance that admits clients and owns their player assignments.
 - **Player slot:** A host-managed assignment that binds one admitted player to one virtual controller.
 - **Input state:** The complete current Xbox-style controller state for one player, including two stick axes, two analog triggers, semantic face directions, shoulder buttons, stick clicks, D-pad directions, Start, Back, and Guide/Home.
 - **Semantic command:** A profile-independent logical control name such as `south`, `leftStick`, or `rightTrigger`. A visual label or native device bit is a separate mapping.
 - **Standard layout control:** A validated `LayoutDocument` control of type button, D-pad, joystick, trigger, label, or hitzone. All types except hitzone are always visible. hitzone is the only invisible type and exists solely to extend a parent's hit area. No `visible` boolean exists. Controls cannot execute arbitrary code or define a new protocol command.
-- **Virtual controller:** A Linux input device created by airdeck through `uinput` and exposed to games as a real controller.
+- **Virtual controller:** A native input device created by airdeck and exposed to games as a real controller. Linux uses `internal/uinput` against `/dev/uinput`; Windows uses `internal/vigem` against ViGEmBus. Both expose the same Xbox 360 identity per player slot.
 - **Room code:** The persistent human-entered identifier used to find one online host. Generated codes are 6 chars from Crockford-style alphabet (A-Z/2-9 minus ambiguous 0/O, 1/I/L). Custom codes are 4-24 chars from the same alphabet plus dash. Normalization before lookup and claiming: trim, uppercase, strip dashes and spaces. Lives in host configuration, survives restarts until the owner explicitly changes it. Changed or retired codes burn permanently and are never reassigned, so stale links fail instead of reaching a different host. It is a lightweight room guard, not strong authentication.
 - **Installation key:** A random key generated once for one Airdeck installation and stored in host configuration. It proves that a returning host owns its durable room-code claim. It is not derived from hardware and is never shown to players. If the key is lost (reinstall, wiped config), its claimed codes stay tombstoned forever with no recovery; migration means copying the config file.
 - **Room-code claim:** The durable central record binding one normalized room code to one installation key. Changed or retired codes remain reserved to that installation and cannot be claimed by another installation.
@@ -87,11 +87,11 @@ The phone always creates both DataChannels and always sends the offer, but when 
 
 ## Go host in one process
 
-The Linux host will run as one Go process that owns the web server, session state, transport, input routing, and virtual-device lifecycle. We chose Go because the project owner already knows it, it can ship as a single binary, and the input workload does not need Rust's extra language complexity. The virtual-controller layer is a custom internal package (see the custom uinput package ADR). Keeping the systems in one process avoids a second daemon and IPC failure mode.
+The host will run as one Go process that owns the web server, session state, transport, input routing, and virtual-device lifecycle. We chose Go because the project owner already knows it, it can ship as a single binary, and the input workload does not need Rust's extra language complexity. The virtual-controller layer is a custom internal package per OS (see the custom uinput package ADR and the Windows virtual controller via ViGEmBus ADR). Keeping the systems in one process avoids a second daemon and IPC failure mode.
 
 ## Persistent configuration versus session state
 
-Host preferences live in versioned `$XDG_CONFIG_HOME/airdeck/config.json`; CLI flags can override them for one run. Layout documents remain separate files under `layouts/`. No database or environment-only configuration is required.
+Host preferences live in versioned `config.json` under the OS config home (`$XDG_CONFIG_HOME/airdeck` on Linux, `%AppData%/airdeck` on Windows with optional `AIRDECK_CONFIG_HOME` override); CLI flags can override them for one run. Layout documents remain separate files under `layouts/`. No database or environment-only configuration is required.
 
 Versioned host configuration persists preferences, while session codes, player assignments, reconnect generations, diagnostics, and virtual devices exist only inside one process session. Client storage may keep convenience preferences, but reconnect identities expire with the session.
 
@@ -101,19 +101,23 @@ Each `airdeck serve` process owns one active session. The session starts with th
 
 ## Standalone host lifecycle
 
-V1 runs as a standalone CLI process with `doctor`, `setup`, and `serve` commands. A desktop wrapper and required systemd integration are deferred. Normal signals trigger neutralization and device cleanup, while startup diagnostics identify any leftover airdeck-owned devices or permissions problems.
+V1 runs as a standalone CLI process with `doctor`, `setup`, and `serve` commands. A desktop wrapper, tray app, autostart, Windows Service, and required systemd integration are deferred. Normal signals trigger neutralization and device cleanup, while startup diagnostics identify any leftover airdeck-owned devices or permissions problems.
 
 ## Rootless host process
 
-Airdeck uses a privileged setup step for uinput/udev configuration, then runs the host as the normal user. The serving process must not require root. Diagnostics must identify missing kernel modules, permissions, or device capability failures instead of hiding them.
+Airdeck uses a privileged setup step for device access (udev/uinput configuration on Linux, ViGEmBus driver install plus firewall rule on Windows), then runs the host as the normal user. The serving process must not require root/admin. Diagnostics must identify missing kernel modules, drivers, permissions, or device capability failures instead of hiding them.
 
 ## x86_64 Linux baseline
 
 V1 targets x86_64 Linux with the `uinput` kernel interface and is tested on the project owner's Arch Linux system. Broader distro, init-system, immutable-image, and ARM support is an expansion decision, not a v1 promise.
 
+## Windows host parity
+
+Windows support means full native host parity on amd64 Win10/11: same `serve` CLI, same phone client, same 20-byte snapshot protocol, same dashboard, same session and slot semantics, same 16-player ceiling, same Xbox 360 pad identity, bidirectional rumble included. Only the OS-specific backend changes: `internal/vigem` (windows-tagged, LazyDLL, no cgo) behind `device.Factory`, Windows `setup`/`doctor` guts, `%AppData%/airdeck` config home, `net.Interfaces` advertised-IP lookup, `netsh` firewall rule. No MSI/winget installer (zip with exe plus DLL plus Drivers/), no ARM64, no DS4 pad type, no tray/service, no phone client fork.
+
 ## Generic controller contract
 
-Airdeck stops at the Linux virtual-controller boundary. Steamworks, Steam Input configuration, launcher detection, and game launching are outside the host contract. If Steam changes how it wraps a generic controller, that is not a reason to add Steam branches to airdeck.
+Airdeck stops at the native virtual-controller boundary on either OS. Steamworks, Steam Input configuration, launcher detection, and game launching are outside the host contract. If Steam changes how it wraps a generic controller, that is not a reason to add Steam branches to airdeck.
 
 Airdeck exposes generic Xbox 360-style virtual controllers. Representative games are test fixtures only. The host must not branch on game names, launchers, or process identities to make individual titles work.
 
@@ -131,13 +135,17 @@ The package's API is shaped 1:1 after the v1 wire frame: one `State` struct hold
 
 Consequences: airdeck owns the low-level ABI code and must re-verify it if the kernel interface ever changes; the verified reference flow lives in `internal/uinput/probe`. Rootless operation still depends on `airdeck setup` installing proper udev permissions for `/dev/uinput`.
 
+## Windows virtual controller via ViGEmBus
+
+Windows hosts create Xbox 360 pads through ViGEmBus + ViGEmClient (LazyDLL, no cgo) instead of Linux uinput. We chose the archived ViGEmBus 1.22.0 over Nefarius VirtualPad, vJoy, ScpVBus, and SendInput injection because it is the only Windows path with true Xbox 360 identity parity, bidirectional rumble, a production-signed Win10/11 driver, and DS4Windows-scale proof. The cost is depending on a dead driver with no upstream fixes; the Windows backend stays behind `device.Factory` so a VirtualPad swap does not touch the session or protocol contract.
+
 # Slot-bound device lifecycle
 
 A virtual Xbox-style device is created when a client receives a player slot, not lazily on the first input and not for unused slots at host startup. The device remains bound to that slot through reconnect grace and is destroyed after leave, kick, or grace expiry.
 
 ## Xbox-style virtual controller baseline
 
-Airdeck's v1 native device identity is one stable Xbox 360-style virtual controller per player slot. Phone visual layouts and host device profiles are separate concepts. Alternate Linux controller identities require real compatibility evidence before they enter the product.
+Airdeck's v1 native device identity is one stable Xbox 360-style virtual controller per player slot on every OS. Phone visual layouts and host device profiles are separate concepts. Alternate controller identities on any OS require real compatibility evidence before they enter the product.
 
 ## Neutral state on hidden clients
 
@@ -159,7 +167,7 @@ The cost is a single contention point. All 16 players' frame application, up to 
 
 ## Host-owned layout library
 
-Built-in `LayoutDocument` files ship with the frontend assets. User documents live under `$XDG_CONFIG_HOME/airdeck/layouts`, are validated by the host, and are distributed to clients by session. Browser storage may remember a selected preset ID but is not the source of truth. New players receive the host's default, but each player may select another available document without changing other players. Future editor-created documents remain host-owned and are distributed by the session rather than copied manually between phones.
+Built-in `LayoutDocument` files ship with the frontend assets. User documents live under `layouts/` in the OS config home, are validated by the host, and are distributed to clients by session. Browser storage may remember a selected preset ID but is not the source of truth. New players receive the host's default, but each player may select another available document without changing other players. Future editor-created documents remain host-owned and are distributed by the session rather than copied manually between phones.
 
 ## Responsive layout contract
 
@@ -229,7 +237,7 @@ The dashboard generates the QR from the current advertised `/join?code=...` URL 
 
 ## LAN binding and advertised URL
 
-Airdeck listens on `0.0.0.0:6969` unless the host selects a specific interface/address. If the port is occupied, the host tries the next port. The dashboard controls the advertised URL independently, because a machine may have several reachable interfaces and the listening address is not always the address friends should use.
+Airdeck listens on `0.0.0.0:6969` unless the host selects a specific interface/address. If the port is occupied, the host tries the next port. The dashboard controls the advertised URL independently, because a machine may have several reachable interfaces and the listening address is not always the address friends should use. Linux picks the default-route interface via `/proc/net/route`; Windows enumerates `net.Interfaces` preferring up adapters with IPv4 gateways. The loopback-admin split is OS-blind and unchanged on Windows; Windows `setup` additionally adds a `netsh` inbound firewall rule for the exe plus port.
 
 ## Local-only host administration
 
@@ -282,6 +290,7 @@ Central needs a wss relay plus claim database on the VPS. The relay lives in thi
 
 - The exact frontend build tooling and Go asset-embedding method.
 - Broader Linux distributions, architectures, and permission setup beyond the tested Arch x86_64 baseline.
+- ARM64 Windows, a future Nefarius VirtualPad migration off archived ViGEmBus, and any installer beyond the zip release.
 - The exact maximum supported player count beyond the v1 ceiling of 16.
 - Future binary protocol extensions beyond the v1 20-byte input frame.
 - Whether the editor needs extra interaction primitives beyond `interact.js` drag/resize (snapping was explicitly cut).

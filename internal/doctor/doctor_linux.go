@@ -1,3 +1,5 @@
+//go:build linux
+
 package doctor
 
 import (
@@ -11,51 +13,32 @@ import (
 	"github.com/sahaj-b/airdeck/internal/uinput"
 )
 
-type Check struct {
-	Name     string `json:"name"`
-	OK       bool   `json:"ok"`
-	Detail   string `json:"detail"`
-	Critical bool   `json:"critical"`
-}
-
-type Report struct {
-	Checks    []Check  `json:"checks"`
-	Errors    []string `json:"errors"`
-	Leftovers []string `json:"leftovers"`
-}
-
 func Run(cleanup bool) (Report, error) {
 	var report Report
-	add := func(name string, ok bool, detail string, critical bool) {
-		report.Checks = append(report.Checks, Check{Name: name, OK: ok, Detail: detail, Critical: critical})
-		if critical && !ok {
-			report.Errors = append(report.Errors, name+": "+detail)
-		}
-	}
-	add("architecture", runtime.GOARCH == "amd64", runtime.GOARCH, true)
+	report.add("architecture", runtime.GOARCH == "amd64", runtime.GOARCH, true)
 	_, err := os.Stat("/sys/module/uinput")
-	add("uinput module", err == nil, detail(err, "loaded"), true)
+	report.add("uinput module", err == nil, detail(err, "loaded"), true)
 	info, err := os.Stat("/dev/uinput")
-	add("uinput device", err == nil, detail(err, infoMode(info)), true)
+	report.add("uinput device", err == nil, detail(err, infoMode(info)), true)
 	if err == nil {
 		file, openErr := os.OpenFile("/dev/uinput", os.O_RDWR, 0)
 		if openErr == nil {
 			file.Close()
 		}
-		add("uinput read/write access", openErr == nil, detail(openErr, "read/write access available"), true)
+		report.add("uinput read/write access", openErr == nil, detail(openErr, "read/write access available"), true)
 	} else {
-		add("uinput read/write access", false, "device node is unavailable", true)
+		report.add("uinput read/write access", false, "device node is unavailable", true)
 	}
-	add("input group", inInputGroup(), "current user membership", true)
+	report.add("input group", inInputGroup(), "current user membership", true)
 	if report.Errors == nil || len(report.Errors) == 0 {
 		controller, probeErr := uinput.NewController(uinput.Config{Rumble: func(uint16, uint16) {}})
 		if probeErr == nil {
 			_ = controller.Neutralize()
 			_ = controller.Destroy()
 		}
-		add("virtual-controller capability", probeErr == nil, detail(probeErr, "controller created and destroyed"), true)
+		report.add("virtual-controller capability", probeErr == nil, detail(probeErr, "controller created and destroyed"), true)
 	} else {
-		add("virtual-controller capability", false, "skipped because prerequisites failed", true)
+		report.add("virtual-controller capability", false, "skipped because prerequisites failed", true)
 	}
 	report.Leftovers = findLeftovers()
 	if cleanup && len(report.Leftovers) > 0 {
@@ -65,13 +48,6 @@ func Run(cleanup bool) (Report, error) {
 		return report, errors.New(strings.Join(report.Errors, "; "))
 	}
 	return report, nil
-}
-
-func detail(err error, success string) string {
-	if err == nil {
-		return success
-	}
-	return err.Error()
 }
 
 func infoMode(info os.FileInfo) string {

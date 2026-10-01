@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
+	"runtime"
 
 	"github.com/sahaj-b/airdeck/internal/app"
 	"github.com/sahaj-b/airdeck/internal/config"
@@ -66,9 +64,7 @@ func runDoctor(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if os.Geteuid() == 0 {
-		fmt.Fprintln(os.Stderr, paint(colorYellow, "warning: doctor as root checks root's access, not yours; rerun as your normal user"))
-	}
+	warnIfRoot()
 	report, err := doctor.Run(*cleanup)
 	for _, check := range report.Checks {
 		fmt.Printf("%-32s %s: %s\n", check.Name, checkStatus(check), check.Detail)
@@ -77,27 +73,6 @@ func runDoctor(args []string) error {
 		fmt.Println(paint(colorRed, "leftover airdeck device: "+leftover))
 	}
 	return err
-}
-
-// signalTrap cancels its context on the first SIGINT/SIGTERM and force-exits
-// the process on the second. A wedged shutdown must never eat the terminal:
-// the first press starts graceful teardown, the next one always kills.
-func signalTrap() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-	signals := make(chan os.Signal, 2)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-signals
-		fmt.Fprintln(os.Stderr, "airdeck: received "+sig.String()+", shutting down (press Ctrl-C again to force quit)")
-		cancel()
-		sig = <-signals
-		fmt.Fprintln(os.Stderr, "airdeck: received "+sig.String()+" again, forcing exit")
-		os.Exit(130)
-	}()
-	return ctx, func() {
-		signal.Stop(signals)
-		cancel()
-	}
 }
 
 func checkStatus(check doctor.Check) string {
@@ -126,11 +101,13 @@ func runServe(args []string) error {
 	roomCode := flags.String("room-code", "", "persistent room code override")
 	lanOnly := flags.Bool("lan-only", false, "serve LAN only without probing central")
 	approvalRequired := flags.Bool("approval-required", false, "require host approval before admitting joins")
+	defaultOpen := runtime.GOOS == "windows"
+	open := flags.Bool("open", defaultOpen, "open dashboard in browser on serve (pass --open=false to disable)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if os.Geteuid() == 0 {
-		return errors.New("serve must run as your normal user, not as root; run it without sudo")
+	if err := mustNotBeRoot(); err != nil {
+		return err
 	}
 	if _, err := doctor.Run(false); err != nil {
 		return fmt.Errorf("serve prerequisites: %w", err)
@@ -181,6 +158,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	application.OpenBrowser = *open
 	ctx, stop := signalTrap()
 	defer stop()
 	return application.Run(ctx)

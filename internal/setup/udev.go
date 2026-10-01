@@ -1,3 +1,5 @@
+//go:build linux
+
 package setup
 
 import (
@@ -12,33 +14,6 @@ import (
 // project's 99-* uinput rule) cannot reopen the node. Airdeck's rule sorts
 // first among 99-* rules, so finalizing here wins.
 const Rule = `KERNEL=="uinput", GROUP="input", MODE:="0660"`
-
-const (
-	colorGreen  = "32"
-	colorYellow = "33"
-	colorBold   = "1"
-	colorDim    = "2"
-)
-
-// colorsAreEnabled reports whether stdout is a terminal and NO_COLOR is unset.
-func colorsAreEnabled() bool {
-	if _, set := os.LookupEnv("NO_COLOR"); set {
-		return false
-	}
-	info, err := os.Stdout.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-func paint(code, text string) string {
-	if !colorsAreEnabled() {
-		return text
-	}
-	return "\x1b[" + code + "m" + text + "\x1b[0m"
-}
-
-func green(text string) string  { return paint(colorGreen, text) }
-func yellow(text string) string { return paint(colorYellow, text) }
-func dim(text string) string    { return paint(colorDim, text) }
 
 func Run() error {
 	if os.Geteuid() != 0 {

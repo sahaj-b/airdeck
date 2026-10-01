@@ -28,6 +28,7 @@ const shutdownTimeout = 10 * time.Second
 type App struct {
 	Config       config.Config
 	ConfigPath   string
+	OpenBrowser  bool
 	Layouts      *layout.Library
 	Session      *session.Session
 	Devices      *device.Manager
@@ -44,7 +45,7 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	devices := device.NewManager(device.UInputFactory{})
+	devices := device.NewManager(device.DefaultFactory())
 	sess, err := session.New(layouts, devices, time.Duration(cfg.GracePeriodSeconds)*time.Second)
 	if err != nil {
 		return nil, err
@@ -83,8 +84,10 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	joinURL := a.HTTP.AdvertisedJoinURL()
-	log.Printf("dashboard URL %s", a.HTTP.DashboardURL())
+	dashboardURL := a.HTTP.DashboardURL()
+	log.Printf("dashboard URL %s", dashboardURL)
 	log.Printf("session %s, join URL %s", a.Session.Code(), joinURL)
+	maybeOpenBrowser(dashboardURL, a.OpenBrowser)
 	printJoinQR(joinURL)
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)

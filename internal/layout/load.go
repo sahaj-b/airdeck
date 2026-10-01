@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -25,7 +26,7 @@ func LoadBuiltins() ([]Document, error) {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		data, err := fs.ReadFile(builtinFS, filepath.Join("presets", entry.Name()))
+		data, err := fs.ReadFile(builtinFS, path.Join("presets", entry.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("read built-in layout %q: %w", entry.Name(), err)
 		}

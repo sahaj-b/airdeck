@@ -16,9 +16,3 @@ type Device interface {
 type Factory interface {
 	Create(RumbleFunc) (Device, error)
 }
-
-type UInputFactory struct{}
-
-func (UInputFactory) Create(rumble RumbleFunc) (Device, error) {
-	return uinput.NewController(uinput.Config{Rumble: rumble})
-}

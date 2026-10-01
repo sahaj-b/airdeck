@@ -141,7 +141,7 @@ export function InlineSettingsPanel({
   const previewVibration = (ms: number) => {
     if (!hapticsAvailable || ms <= 0) return;
     try {
-      navigator.vibrate?.(ms);
+      feedback.previewVibration(ms);
     } catch {}
   };
 
