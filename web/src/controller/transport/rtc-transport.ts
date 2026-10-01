@@ -21,6 +21,7 @@ import type {
   ControllerTransport,
   ControllerTransportOptions,
   SocketConnection,
+  TransportDebugStats,
 } from './types';
 import { RECONNECT_ID_KEY } from './types';
 
@@ -138,6 +139,8 @@ export class RtcTransport implements ControllerTransport {
   private receivedWelcome = false;
   private reconnectId: string | undefined;
   private joinTimer: ReturnType<typeof setTimeout> | undefined;
+  private inputsSent = 0;
+  private inputsDropped = 0;
   private readonly options: RtcTransportOptions;
 
   constructor(options: RtcTransportOptions) {
@@ -160,15 +163,34 @@ export class RtcTransport implements ControllerTransport {
   }
   sendBinary(frame: Uint8Array): boolean {
     const inputs = this.inputs;
-    if (inputs?.readyState !== 'open') return false;
-    if (this.stateValue !== 'active') return false;
-    if (inputs.bufferedAmount > MAX_BUFFERED_BYTES) return false;
-    try {
-      inputs.send(frame);
-      return true;
-    } catch {
+    if (inputs?.readyState !== 'open') {
+      this.inputsDropped += 1;
       return false;
     }
+    if (this.stateValue !== 'active') {
+      this.inputsDropped += 1;
+      return false;
+    }
+    if (inputs.bufferedAmount > MAX_BUFFERED_BYTES) {
+      this.inputsDropped += 1;
+      return false;
+    }
+    try {
+      inputs.send(frame);
+      this.inputsSent += 1;
+      return true;
+    } catch {
+      this.inputsDropped += 1;
+      return false;
+    }
+  }
+
+  getDebugStats(): TransportDebugStats {
+    return {
+      sent: this.inputsSent,
+      dropped: this.inputsDropped,
+      buffered: this.inputs?.bufferedAmount ?? 0,
+    };
   }
 
   sendJSON(message: object): boolean {

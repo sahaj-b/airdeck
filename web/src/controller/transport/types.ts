@@ -66,4 +66,13 @@ export interface ControllerTransport {
   selectLayout(id: string): boolean;
   close(): void;
   resetReconnectId(): void;
+  // Debug-only input counters for joystick experiments. Optional so fakes
+  // stay small; implemented by both transports.
+  getDebugStats?: () => TransportDebugStats;
+}
+
+export interface TransportDebugStats {
+  sent: number;
+  dropped: number;
+  buffered: number;
 }

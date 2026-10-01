@@ -2,6 +2,7 @@ package input
 
 import (
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -11,10 +12,29 @@ import (
 
 const WatchdogTimeout = 200 * time.Millisecond
 
+// slowApplyThreshold logs one line per offending frame: ApplyInput covers
+// the session lock plus the uinput writes, so a slow device write shows up
+// here instead of hiding inside a ping spike.
+const slowApplyThreshold = 10 * time.Millisecond
+
+// inputDebug enables per-second input fps plus max Apply latency per
+// player for joystick experiments: AIRDECK_INPUT_DEBUG=1 airdeck serve.
+// Off by default; the Handle fast path only reads one bool when off.
+var inputDebug = os.Getenv("AIRDECK_INPUT_DEBUG") != ""
+
+type debugWindow struct {
+	start      time.Time
+	frames     int
+	stale      int
+	maxLatency time.Duration
+}
+
 type Handler struct {
 	session *session.Session
 	mu      sync.Mutex
 	timers  map[string]*watchdogEntry
+	debugMu sync.Mutex
+	windows map[string]*debugWindow
 }
 
 func NewHandler(s *session.Session) *Handler {
@@ -22,13 +42,20 @@ func NewHandler(s *session.Session) *Handler {
 }
 
 func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) error {
+	var start time.Time
+	if inputDebug {
+		start = time.Now()
+	}
 	accepted, err := h.session.AcceptSequence(id, generation, frame.Seq)
 	if err != nil {
 		log.Printf("input rejected player %s seq %d: %v", id, frame.Seq, err)
 		return err
 	}
 	if !accepted {
-		log.Printf("input stale player %s seq %d", id, frame.Seq)
+		if inputDebug {
+			log.Printf("input stale player %s seq %d", id, frame.Seq)
+		}
+		h.trackDebug(id, start, true)
 		return nil
 	}
 	if err := h.session.ApplyInput(id, generation, frame); err != nil {
@@ -36,7 +63,46 @@ func (h *Handler) Handle(id string, generation uint64, frame protocol.Frame) err
 		return err
 	}
 	h.resetWatchdog(id, generation)
+	h.trackDebug(id, start, false)
 	return nil
+}
+
+// trackDebug folds one frame into the per-player one-second window and
+// logs fps plus worst Apply latency. Slow frames log immediately with
+// their latency so a blocking uinput write is caught red-handed.
+func (h *Handler) trackDebug(id string, start time.Time, stale bool) {
+	if !inputDebug {
+		return
+	}
+	latency := time.Since(start)
+	if latency >= slowApplyThreshold {
+		log.Printf("input slow player %s latency=%s stale=%v", id, latency, stale)
+	}
+	now := time.Now()
+	h.debugMu.Lock()
+	window, ok := h.windows[id]
+	if !ok || window == nil {
+		window = &debugWindow{start: now}
+		if h.windows == nil {
+			h.windows = make(map[string]*debugWindow)
+		}
+		h.windows[id] = window
+	}
+	window.frames++
+	if stale {
+		window.stale++
+	}
+	if latency > window.maxLatency {
+		window.maxLatency = latency
+	}
+	if now.Sub(window.start) >= time.Second {
+		log.Printf("input dbg player %s fps=%d stale=%d maxApply=%s", id, window.frames, window.stale, window.maxLatency)
+		window.start = now
+		window.frames = 0
+		window.stale = 0
+		window.maxLatency = 0
+	}
+	h.debugMu.Unlock()
 }
 
 type watchdogEntry struct {

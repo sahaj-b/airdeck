@@ -66,6 +66,7 @@ root.classList.add('dark');
 
 let activeSocket: ControllerTransport | undefined;
 let activeSender: FrameSender | undefined;
+let netDebugTimer: ReturnType<typeof setInterval> | undefined;
 let activeRenderer: RenderedLayout | undefined;
 let activeFeedback: FeedbackController | undefined;
 let activeCapabilities: CapabilityManager | undefined;
@@ -94,6 +95,10 @@ function shouldUseRtcTransport(): boolean {
 }
 
 function renderJoinScreen(errorMessage = '', revealCode = false): void {
+  if (netDebugTimer !== undefined) {
+    clearInterval(netDebugTimer);
+    netDebugTimer = undefined;
+  }
   activeSocket?.close();
   activeSender?.destroy();
   activeRenderer?.destroy();
@@ -808,8 +813,14 @@ function showController(options: {
     if (island && !island.isDestroyed()) island.update({ connectionText });
   };
 
-  const updatePing = (text: string) => {
-    pingText = text;
+  // Debug-only joystick experiment readout. Folded into the existing ping
+  // line so it is visible in the settings drawer with no new UI: ping plus
+  // sender pps, coalesced changes, sender drops, and transport buffer.
+  // Production UI is untouched when ?debug=1 is off.
+  let netLine = '';
+  const renderPingLine = (pingMs: number) => {
+    pingText = `${Math.round(pingMs)} ms`;
+    if (CONTROLLER_DEBUG && netLine !== '') pingText += ` · ${netLine}`;
     if (island && !island.isDestroyed()) island.update({ pingText });
   };
 
@@ -1061,7 +1072,7 @@ function showController(options: {
       feedback.rumble(message);
     },
     onPing: (rttMs) => {
-      updatePing(`${Math.round(rttMs)} ms`);
+      renderPingLine(rttMs);
     },
     onReconnect: () => {
       activeRenderer?.cancelPointers();
@@ -1109,6 +1120,33 @@ function showController(options: {
   }
   activeSocket = socket;
   activeSender = new FrameSender(socket, state);
+  if (netDebugTimer !== undefined) {
+    clearInterval(netDebugTimer);
+    netDebugTimer = undefined;
+  }
+  if (CONTROLLER_DEBUG) {
+    netDebugTimer = setInterval(() => {
+      const senderStats = activeSender?.getStats();
+      const transportStats = activeSocket?.getDebugStats?.();
+      if (senderStats === undefined) return;
+      netLine =
+        `${senderStats.pps}/s ` +
+        `c${senderStats.coalesced} ` +
+        `d${senderStats.dropped}` +
+        (transportStats === undefined
+          ? ''
+          : ` b${transportStats.buffered} td${transportStats.dropped}`);
+      debugLog('net', {
+        pps: senderStats.pps,
+        sent: senderStats.sent,
+        coalesced: senderStats.coalesced,
+        dropped: senderStats.dropped,
+        transportSent: transportStats?.sent,
+        transportDropped: transportStats?.dropped,
+        buffered: transportStats?.buffered,
+      });
+    }, 1000);
+  }
 
   const neutralize = (): void => {
     if (phoneEditorActive) {

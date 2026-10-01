@@ -20,6 +20,7 @@ import {
   type ControllerTransportOptions,
   RECONNECT_ID_KEY,
   type SocketConnection,
+  type TransportDebugStats,
 } from './types';
 
 export { RECONNECT_ID_KEY } from './types';
@@ -40,6 +41,7 @@ export class WsTransport implements ControllerTransport {
   private allowReconnect = true;
   private receivedWelcome = false;
   private reconnectId: string | undefined;
+  private inputsSent = 0;
   private readonly options: WsTransportOptions;
 
   constructor(options: WsTransportOptions) {
@@ -65,10 +67,25 @@ export class WsTransport implements ControllerTransport {
       return false;
     try {
       this.socket.send(frame);
+      this.inputsSent += 1;
       return true;
     } catch {
       return false;
     }
+  }
+
+  // Read-only counters for joystick experiments. The LAN send path itself
+  // is untouched: still no drop, still direct socket.send.
+  getDebugStats(): TransportDebugStats {
+    const socket = this.socket as unknown as
+      | { bufferedAmount?: number }
+      | undefined;
+    return {
+      sent: this.inputsSent,
+      dropped: 0,
+      buffered:
+        typeof socket?.bufferedAmount === 'number' ? socket.bufferedAmount : 0,
+    };
   }
 
   selectLayout(id: string): boolean {
