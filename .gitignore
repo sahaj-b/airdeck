@@ -5,6 +5,7 @@
 benchmarks/
 *.tmp
 *.log
+*.db
 .airdeck-config/
 .DS_Store
 Caddyfile
