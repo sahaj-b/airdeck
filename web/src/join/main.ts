@@ -79,16 +79,22 @@ renderJoinScreen();
 startSkinSync(settingsStore);
 
 // shouldUseRtcTransport picks the online WebRTC path when the join page
-// itself is served from Central (airdeck.sahaj.dev) or a drill override
-// (?transport=rtc, ?relay=) is present. LAN-hosted pages keep the raw
-// WebSocket fallback. No UI: the seam hides the wire either way.
+// itself is served from Central (airdeck.sahaj.dev, any *.pages.dev preview
+// or production deployment) or a drill override (?transport=rtc, ?relay=)
+// is present. LAN-hosted pages keep the raw WebSocket fallback. No UI: the
+// seam hides the wire either way.
 function shouldUseRtcTransport(): boolean {
   try {
     const params = new URLSearchParams(window.location.search);
     const forced = params.get('transport');
     if (forced === 'ws') return false;
     if (forced === 'rtc' || params.get('relay')) return true;
-    return window.location.hostname === 'airdeck.sahaj.dev';
+    const host = window.location.hostname;
+    // Any Pages deployment of this site is Central by definition: a LAN
+    // host never serves from pages.dev, and without this a bare preview
+    // URL silently rides the LAN WebSocket at pages.dev/ws and loops
+    // reconnecting forever with zero relay contact.
+    return host === 'airdeck.sahaj.dev' || host.endsWith('.pages.dev');
   } catch {
     return false;
   }
@@ -103,6 +109,9 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   activeSender?.destroy();
   activeRenderer?.destroy();
   activeFeedback?.destroy();
+  // Every bounce back to the join form funnels through here, so the
+  // fullscreen/orientation grants from the Join tap are released here.
+  activeCapabilities?.releaseJoinCapabilities();
   activeCapabilities?.destroy();
   activeGyro?.destroy();
   activeGyro = undefined;
@@ -299,11 +308,12 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
     settingsStore.getState().setIgnoreCutout(cutout.input.checked);
     writeStorage(WAKE_LOCK_KEY, String(wakeLock.input.checked));
     capabilities.setWakeLockPreference(wakeLock.input.checked);
-    // don't go fullscreen/orientation-lock yet — wait until the server confirms
-    // the code is actually valid. This avoids flashing fullscreen then popping
-    // back to the join screen on a bad code. The transient user-activation
-    // from this click is still alive when the welcome arrives (~100-300ms on
-    // LAN) so the deferred request still counts as a user gesture.
+    // Fullscreen + orientation lock fire synchronously in this click's
+    // transient activation: the WebRTC handshake (ICE gather + DTLS +
+    // hello/welcome) outlives the activation window, so a deferred request
+    // in onWelcome is rejected as gestureless. Fire-and-forget before the
+    // first await; a bad code releases the grants on the way back out.
+    void capabilities.requestJoinCapabilities().catch(() => undefined);
 
     submit.disabled = true;
     submit.textContent = 'Connecting…';
@@ -460,6 +470,87 @@ function showController(options: {
   const fullscreen = buildFullscreenButton();
   chrome.append(fullscreen.button);
   shell.append(host);
+
+  // Connecting overlay: chrome (with the status pill) only enters the DOM
+  // with the first layout render, so without this the phone sits on an
+  // empty host for the whole handshake. On WebRTC that is ICE gather (up
+  // to 5s) plus DTLS plus hello/welcome; on LAN it is one fast round-trip.
+  // Removed on first layout; reconnects keep the rendered controller plus
+  // the pill instead of re-covering the screen.
+  const connectingOverlay = document.createElement('div');
+  connectingOverlay.className = 'controller-connecting';
+  connectingOverlay.setAttribute('role', 'status');
+  connectingOverlay.setAttribute('aria-live', 'polite');
+  const connectingInner = document.createElement('div');
+  connectingInner.className = 'controller-connecting-inner';
+  const connectingSpinner = document.createElement('div');
+  connectingSpinner.className = 'controller-connecting-spinner';
+  connectingSpinner.setAttribute('aria-hidden', 'true');
+  connectingSpinner.innerHTML = SPINNER_ICON;
+  const connectingTitle = document.createElement('p');
+  connectingTitle.className = 'controller-connecting-title';
+  connectingTitle.textContent = 'Connecting';
+  const connectingSub = document.createElement('p');
+  connectingSub.className = 'controller-connecting-sub';
+  connectingSub.textContent = '';
+  const connectingCancel = document.createElement('button');
+  connectingCancel.type = 'button';
+  connectingCancel.className = 'controller-connecting-cancel';
+  connectingCancel.textContent = 'Cancel';
+  connectingCancel.setAttribute('aria-label', 'Cancel join and go back');
+  connectingInner.append(
+    connectingSpinner,
+    connectingTitle,
+    connectingSub,
+    connectingCancel,
+  );
+  connectingOverlay.append(connectingInner);
+  shell.append(connectingOverlay);
+
+  let hasRenderedLayout = false;
+  const hideConnectingOverlay = (): void => {
+    hasRenderedLayout = true;
+    connectingOverlay.remove();
+  };
+  const connectingSubFor = (state: keyof typeof CONNECTION_LABELS): string => {
+    const code = options.sessionCode.trim();
+    const room = code ? `Room ${code}` : '';
+    switch (state) {
+      case 'waiting':
+        return 'The host needs to approve your request.';
+      case 'connecting':
+        if (shouldUseRtcTransport())
+          return room
+            ? `${room} · establishing a peer connection, this takes a few seconds…`
+            : 'Establishing a peer connection, this takes a few seconds…';
+        return room ? `${room} · contacting the host…` : 'Contacting the host…';
+      case 'hello-sent':
+        return room
+          ? `${room} · handshaking with the host…`
+          : 'Handshaking with the host…';
+      case 'welcome-received':
+        return 'Loading your controller…';
+      case 'reconnecting':
+        return 'The connection dropped, retrying…';
+      default:
+        return room;
+    }
+  };
+  // Mirrors updateStatus into the overlay while no layout has rendered yet.
+  // No-ops once the overlay is gone so later pill updates stay cheap.
+  const syncConnectingOverlay = (
+    state: keyof typeof CONNECTION_LABELS,
+    transient: string | null,
+  ): void => {
+    if (hasRenderedLayout || !connectingOverlay.isConnected) return;
+    connectingTitle.textContent = transient
+      ? shortStatus(transient)
+      : (PILL_LABELS[state] ?? CONNECTION_LABELS[state]);
+    const sub = connectingSubFor(state);
+    connectingSub.textContent = sub;
+    connectingSub.hidden = sub === '';
+  };
+  syncConnectingOverlay('connecting', null);
   // immediate long-press kill before layout even renders. preventDefault on
   // touchstart/touchend is what stops Android from even starting long-press
   // detection (the contextmenu buzz). Downside: it also suppresses the
@@ -552,6 +643,7 @@ function showController(options: {
     });
     currentLayoutId = doc.id;
     writeStorage(SELECTED_LAYOUT_KEY, doc.id);
+    hideConnectingOverlay();
     syncGyroLock();
     if (island && !island.isDestroyed())
       island.update({
@@ -810,6 +902,7 @@ function showController(options: {
       ? shortStatus(transient)
       : PILL_LABELS[socket.state];
     connectionText = full;
+    syncConnectingOverlay(socket.state, transient);
     if (island && !island.isDestroyed()) island.update({ connectionText });
   };
 
@@ -898,6 +991,12 @@ function showController(options: {
     activeSocket?.close();
     renderJoinScreen();
   });
+  // Shell-level touchstart is preventDefaulted (long-press kill), so the
+  // overlay cancel binds via pointer events like the chrome buttons.
+  const unbindConnectingCancelTap = bindTap(connectingCancel, () => {
+    activeSocket?.close();
+    renderJoinScreen();
+  });
 
   const onShellKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && island) {
@@ -909,6 +1008,7 @@ function showController(options: {
     document.removeEventListener('keydown', onShellKeyDown);
     unbindGearTap();
     unbindCancelTap();
+    unbindConnectingCancelTap();
     fullscreen.cleanup();
     clearPublishTimer();
     unsubFeedback();
@@ -948,13 +1048,6 @@ function showController(options: {
       }
     },
     onWelcome: (welcome) => {
-      // code is valid — now it's safe to grab fullscreen/orientation. Still
-      // inside the transient user-activation window from the Join click (LAN
-      // round-trip is ~50-300ms, activation lives ~5s) so browsers accept it.
-      void options.capabilities
-        .requestJoinCapabilities()
-        .catch(() => undefined);
-
       activeSender?.setInputRate(welcome.targetInputRate);
       applyWelcome(welcome, slot, name, shell);
       availableLayouts = welcome.availableLayouts;
@@ -991,6 +1084,7 @@ function showController(options: {
       invalidateHostLayout(layout.id);
       if (skipInitialHostLayout) {
         skipInitialHostLayout = false;
+        hideConnectingOverlay();
         updateStatus(diagnostic ?? 'Controller ready.');
         return;
       }
@@ -1003,6 +1097,7 @@ function showController(options: {
       });
       currentLayoutId = layout.id;
       writeStorage(SELECTED_LAYOUT_KEY, layout.id);
+      hideConnectingOverlay();
       syncGyroLock();
       if (island && !island.isDestroyed())
         island.update({ selectedLayout: currentLayoutId });

@@ -10,6 +10,7 @@ interface WakeLockLike {
 
 interface OrientationLike {
   lock?(orientation: 'landscape'): Promise<void>;
+  unlock?(): void;
 }
 
 export type NavigatorCapabilities = Omit<Navigator, 'vibrate' | 'wakeLock'> & {
@@ -121,14 +122,40 @@ export class CapabilityManager {
     this.joined = true;
     this.wakeLockEnabled = wakeLockEnabled;
     const attempts: Promise<void>[] = [];
-
-    if (this.status.fullscreen) attempts.push(this.requestFullscreen());
     if (this.status.wakeLock && wakeLockEnabled)
       attempts.push(this.requestWakeLock());
+    // Sequenced, not parallel: mobile Chrome grants orientation lock only
+    // against an active fullscreen element, so a raced lock() rejects
+    // because the document is not fullscreen yet.
+    if (this.status.fullscreen) {
+      try {
+        await this.requestFullscreen();
+      } catch {
+        // requestFullscreen already recorded the failure below.
+      }
+    }
     if (this.status.orientation) attempts.push(this.requestOrientation());
 
     await Promise.allSettled(attempts);
     return this.currentStatus;
+  }
+
+  // releaseJoinCapabilities drops the fullscreen and orientation grants when
+  // the phone returns to the join form (bad code, decline, reset, cancel),
+  // so the form never sits stuck inside fullscreen. Best effort only.
+  releaseJoinCapabilities(): void {
+    try {
+      if (this.currentDocument.fullscreenElement) {
+        void this.currentDocument.exitFullscreen().catch(() => undefined);
+      }
+    } catch {
+      // Release never blocks the trip back to the join form.
+    }
+    try {
+      this.currentScreen.orientation?.unlock?.();
+    } catch {
+      // Same: best effort only.
+    }
   }
 
   destroy(): void {
