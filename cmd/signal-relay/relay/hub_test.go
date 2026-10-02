@@ -428,6 +428,31 @@ func TestGuestOriginAllowlist(t *testing.T) {
 	_ = loopback.Close()
 }
 
+func TestGuestExtraOrigins(t *testing.T) {
+	hub := NewHub(openTestStore(t), nil, false)
+	// Trailing slash is normalized away; garbage entries are dropped.
+	server := httptest.NewServer(
+		NewServer(hub, false, "https://preview.pages.dev/", "not-an-origin").Routes(),
+	)
+	defer server.Close()
+	base := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	preview := dialRelay(t, base+"/join", "https://preview.pages.dev")
+	_ = preview.Close()
+
+	evil, resp, err := websocket.DefaultDialer.Dial(
+		base+"/join",
+		http.Header{"Origin": {"https://evil.example"}},
+	)
+	if err == nil {
+		_ = evil.Close()
+		t.Fatal("evil origin was accepted despite extras")
+	}
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+}
+
 // A host that drops before signaling completes ends its pendings with
 // peer.left, the only post-pending relay-to-guest message.
 func TestHostDropSendsPeerLeft(t *testing.T) {

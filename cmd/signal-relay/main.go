@@ -37,6 +37,7 @@ func run(args []string) error {
 	turnCredential := flags.String("turn-credential", "", "verbatim TURN credential for one-shot alternate-relay tests (or AIRDECK_TURN_CREDENTIAL)")
 	enforceLimits := flags.Bool("enforce-limits", false, "enforce registration rate limits, code-change caps, and the reserved list (off for dev, on in prod)")
 	dev := flags.Bool("dev", false, "allow localhost guest origins for local drills")
+	guestOrigins := flags.String("guest-origins", "", "extra exact guest origins for the /join allowlist, comma-separated, e.g. Pages preview URLs (or AIRDECK_GUEST_ORIGINS)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -57,6 +58,9 @@ func run(args []string) error {
 	}
 	if *turnCredential == "" {
 		*turnCredential = os.Getenv("AIRDECK_TURN_CREDENTIAL")
+	}
+	if *guestOrigins == "" {
+		*guestOrigins = os.Getenv("AIRDECK_GUEST_ORIGINS")
 	}
 	store, err := relay.Open(*dbPath)
 	if err != nil {
@@ -82,9 +86,13 @@ func run(args []string) error {
 		log.Printf("signal-relay: Cloudflare TURN primary, self-hosted fallback (%d urls)", len(staticURLs))
 	}
 	hub := relay.NewHub(store, provider, *enforceLimits)
+	extras := splitList(*guestOrigins)
+	if len(extras) > 0 {
+		log.Printf("signal-relay: allowing %d extra guest origin(s)", len(extras))
+	}
 	server := &http.Server{
 		Addr:         *listen,
-		Handler:      relay.NewServer(hub, *dev).Routes(),
+		Handler:      relay.NewServer(hub, *dev, extras...).Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}
@@ -102,6 +110,18 @@ func run(args []string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	return nil
+}
+
+// splitList parses a comma-separated flag value. Empty items and
+// surrounding whitespace are dropped.
+func splitList(raw string) []string {
+	var out []string
+	for _, item := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 // splitTurnURLs parses the comma-separated --turn-urls flag. Empty items

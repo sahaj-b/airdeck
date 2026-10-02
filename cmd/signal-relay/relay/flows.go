@@ -177,10 +177,12 @@ func (h *Hub) handleJoin(guest *guestConn, data []byte) {
 		if !errors.Is(err, sql.ErrNoRows) {
 			log.Printf("relay: claim lookup failed: %v", err)
 		}
+		log.Printf("relay: join room %s -> error (unknown code)", code)
 		guest.deadCode()
 		return
 	}
 	if claim.Retired {
+		log.Printf("relay: join room %s -> error (retired code)", code)
 		guest.deadCode()
 		return
 	}
@@ -189,6 +191,7 @@ func (h *Hub) handleJoin(guest *guestConn, data []byte) {
 	approval := ok && host.approvalRequired
 	h.mu.Unlock()
 	if !ok {
+		log.Printf("relay: join room %s -> error (host offline)", code)
 		guest.deadCode()
 		return
 	}
@@ -203,6 +206,7 @@ func (h *Hub) handleJoin(guest *guestConn, data []byte) {
 // still gets the generic error so the check cannot become a live-code oracle.
 func (h *Hub) joinOpen(host *hostConn, guest *guestConn, join rtc.Join) {
 	if join.Offer == "" {
+		log.Printf("relay: join room %s -> error (missing offer)", roomcode.Normalize(join.RoomCode))
 		guest.deadCode()
 		return
 	}
@@ -222,6 +226,7 @@ func (h *Hub) joinOpen(host *hostConn, guest *guestConn, join rtc.Join) {
 		ReconnectID:   join.ReconnectID,
 		Offer:         join.Offer,
 	})
+	log.Printf("relay: join room %s -> open forwarded", roomcode.Normalize(join.RoomCode))
 }
 
 // joinApproval queues an offer-less join as a pending.
@@ -253,6 +258,7 @@ func (h *Hub) joinApproval(host *hostConn, guest *guestConn, join rtc.Join) {
 		WaitingSince: entry.waitingSince,
 	})
 	guest.enqueue(rtc.Pending{Type: rtc.MessagePending, PendingID: id})
+	log.Printf("relay: join room %s -> pending %s", roomcode.Normalize(join.RoomCode), id)
 }
 
 // handleGuestOffer forwards a post-accept offer.
@@ -297,6 +303,7 @@ func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 		CorrelationID: id,
 		SDP:           offer.SDP,
 	})
+	log.Printf("relay: offer room %s -> forwarded (pending %s)", entry.host.code, entry.id)
 }
 
 // handleAccept releases one queued pending toward slot assignment.
@@ -357,6 +364,10 @@ func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 		return
 	}
 	delete(h.routes, answer.CorrelationID)
+	code := ""
+	if found.host != nil {
+		code = found.host.code
+	}
 	var entry *pending
 	if !found.open {
 		entry, _ = h.pendings[found.pendingID]
@@ -371,6 +382,7 @@ func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 			Answer:     answer.SDP,
 			ICEServers: h.turn.Servers(context.Background()),
 		})
+		log.Printf("relay: answer room %s -> forwarded (open)", code)
 		return
 	}
 	found.guest.enqueue(rtc.Answer{
@@ -378,6 +390,7 @@ func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 		CorrelationID: answer.CorrelationID,
 		SDP:           answer.SDP,
 	})
+	log.Printf("relay: answer room %s -> forwarded (approval)", code)
 	if entry != nil {
 		entry.guest.mu.Lock()
 		delete(entry.guest.pending, entry.id)

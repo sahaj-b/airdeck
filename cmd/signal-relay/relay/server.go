@@ -9,20 +9,28 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Only this join-page origin may open guest signaling sockets.
+// Only this join-page origin may open guest signaling sockets. Extra
+// preview origins join the allowlist via --guest-origins.
 const prodGuestOrigin = "https://airdeck.sahaj.dev"
 
 // Server is /health plus the two signaling sockets.
 type Server struct {
 	hub            *Hub
 	allowLocalhost bool
+	extraOrigins   []string
 	hostUpgrader   websocket.Upgrader
 	guestUpgrader  websocket.Upgrader
 }
 
-// NewServer builds the routes for one hub.
-func NewServer(hub *Hub, allowLocalhost bool) *Server {
-	s := &Server{hub: hub, allowLocalhost: allowLocalhost}
+// NewServer builds the routes for one hub. extraOrigins allowlists
+// additional exact join-page origins (Pages preview deployments) next to
+// the production origin; entries are normalized to scheme://host.
+func NewServer(hub *Hub, allowLocalhost bool, extraOrigins ...string) *Server {
+	s := &Server{
+		hub:            hub,
+		allowLocalhost: allowLocalhost,
+		extraOrigins:   normalizeOrigins(extraOrigins),
+	}
 	s.hostUpgrader = websocket.Upgrader{ReadBufferSize: 4096, WriteBufferSize: 4096}
 	s.guestUpgrader = websocket.Upgrader{
 		ReadBufferSize: 4096, WriteBufferSize: 4096,
@@ -44,6 +52,11 @@ func (s *Server) checkGuestOrigin(r *http.Request) bool {
 	if strings.EqualFold(origin, prodGuestOrigin) {
 		return true
 	}
+	for _, extra := range s.extraOrigins {
+		if strings.EqualFold(origin, extra) {
+			return true
+		}
+	}
 	if !s.allowLocalhost {
 		return false
 	}
@@ -52,6 +65,33 @@ func (s *Server) checkGuestOrigin(r *http.Request) bool {
 	}
 	host := parsed.Hostname()
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+// normalizeOrigins trims comma-separated origin entries down to
+// scheme://host, dropping empties and anything that is not an http(s)
+// origin. Browser Origin headers carry no path, so neither does the list.
+func normalizeOrigins(raw []string) []string {
+	var out []string
+	for _, item := range raw {
+		entry := strings.TrimSpace(item)
+		if entry == "" {
+			continue
+		}
+		parsed, err := url.Parse(entry)
+		if err != nil {
+			continue
+		}
+		parsed.Scheme = strings.ToLower(parsed.Scheme)
+		host := strings.ToLower(parsed.Hostname())
+		if (parsed.Scheme != "http" && parsed.Scheme != "https") || host == "" {
+			continue
+		}
+		if port := parsed.Port(); port != "" {
+			host += ":" + port
+		}
+		out = append(out, parsed.Scheme+"://"+host)
+	}
+	return out
 }
 
 // Routes exposes /health, /register, and /join.
