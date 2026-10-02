@@ -54,6 +54,12 @@ const (
 // offerWaitTimeout bounds accept-to-offer; a var so tests shrink it.
 var offerWaitTimeout = 30 * time.Second
 
+// readTimeout bounds one quiet stretch on the register socket; a var so
+// tests shrink it. The relay pings every 30s and the ping handler below
+// refreshes the deadline on each one, so this only fires on a truly dead
+// socket, never on an idle-but-healthy registration.
+var readTimeout = 90 * time.Second
+
 // Options configures one agent. The session owns the room code.
 type Options struct {
 	InstallationKey  string
@@ -402,6 +408,7 @@ func (a *Agent) serveRegister(done <-chan struct{}) (bool, bool) {
 		log.Printf("online: relay dial failed, retrying: %v", err)
 		return false, false
 	}
+	armRegisterConn(conn)
 	a.connMu.Lock()
 	a.conn = conn
 	a.out = make(chan []byte, sendQueue)
@@ -475,6 +482,20 @@ func (a *Agent) serveRegister(done <-chan struct{}) (bool, bool) {
 	return false, retrySoon
 }
 
+// armRegisterConn installs the heartbeat refresh on a register socket.
+// The relay pings every 30s, but gorilla consumes pings inside ReadMessage
+// without returning, so readLoop's deadline would fire on every quiet
+// stretch without this. The handler mirrors the default (reply pong, which
+// the relay needs for its own read deadline) and additionally pushes our
+// read deadline out, keeping an idle-but-healthy socket open indefinitely.
+func armRegisterConn(conn *websocket.Conn) {
+	conn.SetPingHandler(func(appData string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+		_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(writeTimeout))
+	})
+}
+
 // readLoop serves one register socket until it drops. It returns true
 // only for a permanent claim conflict (stop without retry); every other
 // ending retries with backoff.
@@ -485,7 +506,7 @@ func (a *Agent) readLoop(conn *websocket.Conn, done <-chan struct{}) bool {
 			return false
 		default:
 		}
-		_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			select {

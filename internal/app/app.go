@@ -69,9 +69,7 @@ func New(cfg config.Config, configPath string) (*App, error) {
 		OnStateChange: func() {
 			httpServer.BroadcastAdminState()
 			// Reprint so the terminal tracks the dashboard QR flip.
-			joinURL := httpServer.AdvertisedJoinURL()
-			log.Printf("join URL %s", joinURL)
-			printJoinQR(joinURL)
+			announceJoinURL(httpServer.AdvertisedJoinURL())
 		},
 	})
 	httpServer.SetOnline(agent)
@@ -85,14 +83,40 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	joinURL := a.HTTP.AdvertisedJoinURL()
 	dashboardURL := a.HTTP.DashboardURL()
+	joinQRSerial.Lock()
 	log.Printf("dashboard URL %s", dashboardURL)
 	log.Printf("session %s, join URL %s", a.Session.Code(), joinURL)
-	maybeOpenBrowser(dashboardURL, a.OpenBrowser)
+	lastJoinQR = joinURL
 	printJoinQR(joinURL)
+	joinQRSerial.Unlock()
+	maybeOpenBrowser(dashboardURL, a.OpenBrowser)
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	return a.Shutdown(shutdownCtx)
+}
+
+// joinQRSerial serializes terminal join announcements. The initial print in
+// Run races the agent reprint on central registration (instant against a
+// local relay), and log lines on stderr interleave qrterminal's stdout
+// mid-QR, mangling both. Reprints with an unchanged URL skip the QR so
+// reachable flaps don't spam the terminal.
+var (
+	joinQRSerial sync.Mutex
+	lastJoinQR   string
+)
+
+// announceJoinURL logs one join URL and QR-prints it atomically, skipping
+// the QR when the URL hasn't changed since the last print.
+func announceJoinURL(joinURL string) {
+	joinQRSerial.Lock()
+	defer joinQRSerial.Unlock()
+	log.Printf("join URL %s", joinURL)
+	if joinURL == lastJoinQR {
+		return
+	}
+	lastJoinQR = joinURL
+	printJoinQR(joinURL)
 }
 
 func printJoinQR(joinURL string) {

@@ -2,6 +2,7 @@ package online
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -673,4 +674,77 @@ func TestAcceptedOfferTimeoutFreesSlot(t *testing.T) {
 	}
 	relay.waitAccepts(t, 1)
 	waitFor(t, "offer timeout to free the slot", func() bool { return len(fix.session.Players()) == 0 })
+}
+
+// TestRegisterConnSurvivesIdlePings is the regression test for the 90s
+// registration flap: gorilla consumes pings inside ReadMessage without
+// returning, so a register socket with no data frames died on the read
+// deadline despite the relay pinging every 30s. With the heartbeat refresh
+// armed, pings hold the deadline open; silence after they stop still times
+// out, proving a truly dead socket is detected.
+func TestRegisterConnSurvivesIdlePings(t *testing.T) {
+	old := readTimeout
+	readTimeout = 300 * time.Millisecond
+	defer func() { readTimeout = old }()
+
+	done := make(chan struct{})
+	defer close(done)
+	stopPings := make(chan struct{})
+	m := http.NewServeMux()
+	m.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		pinging := true
+		for pinging {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
+			case <-stopPings:
+				pinging = false
+			}
+		}
+		// Hold the socket open in silence so the read deadline can fire.
+		<-done
+	})
+	server := httptest.NewServer(m)
+	defer server.Close()
+
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+	conn, _, err := dialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/register", nil)
+	if err != nil {
+		t.Fatalf("dial register: %v", err)
+	}
+	defer conn.Close()
+	armRegisterConn(conn)
+
+	// Ping for a full second, then go silent: without the refresh this
+	// dies at ~300ms.
+	pingStop := time.AfterFunc(time.Second, func() { close(stopPings) })
+	defer pingStop.Stop()
+	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+	start := time.Now()
+	_, _, err = conn.ReadMessage()
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("idle ReadMessage returned a frame, want timeout")
+	}
+	if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Fatalf("ReadMessage err = %v, want timeout", err)
+	}
+	// Pings held the deadline through the first second; the timeout fired
+	// only after they stopped (1s pings + ~300ms deadline, wide margins).
+	if elapsed < 900*time.Millisecond {
+		t.Fatalf("ReadMessage timed out after %v, want it to survive the ping window", elapsed)
+	}
 }
