@@ -54,11 +54,19 @@ export class WsTransport implements ControllerTransport {
   }
 
   connect(): void {
-    if (this.stateValue === 'connecting' || this.stateValue === 'hello-sent')
+    if (
+      this.stateValue === 'connecting' ||
+      this.stateValue === 'hello-sent' ||
+      this.stateValue === 'waiting' ||
+      this.stateValue === 'reconnecting' ||
+      this.stateValue === 'active' ||
+      this.stateValue === 'welcome-received'
+    )
       return;
     this.intentionalClose = false;
     this.allowReconnect = true;
     this.reconnectAttempts = 0;
+    this.closeSocket();
     this.open();
   }
 
@@ -94,19 +102,31 @@ export class WsTransport implements ControllerTransport {
   }
 
   close(reason = 'client_closed'): void {
+    const alreadyClosed = this.stateValue === 'closed' && !this.socket;
     this.allowReconnect = false;
     this.intentionalClose = true;
     if (this.reconnectTimer !== undefined) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = undefined;
     }
-    if (this.socket && this.socket.readyState !== 3) {
-      if (this.socket.readyState === 1)
-        this.sendJSON({ type: 'close', reason });
-      this.socket.close();
+    const socket = this.socket;
+    if (socket && socket.readyState !== 3) {
+      if (socket.readyState === 1) this.sendJSON({ type: 'close', reason });
+      // Clear before close so the async onclose is a no-op (RTC parity:
+      // close() fires onClose synchronously, exactly once).
+      this.socket = undefined;
+      try {
+        socket.close();
+      } catch {
+        // Teardown never blocks input.
+      }
     } else {
-      this.setState('closed');
+      this.socket = undefined;
     }
+    // RTC parity: close() always lands on 'closed'; the cleared socket
+    // makes the async onclose a no-op, so nothing else sets it.
+    if (this.stateValue !== 'closed') this.setState('closed');
+    if (!alreadyClosed) this.options.onClose?.();
   }
 
   resetReconnectId(): void {
@@ -114,8 +134,20 @@ export class WsTransport implements ControllerTransport {
     removeSessionValue(RECONNECT_ID_KEY);
   }
 
+  private closeSocket(): void {
+    const socket = this.socket;
+    this.socket = undefined;
+    try {
+      socket?.close();
+    } catch {
+      // Teardown never blocks input.
+    }
+  }
+
   private open(): void {
     this.setState('connecting');
+    // Close any predecessor: re-entrant connect() must not orphan a socket.
+    this.closeSocket();
     const socket = this.createSocket();
     this.socket = socket;
     socket.binaryType = 'arraybuffer';
@@ -162,6 +194,11 @@ export class WsTransport implements ControllerTransport {
 
   private handleMessage(socket: SocketConnection, data: unknown): void {
     if (socket !== this.socket) return;
+    // RTC parity: non-string frames are silently ignored (old socket.ts
+    // also ignored them). Only a string that fails JSON parse surfaces
+    // invalid_message, so a future binary use or middlebox artifact does
+    // not show a user-visible error on LAN while RTC stays silent.
+    if (typeof data !== 'string') return;
     const parsed = parseControlFrame(data);
     if (parsed === undefined) {
       this.reportError('invalid_message', 'The host sent an invalid message.');

@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -120,6 +121,26 @@ func TestApprovalQueueAcceptReject(t *testing.T) {
 	server.routes(false).ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown accept status = %d, want 404", rec.Code)
+	}
+}
+
+// A reject with no body is not a 400: the human reason is optional.
+func TestApprovalRejectWithoutBody(t *testing.T) {
+	server, _, sess := newTestHTTPServer(t, "127.0.0.1")
+	defer sess.Close()
+	sess.SetApprovalRequired(true)
+	admission, err := sess.Admit(sess.Code(), "Phone", "", "", nil, nil)
+	if !errors.Is(err, session.ErrApprovalPending) || admission.PendingID == "" {
+		t.Fatalf("Admit = %+v, err = %v; want pending", admission, err)
+	}
+	req := loopbackRequest(http.MethodPost, "/api/admin/approval/"+admission.PendingID+"/reject", "")
+	rec := httptest.NewRecorder()
+	server.routes(false).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("empty-body reject status = %d, want 200 (%s)", rec.Code, rec.Body.String())
+	}
+	if state := decodeState(t, rec); len(state.Pendings) != 0 {
+		t.Fatalf("pendings = %d after empty reject, want 0", len(state.Pendings))
 	}
 }
 

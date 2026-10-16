@@ -31,11 +31,27 @@ type Hub struct {
 	turn           *turn.Provider
 	enforceLimits  bool
 	registerLimits *RateLimiter
+	joinLimits     *RateLimiter
 	hosts          map[string]*hostConn // normalized code -> host
 	pendings       map[string]*pending  // pendingID -> entry
 	routes         map[string]*route    // correlationID -> guest route
 	now            func() time.Time
 }
+
+const (
+	// maxPendingsPerGuest bounds one socket so a looping join cannot grow
+	// the relay tables forever. maxPendingsPerHost keeps one approval
+	// queue usable; maxPendingsTotal bounds the whole process.
+	maxPendingsPerGuest = 8
+	maxPendingsPerHost  = 64
+	maxPendingsTotal    = 1024
+	// maxRoutesTotal bounds in-flight open/post-accept answers.
+	maxRoutesTotal = 2048
+	// maxPendingAge evaporates a queued approval join whose host never
+	// answers; dropHost already notifies the guest, this covers a host
+	// that stays connected but idle.
+	maxPendingAge = 10 * time.Minute
+)
 
 // pending is one approval-mode join waiting on the host. It lives exactly
 // while the guest stays connected: socket close evaporates it, no timers.
@@ -68,6 +84,7 @@ func NewHub(store *Store, provider *turn.Provider, enforceLimits bool) *Hub {
 		turn:           provider,
 		enforceLimits:  enforceLimits,
 		registerLimits: NewRateLimiter(RegistrationLimit, RegistrationWindow),
+		joinLimits:     NewRateLimiter(JoinLimit, JoinWindow),
 		hosts:          make(map[string]*hostConn),
 		pendings:       make(map[string]*pending),
 		routes:         make(map[string]*route),
@@ -86,13 +103,32 @@ func (h *Hub) limited(reason string) bool {
 
 // hostConn is one /register socket. code tracks the current claim so a
 // second register on the same socket (dashboard code change) re-routes.
+// code and approvalRequired are guarded by h.mu for map routing plus a
+// per-conn mu for lock-free reads (logging, enqueue); writes hold h.mu
+// then the conn mu. writeMu serializes all websocket writes: gorilla
+// allows one concurrent reader plus one writer, so pumpWriter and
+// keepalive must share it.
 type hostConn struct {
 	conn             *websocket.Conn
 	send             chan []byte
 	done             chan struct{}
 	closeOnce        sync.Once
+	writeMu          sync.Mutex
+	codeMu           sync.Mutex
 	code             string
 	approvalRequired bool
+}
+
+func (c *hostConn) getCode() string {
+	c.codeMu.Lock()
+	defer c.codeMu.Unlock()
+	return c.code
+}
+
+func (c *hostConn) setCode(code string) {
+	c.codeMu.Lock()
+	c.code = code
+	c.codeMu.Unlock()
 }
 
 type guestConn struct {
@@ -100,6 +136,7 @@ type guestConn struct {
 	send      chan []byte
 	done      chan struct{}
 	closeOnce sync.Once
+	writeMu   sync.Mutex
 	mu        sync.Mutex
 	pending   map[string]*pending
 }
@@ -127,7 +164,7 @@ func (c *hostConn) enqueue(value any) {
 		return
 	case c.send <- writeJSON(value):
 	default:
-		log.Printf("relay: host %s outbound full, dropping message", c.code)
+		log.Printf("relay: host %s outbound full, dropping message", c.getCode())
 	}
 }
 
@@ -149,16 +186,21 @@ func (c *guestConn) finishClose() {
 	c.closeOnce.Do(func() { close(c.done); _ = c.conn.Close() })
 }
 
-// pumpWriter drains one connection queue on a single goroutine.
-func pumpWriter(conn *websocket.Conn, out <-chan []byte, done <-chan struct{}, finish func()) {
+// pumpWriter drains one connection queue on a single goroutine. writeMu
+// must be the same mutex keepalive uses: gorilla panics on concurrent
+// WriteMessage/Ping from two goroutines.
+func pumpWriter(conn *websocket.Conn, writeMu *sync.Mutex, out <-chan []byte, done <-chan struct{}, finish func()) {
 	defer finish()
 	for {
 		select {
 		case <-done:
 			return
 		case data := <-out:
+			writeMu.Lock()
 			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			err := conn.WriteMessage(websocket.TextMessage, data)
+			writeMu.Unlock()
+			if err != nil {
 				return
 			}
 		}
@@ -166,8 +208,8 @@ func pumpWriter(conn *websocket.Conn, out <-chan []byte, done <-chan struct{}, f
 }
 
 // keepalive sends ping frames until done closes and kills the read side
-// when the peer stops answering.
-func keepalive(conn *websocket.Conn, done <-chan struct{}) {
+// when the peer stops answering. Shares writeMu with pumpWriter.
+func keepalive(conn *websocket.Conn, writeMu *sync.Mutex, done <-chan struct{}) {
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 	for {
@@ -175,8 +217,11 @@ func keepalive(conn *websocket.Conn, done <-chan struct{}) {
 		case <-done:
 			return
 		case <-ticker.C:
+			writeMu.Lock()
 			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			err := conn.WriteMessage(websocket.PingMessage, nil)
+			writeMu.Unlock()
+			if err != nil {
 				return
 			}
 		}

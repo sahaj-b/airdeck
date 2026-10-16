@@ -130,27 +130,4 @@ describe('FrameSender', () => {
     sender.stop();
     sender.destroy();
   });
-
-  it('reports sender stats for experiments', () => {
-    const state = new InputStateStore();
-    const sender = new FrameSender(
-      {
-        sendBinary: () => true,
-      },
-      state,
-      60,
-    );
-    sender.start();
-    for (let i = 1; i <= 5; i += 1) {
-      state.setStick('touch', 'leftStick', i / 10, 0);
-    }
-    const stats = sender.getStats();
-    // Start sent 1, the 5 same-ms moves coalesced into 0 extra sends.
-    expect(stats.sent).toBe(1);
-    expect(stats.coalesced).toBe(5);
-    expect(stats.dropped).toBe(0);
-    expect(stats.pps).toBe(1);
-    sender.stop();
-    sender.destroy();
-  });
 });

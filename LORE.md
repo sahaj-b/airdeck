@@ -275,6 +275,10 @@ Go types in `internal/protocol`, `internal/layout`, and `internal/config` are th
 
 Central needs a wss relay plus claim database on the VPS. The relay lives in this monorepo as a separate `cmd/signal-relay` binary sharing an `internal/rtc` contract package, so host, join page, and relay compile the same message types and signaling drift fails at build time. Considered a separate repo (every message change becomes a two-repo sync, the exact drift tygo codegen exists to kill) and a same-binary flag (ships dead central code to every laptop, invites rogue relays).
 
+## Relay rate limits key on the real client
+
+The relay serves plain HTTP behind Caddy, so every guest socket arrives from loopback and a limit keyed on the TCP peer lumps the whole party into one bucket: one phone in a rejoin loop spends everyone's budget and the rest get `room_not_found`, which the join page treats as fatal. The rate-limit key is the client, read from `X-Forwarded-For` only when the peer is a trusted hop — loopback by default (a remote client cannot fake its TCP source), plus `--trusted-proxies` for a proxy on another host — and read right to left, so the rightmost untrusted address wins and an attacker-prepended entry never does. The join budget is 120 joins per client per minute: enough for sixteen phones behind one carrier NAT or hotspot to rejoin at once, tight enough to throttle code enumeration.
+
 # Decisions
 
 - Layout editor is split as above: dashboard full vs phone minimal React island, 3-fixed `relativeWidth`, `round`|`rect` plus `hitzone` (`round`|`rect`, `parentId` required, no `binding`/`hitShape`, same-section, cascade delete, parent drag moves hitzones as one undo entry, ghosted in editor and invisible on phone), host-owned files with 202 publish + approval.

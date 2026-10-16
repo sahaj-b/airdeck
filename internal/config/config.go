@@ -79,11 +79,18 @@ func Validate(cfg Config) error {
 	if cfg.RoomCode == "" || cfg.InstallationKey == "" {
 		return fmt.Errorf("%w: missing roomCode/installationKey (pre-room-code file)", ErrUnsupportedConfig)
 	}
+	// Invalid values are plain errors: telling the owner to delete the
+	// file would regenerate the installationKey and permanently
+	// tombstone their claimed codes (lost key, no recovery per LORE).
 	if err := roomcode.Validate(cfg.RoomCode); err != nil {
-		return fmt.Errorf("%w: invalid roomCode: %w", ErrUnsupportedConfig, err)
+		return fmt.Errorf("invalid roomCode: %w", err)
 	}
-	if key, err := hex.DecodeString(cfg.InstallationKey); err != nil || len(key) != 32 {
-		return fmt.Errorf("%w: invalid installationKey (expected 64 hex chars)", ErrUnsupportedConfig)
+	key, err := hex.DecodeString(cfg.InstallationKey)
+	if err != nil {
+		return fmt.Errorf("invalid installationKey (expected 64 hex chars): %w", err)
+	}
+	if len(key) != 32 {
+		return fmt.Errorf("invalid installationKey: expected 64 hex chars, got %d", len(cfg.InstallationKey))
 	}
 	if cfg.Port < 0 || cfg.Port > 65535 || cfg.AdvertisedPort < 0 || cfg.AdvertisedPort > 65535 {
 		return errors.New("config ports must be between 0 and 65535")

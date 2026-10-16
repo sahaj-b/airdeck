@@ -185,6 +185,36 @@ describe('WsTransport', () => {
     expect(errors).toEqual(['invalid_message']);
   });
 
+  it('lands on closed when close() runs on a live socket', () => {
+    const fake = new FakeSocket();
+    const states: string[] = [];
+    let closes = 0;
+    const socket = new WsTransport({
+      sessionCode: '4821',
+      capabilities: {
+        sound: false,
+        wakeLock: false,
+        fullscreen: false,
+        orientation: false,
+      },
+      socketFactory: () => fake,
+      onStateChange: (state) => states.push(state),
+      onClose: () => {
+        closes += 1;
+      },
+    });
+    socket.connect();
+    fake.open();
+    expect(socket.state).toBe('hello-sent');
+    socket.close('test');
+    // The socket's own onclose must not report or transition a second time.
+    expect(socket.state).toBe('closed');
+    expect(states.at(-1)).toBe('closed');
+    expect(closes).toBe(1);
+    socket.close('again');
+    expect(closes).toBe(1);
+  });
+
   it('rejects the connection after a pre-welcome admission error', () => {
     const fake = new FakeSocket();
     const states: string[] = [];

@@ -417,19 +417,19 @@ func (p *peer) handleHello(data []byte) {
 	hello, err := protocol.DecodeHello(data)
 	if err != nil || hello.ClientVersion == "" {
 		log.Printf("rtchost: player %s bad hello (%v), closing", p.playerID, err)
-		p.sendErrorAndClose("invalid_hello", "the first message must be a valid hello")
+		p.failHello("invalid_hello", "the first message must be a valid hello")
 		return
 	}
 	if err := m.session.CheckCode(hello.SessionCode); err != nil {
 		code, message := session.AdmissionError(err)
 		log.Printf("rtchost: player %s hello code %q rejected (%s)", p.playerID, hello.SessionCode, code)
-		p.sendErrorAndClose(code, message)
+		p.failHello(code, message)
 		return
 	}
 	if err := m.session.AttachTransport(p.playerID, p.generation, p.sendValue, p.closePC); err != nil {
 		code, message := session.AdmissionError(err)
 		log.Printf("rtchost: player %s hello attach failed (%s: %v)", p.playerID, code, err)
-		p.sendErrorAndClose(code, message)
+		p.failHello(code, message)
 		return
 	}
 	log.Printf("rtchost: player %s hello ok layout=%q", p.playerID, hello.SelectedLayout)
@@ -443,20 +443,56 @@ func (p *peer) handleHello(data []byte) {
 	}
 	player, ok := m.session.Player(p.playerID)
 	if !ok {
-		p.sendErrorAndClose("device_error", "The host could not create your virtual controller.")
+		p.failHello("device_error", "The host could not create your virtual controller.")
 		return
 	}
 	if err := p.sendValue(session.BuildWelcome(player, m.layouts, m.targetInputRate)); err != nil {
+		// Control channel died before welcome flushed: attached is true
+		// so the hello timeout no-ops. Reap immediately or the Active
+		// player with no usable transport leaks until manual kick.
+		p.removeFromMap()
+		p.closePC()
+		m.abandon(p.admission)
 		return
 	}
 	document, err := m.session.Layout(p.playerID)
 	if err != nil {
+		p.removeFromMap()
+		p.closePC()
+		m.abandon(p.admission)
 		return
 	}
 	if err := p.sendValue(protocol.LayoutMessage{Type: protocol.MessageLayout, ID: document.ID, Layout: document}); err != nil {
+		p.removeFromMap()
+		p.closePC()
+		m.abandon(p.admission)
 		return
 	}
 	p.heartbeat()
+}
+
+// failHello rejects one hello and frees its slot at once instead of
+// waiting out the 10s hello timeout: the slot was allocated at Admit,
+// so a wrong code or malformed hello would otherwise hold it Active
+// with no transport (16x = session_full for legit joins).
+func (p *peer) failHello(code, message string) {
+	p.sendErrorAndClose(code, message)
+	p.removeFromMap()
+	// closePC runs via closeSoon for the farewell flush; abandon frees
+	// the slot now so the farewell channel write (sendValue returns
+	// "not open" and drops rumble-only) cannot resurrect it.
+	p.manager.abandon(p.admission)
+}
+
+// removeFromMap drops this peer from the manager table if it still owns
+// the slot; teardown ownership stays with the winner on races.
+func (p *peer) removeFromMap() {
+	m := p.manager
+	m.mu.Lock()
+	if current, ok := m.peers[p.playerID]; ok && current == p {
+		delete(m.peers, p.playerID)
+	}
+	m.mu.Unlock()
 }
 
 // handleText mirrors transport.Server.handleText: pong, layout.select,

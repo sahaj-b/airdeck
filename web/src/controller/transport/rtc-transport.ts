@@ -46,8 +46,9 @@ const GATHER_TIMEOUT_MS = 5000;
 // answers nothing and the guest would sit in connecting forever. Firing
 // first means the phone gives up on its own and shows the dead-code error
 // instead of hanging. Approval-mode guests never trip it: they get pending
-// or an error while the timer is parked.
-const JOIN_TIMEOUT_MS = 15000;
+// or an error while the timer is parked. 25s covers up to 5s ICE gather
+// plus TURN allocation plus a slow relay round-trip.
+const JOIN_TIMEOUT_MS = 25000;
 
 // relayJoinURL resolves the signaling socket URL: explicit ?relay= wins
 // (LAN drills through Caddy), loopback pages map to the local relay
@@ -153,12 +154,21 @@ export class RtcTransport implements ControllerTransport {
   }
 
   connect(): void {
-    if (this.stateValue === 'connecting' || this.stateValue === 'hello-sent')
+    if (
+      this.stateValue === 'connecting' ||
+      this.stateValue === 'hello-sent' ||
+      this.stateValue === 'waiting' ||
+      this.stateValue === 'reconnecting' ||
+      this.stateValue === 'active' ||
+      this.stateValue === 'welcome-received'
+    )
       return;
     this.intentionalClose = false;
     this.allowReconnect = true;
     this.reconnectAttempts = 0;
     this.joinSeq += 1;
+    this.teardownPeer();
+    this.closeSignaling();
     this.openSignaling();
   }
   sendBinary(frame: Uint8Array): boolean {
@@ -269,6 +279,9 @@ export class RtcTransport implements ControllerTransport {
   private openSignaling(): void {
     this.setState('connecting');
     const url = this.options.relayUrl ?? relayJoinURL();
+    // Close any predecessor: re-entrant connect() or a racing rejoin must
+    // not orphan a signaling socket (same leak as the PC below).
+    this.closeSignaling();
     const socket = this.createSignalingSocket(url);
     this.signaling = socket;
     const seq = this.joinSeq;
@@ -346,6 +359,10 @@ export class RtcTransport implements ControllerTransport {
       pc.close();
       return;
     }
+    // Drop any predecessor before installing: a re-entrant connect()
+    // while gather is in flight would otherwise orphan the first PC
+    // (plus its TURN allocation) when the second build overwrites it.
+    this.teardownPeer();
     this.pc = pc;
     this.wirePeerConnection(pc, seq);
     this.control = pc.createDataChannel(CONTROL_LABEL, {
@@ -365,11 +382,33 @@ export class RtcTransport implements ControllerTransport {
       await waitForGatheringComplete(pc);
       offerSdp = pc.localDescription?.sdp ?? offer.sdp;
     } catch {
-      if (seq !== this.joinSeq) return;
+      if (seq !== this.joinSeq) {
+        // Stale generation: this.pc already points at the newer build
+        // (or nothing); close only the orphan we just built.
+        if (this.pc === pc) this.teardownPeer();
+        else {
+          try {
+            pc.close();
+          } catch {
+            // Teardown never blocks the rejoin.
+          }
+        }
+        return;
+      }
       this.handleAttemptFailed(seq);
       return;
     }
-    if (seq !== this.joinSeq || !this.allowReconnect) return;
+    if (seq !== this.joinSeq || !this.allowReconnect) {
+      if (this.pc === pc) this.teardownPeer();
+      else {
+        try {
+          pc.close();
+        } catch {
+          // Teardown never blocks the rejoin.
+        }
+      }
+      return;
+    }
     if (!offerSdp) {
       this.handleAttemptFailed(seq);
       return;

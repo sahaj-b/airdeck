@@ -324,7 +324,7 @@ func TestApprovalOfferUsesStoredAdmission(t *testing.T) {
 func TestHelloParityWithLANSocket(t *testing.T) {
 	manager, sess, _ := newTestManager(t, false)
 	phone := dialTestPhone(t)
-	answerSDP, admission, err := manager.HandleJoin(rtc.Join{
+	answerSDP, _, err := manager.HandleJoin(rtc.Join{
 		Type: rtc.MessageJoin, CorrelationID: "corr-parity", Offer: phone.offer(t),
 	})
 	if err != nil {
@@ -357,10 +357,13 @@ func TestHelloParityWithLANSocket(t *testing.T) {
 	if errMsg.Code != wantCode {
 		t.Fatalf("hello error code = %q, want %q", errMsg.Code, wantCode)
 	}
-	if n := len(sess.Players()); n != 1 {
-		t.Fatalf("failed hello minted players: %d, want 1", n)
+	// Failed hello frees its slot at once instead of holding it for the 10s hello timeout.
+	if n := len(sess.Players()); n != 0 {
+		t.Fatalf("failed hello left players: %d, want 0 (slot freed)", n)
 	}
-	_ = admission
+	if n := manager.PeerCount(); n != 0 {
+		t.Fatalf("failed hello left peers: %d, want 0", n)
+	}
 }
 
 func TestToPionConversion(t *testing.T) {

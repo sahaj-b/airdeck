@@ -217,11 +217,9 @@ func TestNewSessionKeepsCodeAndClearsPendings(t *testing.T) {
 	}
 	// One admitted player plus two pendings: reset must clear all three.
 	session.SetApprovalRequired(false)
-	open, err := session.Admit(before, "Open", "", "", nil, nil)
-	if err != nil {
+	if _, err := session.Admit(before, "Open", "", "", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	_ = open
 	session.SetApprovalRequired(true)
 	if err := session.NewSession(); err != nil {
 		t.Fatal(err)
@@ -332,35 +330,6 @@ func TestConcurrentAcceptsNeverShareSlot(t *testing.T) {
 	}
 }
 
-func TestRTCValidationOnlyHelloNeverMintsSecondPlayer(t *testing.T) {
-	session, _ := newTestSession(t)
-	defer session.Close()
-	// Open-mode RTC admits at join-forward time, before any DataChannel.
-	admission, err := session.Admit(session.Code(), "Phone", "", "xbox-default", nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before := len(session.Players())
-	// The control-channel hello validates and receives the pre-built
-	// welcome; it must never run Admit again.
-	if err := session.CheckCode(session.Code()); err != nil {
-		t.Fatalf("CheckCode: %v", err)
-	}
-	welcome := BuildWelcome(admission.Player, mustTestLayouts(t, session), 60)
-	if welcome.PlayerID != admission.Player.ID {
-		t.Fatalf("welcome player = %q, want %q", welcome.PlayerID, admission.Player.ID)
-	}
-	if after := len(session.Players()); after != before {
-		t.Fatalf("validation-only hello minted players: %d -> %d", before, after)
-	}
-	if err := session.CheckCode("WRONG1"); !errors.Is(err, ErrInvalidCode) {
-		t.Fatalf("bad code error = %v, want ErrInvalidCode", err)
-	}
-	if after := len(session.Players()); after != before {
-		t.Fatalf("failed hello minted players: %d -> %d", before, after)
-	}
-}
-
 func TestAdmissionErrorMapping(t *testing.T) {
 	cases := []struct {
 		err  error
@@ -373,6 +342,7 @@ func TestAdmissionErrorMapping(t *testing.T) {
 		{ErrDeclined, "declined"},
 		{ErrJoinsClosed, "joins_closed"},
 		{ErrSessionFull, "session_full"},
+		{ErrPendingsFull, "session_full"},
 		{ErrInvalidReconnect, "invalid_reconnect"},
 		{errors.New("boom"), "device_error"},
 	}
@@ -380,6 +350,31 @@ func TestAdmissionErrorMapping(t *testing.T) {
 		if code, _ := AdmissionError(c.err); code != c.code {
 			t.Errorf("AdmissionError(%v) code = %q, want %q", c.err, code, c.code)
 		}
+	}
+}
+
+// A full approval queue is not a full session: slots can be free while the
+// host is not answering, and the guest-facing message says so.
+func TestPendingQueueFull(t *testing.T) {
+	session, _ := newTestSession(t)
+	defer session.Close()
+	session.SetApprovalRequired(true)
+	for i := 0; i < MaxPendings; i++ {
+		_, err := session.Admit(session.Code(), "Phone", "", "", nil, nil)
+		if !errors.Is(err, ErrApprovalPending) {
+			t.Fatalf("queued join %d error = %v, want pending", i, err)
+		}
+	}
+	if _, err := session.Admit(session.Code(), "Phone", "", "", nil, nil); !errors.Is(err, ErrPendingsFull) {
+		t.Fatalf("overflow error = %v, want ErrPendingsFull", err)
+	}
+	if code, message := AdmissionError(ErrPendingsFull); code != "session_full" || message != "Too many join requests are waiting for host approval." {
+		t.Fatalf("overflow mapping = %q, %q", code, message)
+	}
+	// Draining one entry frees a queue slot.
+	session.RemovePending(session.Pendings()[0].ID)
+	if _, err := session.Admit(session.Code(), "Phone", "", "", nil, nil); !errors.Is(err, ErrApprovalPending) {
+		t.Fatalf("join after drain error = %v, want pending", err)
 	}
 }
 

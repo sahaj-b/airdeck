@@ -27,15 +27,29 @@ func dialRelay(t *testing.T, url, origin string) *websocket.Conn {
 	if origin != "" {
 		header.Set("Origin", origin)
 	}
+	return dialRelayHeader(t, url, header)
+}
+
+// dialRelayHeader is dialRelay with handshake headers the test chooses,
+// e.g. a forged X-Forwarded-For.
+func dialRelayHeader(t *testing.T, url string, header http.Header) *websocket.Conn {
+	t.Helper()
 	conn, resp, err := websocket.DefaultDialer.Dial(url, header)
 	if err != nil {
 		if resp != nil {
 			_ = resp.Body.Close()
 		}
-		t.Fatalf("dial %s (origin %q): %v", url, origin, err)
+		t.Fatalf("dial %s: %v", url, err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return conn
+}
+
+// forwardedDial is one guest socket claiming to arrive through a proxy
+// that reported clientIP.
+func forwardedDial(t *testing.T, base, clientIP string) *websocket.Conn {
+	t.Helper()
+	return dialRelayHeader(t, base+"/join", http.Header{"X-Forwarded-For": {clientIP}})
 }
 
 func readFrame(t *testing.T, conn *websocket.Conn) (string, []byte) {
@@ -497,4 +511,98 @@ func TestRegistrationRateLimitToggle(t *testing.T) {
 	laxBase := "ws" + strings.TrimPrefix(laxServer.URL, "http")
 	_ = registerHost(t, laxBase, "UNA222", "key-a", false)
 	_ = registerHost(t, laxBase, "DUET22", "key-c", false)
+}
+
+// clientIP decides the rate-limit key: a proxy's X-Forwarded-For counts
+// only from a trusted hop, and only the rightmost untrusted entry does.
+func TestClientIPResolution(t *testing.T) {
+	server := NewServer(NewHub(openTestStore(t), nil, false), false)
+	if err := server.SetTrustedProxies([]string{"10.0.0.0/8", "192.0.2.7"}); err != nil {
+		t.Fatalf("trusted proxies: %v", err)
+	}
+	if err := server.SetTrustedProxies([]string{"not-an-ip"}); err == nil {
+		t.Fatal("garbage trusted proxy accepted")
+	}
+	cases := []struct {
+		name       string
+		remoteAddr string
+		xff        string
+		want       string
+	}{
+		{"direct peer ignores spoofed header", "203.0.113.9:443", "198.51.100.1", "203.0.113.9"},
+		{"loopback proxy forwards client", "127.0.0.1:9000", "198.51.100.1", "198.51.100.1"},
+		{"prepended entry never wins", "127.0.0.1:9000", "10.1.2.3, 198.51.100.7", "198.51.100.7"},
+		{"no header falls back to peer", "127.0.0.1:9000", "", "127.0.0.1"},
+		{"trusted hop skipped right to left", "10.0.0.5:9000", "198.51.100.7, 10.0.0.9", "198.51.100.7"},
+		{"mapped loopback is loopback", "[::ffff:127.0.0.1]:9000", "198.51.100.9", "198.51.100.9"},
+		{"trusted bare ip", "192.0.2.7:9000", "198.51.100.11", "198.51.100.11"},
+		{"junk header falls back to peer", "127.0.0.1:9000", "not-an-ip", "127.0.0.1"},
+		{"host:port entry is unwrapped", "127.0.0.1:9000", "198.51.100.12:443", "198.51.100.12"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/join", nil)
+		req.RemoteAddr = tc.remoteAddr
+		if tc.xff != "" {
+			req.Header.Set("X-Forwarded-For", tc.xff)
+		}
+		if got := server.clientIP(req); got != tc.want {
+			t.Fatalf("%s: clientIP = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// Join limits key on the real client, not on the proxy hop: behind Caddy
+// every guest would otherwise share one bucket, so one phone in a rejoin
+// loop could spend the whole party's budget.
+func TestJoinLimitKeysOnForwardedClient(t *testing.T) {
+	hub := NewHub(openTestStore(t), nil, true)
+	hub.joinLimits = NewRateLimiter(1, time.Minute)
+	server := httptest.NewServer(NewServer(hub, false).Routes())
+	defer server.Close()
+	base := "ws" + strings.TrimPrefix(server.URL, "http")
+	host := registerHost(t, base, "PRCD32", "key-a", false)
+
+	guestA := forwardedDial(t, base, "203.0.113.7")
+	mustWrite(t, guestA, rtc.Join{Type: rtc.MessageJoin, RoomCode: "PRCD32", Offer: "offer-a"})
+	if msgType, _ := readFrame(t, host); msgType != rtc.MessageJoin {
+		t.Fatalf("first join from client A got %q on host, want join", msgType)
+	}
+	mustWrite(t, guestA, rtc.Join{Type: rtc.MessageJoin, RoomCode: "PRCD32", Offer: "offer-a2"})
+	msgType, data := readFrame(t, guestA)
+	if msgType != rtc.MessageError {
+		t.Fatalf("over-budget join got %q, want error", msgType)
+	}
+	var errMsg rtc.ErrorMessage
+	if err := json.Unmarshal(data, &errMsg); err != nil || errMsg.Code != rtc.ErrorRoomNotFound {
+		t.Fatalf("over-budget error = %s, want room_not_found", data)
+	}
+
+	guestB := forwardedDial(t, base, "203.0.113.8")
+	mustWrite(t, guestB, rtc.Join{Type: rtc.MessageJoin, RoomCode: "PRCD32", Offer: "offer-b"})
+	if msgType, _ := readFrame(t, host); msgType != rtc.MessageJoin {
+		t.Fatalf("client B join got %q on host, want join", msgType)
+	}
+}
+
+// One socket cannot queue unbounded approval pendings: past the cap the
+// guest gets the generic dead-code error instead of another entry.
+func TestPendingPerGuestCap(t *testing.T) {
+	_, base := testRelay(t, true, false)
+	_ = registerHost(t, base, "CAPQ22", "key-a", true)
+	guest := dialRelay(t, base+"/join", "")
+	for i := 0; i < maxPendingsPerGuest; i++ {
+		mustWrite(t, guest, rtc.Join{Type: rtc.MessageJoin, RoomCode: "CAPQ22", DisplayName: "Phone"})
+		if msgType, _ := readFrame(t, guest); msgType != rtc.MessagePending {
+			t.Fatalf("pending %d got %q, want pending", i, msgType)
+		}
+	}
+	mustWrite(t, guest, rtc.Join{Type: rtc.MessageJoin, RoomCode: "CAPQ22", DisplayName: "Phone"})
+	msgType, data := readFrame(t, guest)
+	if msgType != rtc.MessageError {
+		t.Fatalf("overflow join got %q, want error", msgType)
+	}
+	var errMsg rtc.ErrorMessage
+	if err := json.Unmarshal(data, &errMsg); err != nil || errMsg.Code != rtc.ErrorRoomNotFound {
+		t.Fatalf("overflow error = %s, want room_not_found", data)
+	}
 }

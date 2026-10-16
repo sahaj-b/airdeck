@@ -35,9 +35,10 @@ func run(args []string) error {
 	turnURLs := flags.String("turn-urls", "", "self-hosted TURN urls, comma-separated, e.g. turn:signal.airdeck.sahaj.dev:3478?transport=udp (or AIRDECK_TURN_URLS)")
 	turnUsername := flags.String("turn-username", "", "verbatim TURN username for one-shot alternate-relay tests, served as-is with --turn-urls (or AIRDECK_TURN_USERNAME)")
 	turnCredential := flags.String("turn-credential", "", "verbatim TURN credential for one-shot alternate-relay tests (or AIRDECK_TURN_CREDENTIAL)")
-	enforceLimits := flags.Bool("enforce-limits", false, "enforce registration rate limits, code-change caps, and the reserved list (off for dev, on in prod)")
+	enforceLimits := flags.Bool("enforce-limits", true, "enforce registration rate limits, code-change caps, and the reserved list (on in prod, pass --enforce-limits=false for dev)")
 	dev := flags.Bool("dev", false, "allow localhost guest origins for local drills")
 	guestOrigins := flags.String("guest-origins", "", "extra exact guest origins for the /join allowlist, comma-separated, e.g. Pages preview URLs (or AIRDECK_GUEST_ORIGINS)")
+	trustedProxies := flags.String("trusted-proxies", "", "extra proxy hops whose X-Forwarded-For names the real client for rate limiting, comma-separated IPs/CIDRs; loopback is always trusted (or AIRDECK_TRUSTED_PROXIES)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -61,6 +62,9 @@ func run(args []string) error {
 	}
 	if *guestOrigins == "" {
 		*guestOrigins = os.Getenv("AIRDECK_GUEST_ORIGINS")
+	}
+	if *trustedProxies == "" {
+		*trustedProxies = os.Getenv("AIRDECK_TRUSTED_PROXIES")
 	}
 	store, err := relay.Open(*dbPath)
 	if err != nil {
@@ -90,9 +94,17 @@ func run(args []string) error {
 	if len(extras) > 0 {
 		log.Printf("signal-relay: allowing %d extra guest origin(s)", len(extras))
 	}
+	handler := relay.NewServer(hub, *dev, extras...)
+	proxies := splitList(*trustedProxies)
+	if err := handler.SetTrustedProxies(proxies); err != nil {
+		return err
+	}
+	if len(proxies) > 0 {
+		log.Printf("signal-relay: trusting X-Forwarded-For from %d extra proxy range(s)", len(proxies))
+	}
 	server := &http.Server{
 		Addr:         *listen,
-		Handler:      relay.NewServer(hub, *dev, extras...).Routes(),
+		Handler:      handler.Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}

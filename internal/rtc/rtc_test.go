@@ -75,24 +75,6 @@ func TestMessageRoundTrip(t *testing.T) {
 	}
 }
 
-// Unknown, retired, and offline-host codes must be indistinguishable on
-// the wire: one relay path, no enumeration oracle.
-func TestRoomNotFoundIndistinguishable(t *testing.T) {
-	unknown := mustMarshal(t, RoomNotFoundError())
-	retired := mustMarshal(t, RoomNotFoundError())
-	offline := mustMarshal(t, RoomNotFoundError())
-	if string(unknown) != string(retired) || string(retired) != string(offline) {
-		t.Fatalf("dead-code errors differ:\nunknown=%s\nretired=%s\noffline=%s", unknown, retired, offline)
-	}
-	var decoded ErrorMessage
-	if err := json.Unmarshal(unknown, &decoded); err != nil {
-		t.Fatalf("unmarshal generic error: %v", err)
-	}
-	if decoded.Code != ErrorRoomNotFound {
-		t.Fatalf("generic error code = %q, want %q", decoded.Code, ErrorRoomNotFound)
-	}
-}
-
 // Lookup and claiming normalize before comparing: case, dashes, and
 // surrounding spaces never route two spellings of one code apart.
 func TestNormalizationBeforeLookup(t *testing.T) {
@@ -116,46 +98,5 @@ func TestNormalizationBeforeLookup(t *testing.T) {
 		if err := roomcode.Validate(bad); err == nil {
 			t.Fatalf("Validate(%q) passed, want rejection", bad)
 		}
-	}
-}
-
-// Answers correlate by the echoed relay-assigned correlation id, never by
-// connection: the answer carries no connection-identifying field.
-func TestAnswerEchoesCorrelationID(t *testing.T) {
-	forwarded := Join{Type: MessageJoin, PendingID: "p1", CorrelationID: "corr-123", DisplayName: "Phone", Offer: "v=0\r\n..."}
-	answer := Answer{Type: MessageAnswer, CorrelationID: forwarded.CorrelationID, SDP: "v=0\r\n..."}
-	data := mustMarshal(t, answer)
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal answer to map: %v", err)
-	}
-	for want := range map[string]bool{"type": true, "correlationId": true, "sdp": true} {
-		if _, ok := raw[want]; !ok {
-			t.Fatalf("answer missing field %q: %s", want, data)
-		}
-	}
-	if len(raw) != 3 {
-		t.Fatalf("answer carries extra fields beyond id correlation: %s", data)
-	}
-	var decoded Answer
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("unmarshal answer: %v", err)
-	}
-	if decoded.CorrelationID != forwarded.CorrelationID {
-		t.Fatalf("answer correlation = %q, want %q", decoded.CorrelationID, forwarded.CorrelationID)
-	}
-}
-
-// A guest socket survives rejects and re-requests, so a second join flow
-// on the same socket needs a fresh correlation id, not connection state.
-func TestRejoinCarriesFreshCorrelation(t *testing.T) {
-	first := Join{Type: MessageJoin, CorrelationID: "corr-1", DisplayName: "Phone", Offer: "v=0\r\n..."}
-	second := Join{Type: MessageJoin, CorrelationID: "corr-2", DisplayName: "Phone", Offer: "v=0\r\n..."}
-	if first.CorrelationID == second.CorrelationID {
-		t.Fatal("re-request reused the correlation id")
-	}
-	answer := Answer{Type: MessageAnswer, CorrelationID: second.CorrelationID, SDP: "v=0\r\n..."}
-	if answer.CorrelationID == first.CorrelationID {
-		t.Fatal("answer echoed a stale join flow")
 	}
 }

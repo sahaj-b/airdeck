@@ -23,10 +23,16 @@ import (
 // client blip resolves. The host can override it per session.
 const DefaultGracePeriod = 5 * time.Second
 
+// MaxPendings caps queued approval joins: pendings hold no slot but each
+// holds a socket plus a dashboard row, so unbounded queueing lets one
+// attacker fill memory and bury the queue.
+const MaxPendings = 32
+
 var (
 	ErrInvalidCode      = errors.New("invalid session code")
 	ErrJoinsClosed      = errors.New("session is not accepting new joins")
 	ErrSessionFull      = errors.New("session is full")
+	ErrPendingsFull     = errors.New("too many joins are waiting for approval")
 	ErrInvalidReconnect = errors.New("reconnect id is invalid or expired")
 	ErrPlayerNotFound   = errors.New("player not found")
 	ErrGeneration       = errors.New("connection generation is no longer current")
@@ -304,6 +310,10 @@ func (s *Session) Admit(sessionCode, displayName, reconnectID, selectedLayout st
 	}
 	// Approval gate: reclaim already returned above and skips re-approval.
 	if s.approvalRequired {
+		if len(s.pendings) >= MaxPendings {
+			s.mu.Unlock()
+			return Admission{}, ErrPendingsFull
+		}
 		id, err := newID()
 		if err != nil {
 			s.mu.Unlock()
@@ -494,6 +504,10 @@ func AdmissionError(err error) (string, string) {
 		return "joins_closed", "This session is not accepting new joins."
 	case errors.Is(err, ErrSessionFull):
 		return "session_full", fmt.Sprintf("This session already has %d players.", MaxPlayers)
+	case errors.Is(err, ErrPendingsFull):
+		// Same wire code: the client treats it as a fatal pre-join error,
+		// which is right for a queue no host answer can drain.
+		return "session_full", "Too many join requests are waiting for host approval."
 	case errors.Is(err, ErrInvalidReconnect):
 		return "invalid_reconnect", "The reconnect window has expired. Join as a new player."
 	default:

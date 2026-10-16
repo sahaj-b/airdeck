@@ -156,17 +156,30 @@ func TestLoadNormalizesHandEditedRoomCode(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsNonHexInstallationKey(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	cfg := Defaults()
-	cfg.InstallationKey = strings.Repeat("Z", 64)
-	data, _ := json.Marshal(cfg)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
+func TestLoadRejectsBadInstallationKey(t *testing.T) {
+	cases := []struct {
+		name string
+		key  string
+	}{
+		{"non-hex", strings.Repeat("Z", 64)},
+		{"short hex", strings.Repeat("a", 62)},
+		{"long hex", strings.Repeat("a", 66)},
 	}
-	if _, err := Load(path); err == nil {
-		t.Fatal("64-char non-hex installation key should be rejected")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.json")
+			cfg := Defaults()
+			cfg.InstallationKey = tc.key
+			data, _ := json.Marshal(cfg)
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(path)
+			if err == nil {
+				t.Fatalf("%s installation key should be rejected", tc.name)
+			}
+		})
 	}
 }
 

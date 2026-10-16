@@ -179,6 +179,9 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
+		if agent := s.options.Online; agent != nil {
+			agent.ClearApprovals()
+		}
 		writeJSON(w, http.StatusOK, s.currentState())
 	case path == "/joins" && r.Method == http.MethodPut:
 		var body struct {
@@ -509,11 +512,17 @@ func (s *Server) approvalAPI(w http.ResponseWriter, r *http.Request, value strin
 		var body struct {
 			Reason string `json:"reason"`
 		}
-		// Reason is optional; an empty body still rejects.
-		if r.ContentLength != 0 {
+		// Reason is optional; an empty body still rejects. ContentLength
+		// is -1 for chunked uploads, so check the body itself: EOF means
+		// empty reason, not a 400.
+		if r.Body != nil {
 			if err := decodeJSON(r, &body); err != nil {
-				writeErrorStatus(w, err, http.StatusBadRequest)
-				return
+				if errors.Is(err, io.EOF) {
+					body.Reason = ""
+				} else {
+					writeErrorStatus(w, err, http.StatusBadRequest)
+					return
+				}
 			}
 		}
 		if agent != nil {

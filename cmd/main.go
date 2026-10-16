@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 
 	"github.com/sahaj-b/airdeck/internal/app"
 	"github.com/sahaj-b/airdeck/internal/config"
@@ -86,6 +87,35 @@ func checkStatus(check doctor.Check) string {
 	return paint(code, text)
 }
 
+// optionalBool is a bool flag that tracks whether it was set, so
+// --lan-only=false can disable a config true (plain *bool cannot
+// distinguish unset from false).
+type optionalBool struct {
+	value bool
+	set   bool
+}
+
+func (b *optionalBool) String() string {
+	if b.value {
+		return "true"
+	}
+	return "false"
+}
+
+func (b *optionalBool) Set(s string) error {
+	// Same accepted forms as flag.Bool; a bare --lan-only arrives as
+	// "true" through IsBoolFlag, a typo like "flase" is rejected.
+	value, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	b.value = value
+	b.set = true
+	return nil
+}
+
+func (b *optionalBool) IsBoolFlag() bool { return true }
+
 func runServe(args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	configPath := flags.String("config", config.File(), "configuration file")
@@ -96,11 +126,14 @@ func runServe(args []string) error {
 	defaultLayout := flags.String("default-layout", "", "default layout override")
 	inputRate := flags.Int("input-rate", 0, "startup input rate override")
 	gracePeriod := flags.Int("grace-period", 0, "reconnect grace period override in seconds")
-	noCode := flags.Bool("no-code", false, "let clients join /join without entering a session code")
-	flags.BoolVar(noCode, "n", false, "shorthand for --no-code")
+	var noCode optionalBool
+	flags.Var(&noCode, "no-code", "let clients join /join without entering a session code")
+	flags.Var(&noCode, "n", "shorthand for --no-code")
 	roomCode := flags.String("room-code", "", "persistent room code override")
-	lanOnly := flags.Bool("lan-only", false, "serve LAN only without probing central")
-	approvalRequired := flags.Bool("approval-required", false, "require host approval before admitting joins")
+	var lanOnly optionalBool
+	flags.Var(&lanOnly, "lan-only", "serve LAN only without probing central")
+	var approvalRequired optionalBool
+	flags.Var(&approvalRequired, "approval-required", "require host approval before admitting joins")
 	defaultOpen := runtime.GOOS == "windows"
 	open := flags.Bool("open", defaultOpen, "open dashboard in browser on serve (pass --open=false to disable)")
 	if err := flags.Parse(args); err != nil {
@@ -138,17 +171,17 @@ func runServe(args []string) error {
 	if *gracePeriod != 0 {
 		overrides.GracePeriodSeconds = gracePeriod
 	}
-	if *noCode {
-		overrides.NoCode = noCode
+	if noCode.set {
+		overrides.NoCode = &noCode.value
 	}
 	if *roomCode != "" {
 		overrides.RoomCode = roomCode
 	}
-	if *lanOnly {
-		overrides.LanOnly = lanOnly
+	if lanOnly.set {
+		overrides.LanOnly = &lanOnly.value
 	}
-	if *approvalRequired {
-		overrides.ApprovalRequired = approvalRequired
+	if approvalRequired.set {
+		overrides.ApprovalRequired = &approvalRequired.value
 	}
 	cfg, err = config.ApplyOverrides(cfg, overrides)
 	if err != nil {

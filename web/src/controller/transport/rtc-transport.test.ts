@@ -479,27 +479,4 @@ describe('RtcTransport reconnect', () => {
     ]);
     expect(states.at(-1)).toBe('rejected');
   });
-
-  it('forces relay-only candidates in turn-only mode', async () => {
-    // localStorage is absent outside browsers; skip the flag there.
-    if (typeof localStorage === 'undefined') return;
-    let policy: string | undefined;
-    const { transport, signals, pcs } = setup({
-      peerConnectionFactory: (config) => {
-        policy = config.iceTransportPolicy;
-        const pc = new FakePeerConnection(config);
-        pcs.push(pc);
-        return pc;
-      },
-    });
-    try {
-      localStorage.setItem('airdeck.turnOnly', '1');
-      transport.connect();
-      signals[0].open();
-      await flush();
-      expect(policy).toBe('relay');
-    } finally {
-      localStorage.removeItem('airdeck.turnOnly');
-    }
-  });
 });

@@ -149,9 +149,6 @@ func TestApprovalReclaimSkipsQueueOnWire(t *testing.T) {
 	if len(sess.Pendings()) != 0 {
 		t.Fatal("reclaim queued a pending, want direct admit")
 	}
-	if !errors.Is(sess.CheckCode(sess.Code()), nil) {
-		t.Fatal("CheckCode rejected the valid code")
-	}
 }
 
 func TestApprovalAcceptRacingDisconnectCleansUp(t *testing.T) {

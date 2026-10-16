@@ -80,6 +80,23 @@ func (h *Handler) trackDebug(id string, start time.Time, stale bool) {
 	}
 	now := time.Now()
 	h.debugMu.Lock()
+	// Bound churn: random player IDs over a long uptime must not grow
+	// this map forever when debug is on. Evict the stalest window (its
+	// start is the last second bucket it logged, so a live player is
+	// never the oldest) and never the caller's own.
+	if h.windows != nil && len(h.windows) >= 128 {
+		oldestID := ""
+		var oldestStart time.Time
+		for key, window := range h.windows {
+			if key == id || window == nil {
+				continue
+			}
+			if oldestID == "" || window.start.Before(oldestStart) {
+				oldestID, oldestStart = key, window.start
+			}
+		}
+		delete(h.windows, oldestID)
+	}
 	window, ok := h.windows[id]
 	if !ok || window == nil {
 		window = &debugWindow{start: now}
@@ -151,6 +168,9 @@ func (h *Handler) Disconnect(id string, generation uint64) error {
 		delete(h.timers, id)
 	}
 	h.mu.Unlock()
+	h.debugMu.Lock()
+	delete(h.windows, id)
+	h.debugMu.Unlock()
 	return h.session.Disconnect(id, generation)
 }
 
@@ -161,4 +181,7 @@ func (h *Handler) Close() {
 		delete(h.timers, id)
 	}
 	h.mu.Unlock()
+	h.debugMu.Lock()
+	h.windows = nil
+	h.debugMu.Unlock()
 }

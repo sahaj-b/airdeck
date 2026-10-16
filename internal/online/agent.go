@@ -90,20 +90,31 @@ type Agent struct {
 	approvals map[string]*approval
 	// connMu serializes signaling writes; the read loop never holds it.
 	connMu sync.Mutex
-	conn   *websocket.Conn
-	out    chan []byte
+	// writeMu serializes raw websocket writes: the writer goroutine and
+	// the ping-handler pong reply share one conn.
+	writeMu sync.Mutex
+	conn    *websocket.Conn
+	out     chan []byte
 
 	done    chan struct{}
 	closeMu sync.Mutex
 	closed  bool
 	wg      sync.WaitGroup
 	retryCh chan struct{}
+
+	loopMu          sync.Mutex
+	registerRunning bool
+	// stopped ends loop restart: Close sets it under loopMu, and
+	// ensureRegisterLoop adds to the WaitGroup under the same lock, so no
+	// wg.Add can land after Close began waiting.
+	stopped bool
 }
 
 type approval struct {
 	sessionPending string
 	admission      session.Admission
 	accepted       bool
+	answering      bool
 }
 
 // New builds a stopped agent. Call Start to probe and register.
@@ -161,8 +172,39 @@ func (a *Agent) Start() {
 		a.setReachable(false)
 		return
 	}
+	a.loopMu.Lock()
+	a.registerRunning = true
+	a.loopMu.Unlock()
 	a.wg.Add(2)
 	go a.probeLoop()
+	go a.registerLoop()
+}
+
+func (a *Agent) registerStopped() bool {
+	a.loopMu.Lock()
+	defer a.loopMu.Unlock()
+	return !a.registerRunning
+}
+
+// ensureRegisterLoop restarts the register loop after a permanent
+// conflict. The stop check, the running flag, and wg.Add share loopMu
+// with Close so a SetCode racing shutdown cannot revive the loop (and a
+// late wg.Add cannot race Close's wg.Wait).
+func (a *Agent) ensureRegisterLoop() {
+	a.mu.Lock()
+	lanOnly := a.lanOnly
+	a.mu.Unlock()
+	if lanOnly {
+		return
+	}
+	a.loopMu.Lock()
+	if a.stopped || a.registerRunning {
+		a.loopMu.Unlock()
+		return
+	}
+	a.registerRunning = true
+	a.wg.Add(1)
+	a.loopMu.Unlock()
 	go a.registerLoop()
 }
 
@@ -178,7 +220,8 @@ func (a *Agent) Retry() {
 // SetCode installs a new desired room code plus approval flag (dashboard
 // resolve path) and retries registration immediately. The session is the
 // single source of truth for the code: it updates together with the
-// agent so LAN validation and relay routing never diverge.
+// agent so LAN validation and relay routing never diverge. If the loop
+// already exited on a permanent conflict, it restarts here.
 func (a *Agent) SetCode(roomCode string, approvalRequired bool) {
 	normalized := roomcode.Normalize(roomCode)
 	a.mu.Lock()
@@ -190,6 +233,7 @@ func (a *Agent) SetCode(roomCode string, approvalRequired bool) {
 	a.notify()
 	a.closeConn()
 	a.Retry()
+	a.ensureRegisterLoop()
 }
 
 // SetApprovalRequired mirrors the dashboard toggle onto future registers.
@@ -219,6 +263,11 @@ func (a *Agent) Close() {
 	}
 	close(a.done)
 	a.closeMu.Unlock()
+	// Stop loop restarts before waiting: a SetCode arriving during
+	// shutdown must not add a goroutine to a WaitGroup already waited on.
+	a.loopMu.Lock()
+	a.stopped = true
+	a.loopMu.Unlock()
 	a.closeConn()
 	a.wg.Wait()
 }
@@ -363,6 +412,11 @@ func probeSTUN(addr string, timeout time.Duration) bool {
 // retry network failures with backoff, stop on permanent conflict.
 func (a *Agent) registerLoop() {
 	defer a.wg.Done()
+	defer func() {
+		a.loopMu.Lock()
+		a.registerRunning = false
+		a.loopMu.Unlock()
+	}()
 	done := a.doneCh()
 	backoff := backoffStart
 	for {
@@ -408,7 +462,7 @@ func (a *Agent) serveRegister(done <-chan struct{}) (bool, bool) {
 		log.Printf("online: relay dial failed, retrying: %v", err)
 		return false, false
 	}
-	armRegisterConn(conn)
+	a.armRegisterConn(conn)
 	a.connMu.Lock()
 	a.conn = conn
 	a.out = make(chan []byte, sendQueue)
@@ -428,8 +482,11 @@ func (a *Agent) serveRegister(done <-chan struct{}) (bool, bool) {
 			case <-finish:
 				return
 			case data := <-out:
+				a.writeMu.Lock()
 				_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-				if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				err := conn.WriteMessage(websocket.TextMessage, data)
+				a.writeMu.Unlock()
+				if err != nil {
 					return
 				}
 			}
@@ -447,8 +504,11 @@ func (a *Agent) serveRegister(done <-chan struct{}) (bool, bool) {
 		<-writeDone
 		return false, false
 	}
+	a.writeMu.Lock()
 	_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-	if err := conn.WriteMessage(websocket.TextMessage, register); err != nil {
+	err = conn.WriteMessage(websocket.TextMessage, register)
+	a.writeMu.Unlock()
+	if err != nil {
 		log.Printf("online: relay register write failed, retrying: %v", err)
 		a.closeConn()
 		close(finish)
@@ -488,6 +548,20 @@ func (a *Agent) serveRegister(done <-chan struct{}) (bool, bool) {
 // stretch without this. The handler mirrors the default (reply pong, which
 // the relay needs for its own read deadline) and additionally pushes our
 // read deadline out, keeping an idle-but-healthy socket open indefinitely.
+// Pong writes share writeMu with the writer goroutine: gorilla panics on
+// concurrent writes.
+func (a *Agent) armRegisterConn(conn *websocket.Conn) {
+	conn.SetPingHandler(func(appData string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+		a.writeMu.Lock()
+		defer a.writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(writeTimeout))
+	})
+}
+
+// armRegisterConn installs the heartbeat refresh on a register socket (test
+// hook for unit tests that dial a fake relay without an agent).
 func armRegisterConn(conn *websocket.Conn) {
 	conn.SetPingHandler(func(appData string) error {
 		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
@@ -541,21 +615,23 @@ func (a *Agent) readLoop(conn *websocket.Conn, done <-chan struct{}) bool {
 	}
 }
 
-func (a *Agent) send(value any) {
+func (a *Agent) send(value any) bool {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return
+		return false
 	}
 	a.connMu.Lock()
 	out := a.out
 	a.connMu.Unlock()
 	if out == nil {
-		return
+		return false
 	}
 	select {
 	case out <- data:
+		return true
 	default:
 		log.Printf("online: signaling outbound full, dropping message")
+		return false
 	}
 }
 
@@ -645,6 +721,8 @@ func rejectReason(err error) string {
 	switch {
 	case errors.Is(err, session.ErrSessionFull):
 		return "session is full"
+	case errors.Is(err, session.ErrPendingsFull):
+		return "too many join requests are waiting for host approval"
 	case errors.Is(err, session.ErrJoinsClosed):
 		return "session is not accepting joins"
 	default:
@@ -668,10 +746,12 @@ func (a *Agent) handleRelayOffer(data []byte) {
 	}
 	a.mu.Lock()
 	entry := a.approvals[offer.PendingID]
-	a.mu.Unlock()
-	if entry == nil || !entry.accepted {
+	if entry == nil || !entry.accepted || entry.answering {
+		a.mu.Unlock()
 		return
 	}
+	entry.answering = true
+	a.mu.Unlock()
 	admission := entry.admission
 	pendingID := offer.PendingID
 	go func() {
@@ -733,7 +813,19 @@ func (a *Agent) AcceptPending(relayPendingID string) error {
 	entry.accepted = true
 	entry.sessionPending = ""
 	a.mu.Unlock()
-	a.send(rtc.Accept{Type: rtc.MessageAccept, PendingID: relayPendingID})
+	if !a.send(rtc.Accept{Type: rtc.MessageAccept, PendingID: relayPendingID}) {
+		// Socket dropped between dials (closeConn+Retry race): roll back
+		// the accept so the dashboard error surfaces instead of a silent
+		// stuck guest. The slot is freed, the guest retries.
+		a.mu.Lock()
+		if current := a.approvals[relayPendingID]; current == entry {
+			delete(a.approvals, relayPendingID)
+		}
+		a.mu.Unlock()
+		a.dropAdmission(admission)
+		a.notify()
+		return errors.New("relay connection dropped, retry accept")
+	}
 	a.armOfferTimeout(relayPendingID, admission)
 	a.notify()
 	return nil
@@ -751,7 +843,13 @@ func (a *Agent) RejectPending(relayPendingID, reason string) error {
 		return session.ErrPendingNotFound
 	}
 	_ = a.session.RejectPending(entry.sessionPending, reason)
-	a.send(rtc.Reject{Type: rtc.MessageReject, PendingID: relayPendingID, Reason: reason})
+	if !a.send(rtc.Reject{Type: rtc.MessageReject, PendingID: relayPendingID, Reason: reason}) {
+		// The relay socket is down, so the relay has already dropped this
+		// host's pendings and told every queued guest peer.left: the
+		// guest is notified either way and the local state above is the
+		// truth, so this is not a failure to report.
+		log.Printf("online: reject %s applied locally, relay socket down", relayPendingID)
+	}
 	a.notify()
 	return nil
 }
@@ -783,6 +881,27 @@ func (a *Agent) forgetApproval(pendingID string, entry *approval) {
 		delete(a.approvals, pendingID)
 	}
 	a.mu.Unlock()
+}
+
+// ClearApprovals evaporates all relay approvals after Session.NewSession:
+// queued entries reference pendings that no longer exist (Accept would
+// 404 forever), accepted entries reference players whose devices were
+// destroyed. Accepted slots are freed, queued guests get peer.left via
+// the next relay cycle or rejoin.
+func (a *Agent) ClearApprovals() {
+	a.mu.Lock()
+	entries := make([]*approval, 0, len(a.approvals))
+	for _, entry := range a.approvals {
+		entries = append(entries, entry)
+	}
+	a.approvals = make(map[string]*approval)
+	a.mu.Unlock()
+	for _, entry := range entries {
+		if entry.accepted {
+			a.dropAdmission(entry.admission)
+		}
+	}
+	a.notify()
 }
 
 // dropAdmission frees one accepted slot: reclaims drop back to grace,

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -11,6 +12,9 @@ import (
 
 // ErrConflict reports a claim lost to another key or a tombstoned code.
 var ErrConflict = errors.New("room code is claimed by another installation")
+
+// ErrChangeLimit reports the daily code-change cap.
+var ErrChangeLimit = errors.New("code change limit reached for today")
 
 // Claim is one durable row.
 type Claim struct {
@@ -147,12 +151,127 @@ func (s *Store) Register(code, key string) (RegisterResult, error) {
 		`INSERT INTO claims(room_code, installation_key, retired, created_at, updated_at) VALUES(?, ?, 0, ?, ?)`,
 		code, key, now, now,
 	); err != nil {
+		if isUniqueViolation(err) {
+			return RegisterResult{}, ErrConflict
+		}
 		return RegisterResult{}, fmt.Errorf("insert claim: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
+		if isUniqueViolation(err) {
+			return RegisterResult{}, ErrConflict
+		}
 		return RegisterResult{}, fmt.Errorf("commit claim: %w", err)
 	}
 	return result, nil
+}
+
+// RegisterWithLimit claims code for key while enforcing the daily
+// code-change cap atomically: the active-claim check, tombstone, insert,
+// and change-count increment all run in one transaction, so concurrent
+// registers cannot both pass the cap and a crash cannot grant a free
+// change. Same-code re-register touches without burning the cap.
+func (s *Store) RegisterWithLimit(code, key, day string, maxChanges int) (RegisterResult, error) {
+	now := time.Now().UnixMilli()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return RegisterResult{}, fmt.Errorf("begin claim: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var result RegisterResult
+
+	var existingKey string
+	var retired int
+	err = tx.QueryRow(
+		`SELECT installation_key, retired FROM claims WHERE room_code = ?`, code,
+	).Scan(&existingKey, &retired)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// Unclaimed: fall through.
+	case err != nil:
+		return RegisterResult{}, fmt.Errorf("lookup claim: %w", err)
+	case retired != 0 || existingKey != key:
+		return RegisterResult{}, ErrConflict
+	default:
+		if _, err := tx.Exec(
+			`UPDATE claims SET updated_at = ? WHERE room_code = ?`, now, code,
+		); err != nil {
+			return RegisterResult{}, fmt.Errorf("touch claim: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			if isUniqueViolation(err) {
+				return RegisterResult{}, ErrConflict
+			}
+			return RegisterResult{}, fmt.Errorf("commit claim: %w", err)
+		}
+		return result, nil
+	}
+
+	var active string
+	err = tx.QueryRow(
+		`SELECT room_code FROM claims WHERE installation_key = ? AND retired = 0`, key,
+	).Scan(&active)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// First claim for this installation.
+	case err != nil:
+		return RegisterResult{}, fmt.Errorf("lookup active claim: %w", err)
+	default:
+		if active != code {
+			var count int
+			err = tx.QueryRow(
+				`SELECT count FROM code_changes WHERE installation_key = ? AND day = ?`, key, day,
+			).Scan(&count)
+			switch {
+			case errors.Is(err, sql.ErrNoRows):
+				count = 0
+			case err != nil:
+				return RegisterResult{}, fmt.Errorf("lookup change count: %w", err)
+			}
+			if count >= maxChanges {
+				return RegisterResult{}, ErrChangeLimit
+			}
+			if _, err := tx.Exec(
+				`UPDATE claims SET retired = 1, updated_at = ? WHERE room_code = ?`, now, active,
+			); err != nil {
+				return RegisterResult{}, fmt.Errorf("tombstone old code: %w", err)
+			}
+			result.ChangedFrom = active
+			if _, err := tx.Exec(
+				`INSERT INTO code_changes(installation_key, day, count) VALUES(?, ?, 1)
+				 ON CONFLICT(installation_key, day) DO UPDATE SET count = count + 1`,
+				key, day,
+			); err != nil {
+				return RegisterResult{}, fmt.Errorf("record code change: %w", err)
+			}
+		}
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO claims(room_code, installation_key, retired, created_at, updated_at) VALUES(?, ?, 0, ?, ?)`,
+		code, key, now, now,
+	); err != nil {
+		if isUniqueViolation(err) {
+			return RegisterResult{}, ErrConflict
+		}
+		return RegisterResult{}, fmt.Errorf("insert claim: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		if isUniqueViolation(err) {
+			return RegisterResult{}, ErrConflict
+		}
+		return RegisterResult{}, fmt.Errorf("commit claim: %w", err)
+	}
+	return result, nil
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "constraint failed") ||
+		strings.Contains(msg, "already exists")
 }
 
 // ChangeCount returns how many code changes key burned today.

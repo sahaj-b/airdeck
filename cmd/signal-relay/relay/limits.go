@@ -43,9 +43,17 @@ func NewRateLimiter(max int, window time.Duration) *RateLimiter {
 }
 
 // RegistrationLimit is 10 registers per IP per minute.
+// JoinLimit is 120 joins per IP per minute: room codes are low-entropy
+// and persistent, so unthrottled guessing plus a SQLite lookup per guess
+// is both an enumeration oracle aid and DB pressure. The budget is sized
+// for a party behind one carrier NAT or hotspot: sixteen phones rejoining
+// after a relay blip all share one key, and each retries on a 250ms-to-2s
+// backoff.
 const (
 	RegistrationLimit  = 10
 	RegistrationWindow = time.Minute
+	JoinLimit          = 120
+	JoinWindow         = time.Minute
 )
 
 func (l *RateLimiter) now() time.Time {

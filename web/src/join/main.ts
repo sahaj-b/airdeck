@@ -671,6 +671,11 @@ function showController(options: {
   };
 
   const refreshHostLayouts = async () => {
+    // Central-served (RTC) pages resolve /api/* against Central, not the
+    // LAN host, so HTTP layout fetch 404s there. Welcome/layouts over the
+    // control channel is the source of truth online; skip the HTTP
+    // fallback instead of flashing "could not load".
+    if (shouldUseRtcTransport()) return;
     try {
       const res = await fetch('/api/layouts');
       if (!res.ok) return;
@@ -739,6 +744,15 @@ function showController(options: {
     let docToEdit: LayoutDocument | undefined = loadPersonalLayouts()[editId];
     if (!docToEdit) {
       // Host layout: the client only has id+name, so fetch the full doc.
+      // Online (RTC) pages cannot fetch from the LAN host (see
+      // refreshHostLayouts): editing host layouts is LAN-only for now.
+      if (shouldUseRtcTransport()) {
+        updateStatus(
+          'Editing host layouts is unavailable while joining online.',
+        );
+        setTimeout(() => updateStatus(null), 3000);
+        return;
+      }
       if (!availableLayouts.some((l) => l.id === editId)) return;
       try {
         const res = await fetch(`/api/layouts/${encodeURIComponent(editId)}`);
@@ -856,6 +870,11 @@ function showController(options: {
   const handlePublishPersonal = async (id: string) => {
     const doc = loadPersonalLayouts()[id];
     if (!doc || !playerId) return;
+    if (shouldUseRtcTransport()) {
+      updateStatus('Publishing is unavailable while joining online.');
+      setTimeout(() => updateStatus(null), 3000);
+      return;
+    }
     try {
       const res = await fetch('/api/layouts/publish', {
         method: 'POST',
@@ -887,6 +906,7 @@ function showController(options: {
     pendingPublishId = null;
     clearPublishTimer();
     setPublishState(null);
+    if (shouldUseRtcTransport()) return;
     try {
       await fetch(`/api/layouts/publish/${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -1139,17 +1159,22 @@ function showController(options: {
         message.code === 'invalid_code' ||
         message.code === 'room_not_found' ||
         message.code === 'declined' ||
+        message.code === 'peer_left' ||
         message.code === 'joins_closed' ||
         message.code === 'session_full' ||
         message.code === 'device_error'
       ) {
         // Unknown, retired, and offline-host codes share one generic
-        // room_not_found error (no enumeration oracle); declined returns
-        // to the join screen for an immediate retry.
+        // room_not_found error (no enumeration oracle); declined and
+        // peer_left return to the join screen for an immediate retry.
+        // peer_left fires when the host drops while a guest queues, so
+        // it must navigate like the other fatal pre-join errors instead
+        // of stranding the overlay with only a manual Cancel.
         const reveal =
           message.code === 'invalid_code' ||
           message.code === 'invalid_reconnect' ||
           message.code === 'room_not_found' ||
+          message.code === 'peer_left' ||
           message.code === 'declined';
         renderJoinScreen(message.message, reveal);
         return;
@@ -1184,35 +1209,42 @@ function showController(options: {
     host: window.location.hostname,
     query: window.location.search,
   });
-  const socket: ControllerTransport = shouldUseRtcTransport()
-    ? new RtcTransport(transportOptions)
-    : new WsTransport(transportOptions);
+  // Wrap debug logging before construction: transports retain the options
+  // object by reference today, but a defensive copy or bind-at-construct
+  // would silently drop ?debug=1 logging. Explicit wrapping is robust.
+  let finalOptions: ControllerTransportOptions = transportOptions;
   if (CONTROLLER_DEBUG) {
-    const inner = transportOptions.onStateChange;
-    transportOptions.onStateChange = (nextState) => {
-      debugLog('state -> ' + nextState);
-      inner?.(nextState);
-    };
+    const innerState = transportOptions.onStateChange;
     const innerError = transportOptions.onError;
-    transportOptions.onError = (message) => {
-      debugLog('error', message);
-      innerError?.(message);
-    };
     const innerWelcome = transportOptions.onWelcome;
-    transportOptions.onWelcome = (welcome) => {
-      debugLog('welcome', {
-        playerId: welcome.playerId,
-        slot: welcome.slot,
-        layout: welcome.selectedLayout,
-      });
-      innerWelcome?.(welcome);
-    };
     const innerLayout = transportOptions.onLayout;
-    transportOptions.onLayout = (layout, diagnostic) => {
-      debugLog('layout', { id: (layout as { id?: string }).id });
-      innerLayout?.(layout, diagnostic);
+    finalOptions = {
+      ...transportOptions,
+      onStateChange: (nextState) => {
+        debugLog('state -> ' + nextState);
+        innerState?.(nextState);
+      },
+      onError: (message) => {
+        debugLog('error', message);
+        innerError?.(message);
+      },
+      onWelcome: (welcome) => {
+        debugLog('welcome', {
+          playerId: welcome.playerId,
+          slot: welcome.slot,
+          layout: welcome.selectedLayout,
+        });
+        innerWelcome?.(welcome);
+      },
+      onLayout: (layout, diagnostic) => {
+        debugLog('layout', { id: (layout as { id?: string }).id });
+        innerLayout?.(layout, diagnostic);
+      },
     };
   }
+  const socket: ControllerTransport = shouldUseRtcTransport()
+    ? new RtcTransport(finalOptions)
+    : new WsTransport(finalOptions);
   activeSocket = socket;
   activeSender = new FrameSender(socket, state);
   if (netDebugTimer !== undefined) {

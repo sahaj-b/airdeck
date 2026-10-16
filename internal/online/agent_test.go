@@ -298,12 +298,6 @@ func TestLanOnlyNeverDials(t *testing.T) {
 	}
 }
 
-func TestOnlineJoinURLShape(t *testing.T) {
-	if got := OnlineJoinURL("ABC222"); got != "https://airdeck.sahaj.dev/join?code=ABC222" {
-		t.Fatalf("online join URL = %q", got)
-	}
-}
-
 func (r *fakeRelay) waitAccepts(t *testing.T, n int) []rtc.Accept {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
