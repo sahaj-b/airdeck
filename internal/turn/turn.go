@@ -2,9 +2,8 @@
 //
 // Two backends share one Servers call so the signaling wire never cares
 // where credentials came from:
-//   - Cloudflare: 24h mints fetched via the HTTP API once per ~20h and
-//     cached; no per-join calls, no refresh flow.
-//   - Self-hosted (coturn): offline HMAC mint per Servers call using the
+//   - Cloudflare: short-lived credentials minted once per joining player.
+//   - Self-hosted (coturn): offline HMAC mint per joining player using the
 //     TURN REST API scheme (username <expiry>:<id>, password
 //     base64(HMAC-SHA1(secret, username))). The secret must match
 //     coturn's static-auth-secret. Cheap enough to mint fresh every call,
@@ -13,7 +12,7 @@
 // Backend priority: Cloudflare when its keys are set (better global
 // network), else self-hosted when its secret plus URLs are set, else
 // STUN-only. A Cloudflare mint failure falls back to self-hosted when
-// configured, then stale cache, then STUN-only.
+// configured, then STUN-only.
 package turn
 
 import (
@@ -39,17 +38,15 @@ import (
 const (
 	// STUNURL is always served alongside TURN.
 	STUNURL = "stun:stun.cloudflare.com:3478"
-	// CredentialTTL is the requested credential lifetime in seconds (24h).
-	CredentialTTL = 86400
-	// RefreshInterval re-mints well before the 24h credential dies.
-	RefreshInterval = 20 * time.Hour
-	// MintEndpointFormat builds the Cloudflare credential mint URL.
-	MintEndpointFormat = "https://rtc.live.cloudflare.com/v1/turn/keys/%s/credentials/generate"
+	// CredentialTTL is Cloudflare's maximum supported lifetime, in seconds.
+	CredentialTTL = 48 * 60 * 60
+	// MintEndpointFormat builds the Cloudflare ICE server credential URL.
+	MintEndpointFormat = "https://rtc.live.cloudflare.com/v1/turn/keys/%s/credentials/generate-ice-servers"
 	// MintTimeout bounds one mint call so a slow API never stalls a join.
 	MintTimeout = 10 * time.Second
 )
 
-// Provider serves the cached bundle and never fails.
+// Provider mints TURN credentials and never fails.
 type Provider struct {
 	mu             sync.Mutex
 	keyID          string
@@ -61,8 +58,6 @@ type Provider struct {
 	passUser       string
 	passCred       string
 	passURLs       []string
-	cached         []rtc.ICEServer
-	fetchedAt      time.Time
 }
 
 // New returns a provider for one Cloudflare TURN key.
@@ -116,13 +111,10 @@ func STUNOnly() []rtc.ICEServer {
 	return []rtc.ICEServer{{URLs: []string{STUNURL}}}
 }
 
-// Servers returns the bundle, minting at most once per RefreshInterval.
-// Cloudflare creds come from the 20h cache; self-hosted creds are minted
-// fresh per call (one HMAC, no I/O) so every join gets a full TTL.
+// Servers returns a fresh bundle for one joining player. TURN credentials
+// are not shared across players, and reconnects get a new full TTL.
 func (p *Provider) Servers(ctx context.Context) []rtc.ICEServer {
 	p.mu.Lock()
-	fresh := !p.fetchedAt.IsZero() && time.Since(p.fetchedAt) < RefreshInterval
-	cached := p.cached
 	keyID, secret, endpoint, client := p.keyID, p.secret, p.endpointFormat, p.client
 	staticSecret, staticURLs := p.staticSecret, append([]string(nil), p.staticURLs...)
 	passUser, passCred, passURLs := p.passUser, p.passCred, append([]string(nil), p.passURLs...)
@@ -133,31 +125,15 @@ func (p *Provider) Servers(ctx context.Context) []rtc.ICEServer {
 	}
 	hasStatic := staticSecret != "" && len(staticURLs) > 0
 	if keyID != "" && secret != "" {
-		if fresh && len(cached) > 0 {
-			return cloneServers(cached)
-		}
 		servers, err := MintCredentials(ctx, client, fmt.Sprintf(endpoint, keyID), secret, CredentialTTL)
 		if err == nil {
-			p.mu.Lock()
-			p.cached = servers
-			p.fetchedAt = time.Now()
-			p.mu.Unlock()
-			return cloneServers(servers)
+			return servers
 		}
-		// Cloudflare down: prefer a live self-hosted mint over a dying
-		// cache, and a dying cache over STUN-only.
 		if hasStatic {
 			log.Printf("relay: TURN mint failed, serving self-hosted: %v", err)
 			return staticServers(staticSecret, staticURLs, time.Now())
 		}
-		fallback := "STUN-only"
-		if len(cached) > 0 {
-			fallback = "stale cache"
-		}
-		log.Printf("relay: TURN mint failed, serving %s: %v", fallback, err)
-		if len(cached) > 0 {
-			return cloneServers(cached)
-		}
+		log.Printf("relay: TURN mint failed, serving STUN-only: %v", err)
 		return STUNOnly()
 	}
 	if hasStatic {
@@ -166,26 +142,12 @@ func (p *Provider) Servers(ctx context.Context) []rtc.ICEServer {
 	return STUNOnly()
 }
 
-func cloneServers(in []rtc.ICEServer) []rtc.ICEServer {
-	out := make([]rtc.ICEServer, len(in))
-	for i, server := range in {
-		urls := make([]string, len(server.URLs))
-		copy(urls, server.URLs)
-		out[i] = rtc.ICEServer{URLs: urls, Username: server.Username, Credential: server.Credential}
-	}
-	return out
-}
-
-// mintResponse mirrors the Cloudflare generate response body.
+// mintResponse mirrors Cloudflare's array of ICE server entries.
 type mintResponse struct {
-	ICEServers struct {
-		URLs       []string `json:"urls"`
-		Username   string   `json:"username"`
-		Credential string   `json:"credential"`
-	} `json:"iceServers"`
+	ICEServers []rtc.ICEServer `json:"iceServers"`
 }
 
-// MintCredentials fetches one 24h TURN bundle from the Cloudflare API.
+// MintCredentials fetches one TURN bundle from the Cloudflare API.
 func MintCredentials(ctx context.Context, client *http.Client, endpoint, secret string, ttl int) ([]rtc.ICEServer, error) {
 	body, err := json.Marshal(map[string]int{"ttl": ttl})
 	if err != nil {
@@ -209,10 +171,43 @@ func MintCredentials(ctx context.Context, client *http.Client, endpoint, secret 
 	if err := json.NewDecoder(resp.Body).Decode(&minted); err != nil {
 		return nil, fmt.Errorf("decode TURN mint response: %w", err)
 	}
-	if minted.ICEServers.Username == "" || minted.ICEServers.Credential == "" || len(minted.ICEServers.URLs) == 0 {
-		return nil, fmt.Errorf("TURN mint response missing iceServers")
+	return normalizeMinted(minted.ICEServers)
+}
+
+func normalizeMinted(entries []rtc.ICEServer) ([]rtc.ICEServer, error) {
+	var stunURLs []string
+	var turnServers []rtc.ICEServer
+	for _, entry := range entries {
+		var urls []string
+		for _, url := range entry.URLs {
+			switch {
+			case strings.HasPrefix(strings.ToLower(url), "stun:"):
+				stunURLs = append(stunURLs, url)
+			case strings.HasPrefix(strings.ToLower(url), "turn:") || strings.HasPrefix(strings.ToLower(url), "turns:"):
+				urls = append(urls, url)
+			}
+		}
+		if len(urls) == 0 {
+			continue
+		}
+		if entry.Username == "" || entry.Credential == "" {
+			return nil, fmt.Errorf("TURN mint response has unauthenticated TURN URLs")
+		}
+		turnServers = append(turnServers, rtc.ICEServer{
+			URLs:       urls,
+			Username:   entry.Username,
+			Credential: entry.Credential,
+		})
 	}
-	return SplitMinted(minted.ICEServers.URLs, minted.ICEServers.Username, minted.ICEServers.Credential), nil
+	if len(turnServers) == 0 {
+		return nil, fmt.Errorf("TURN mint response missing TURN URLs")
+	}
+	if len(stunURLs) == 0 {
+		stunURLs = []string{STUNURL}
+	}
+	servers := make([]rtc.ICEServer, 0, len(turnServers)+1)
+	servers = append(servers, rtc.ICEServer{URLs: stunURLs})
+	return append(servers, turnServers...), nil
 }
 
 // SplitMinted splits one mint response URL list into a STUN-first bundle.

@@ -27,7 +27,6 @@ import (
 	"github.com/sahaj-b/airdeck/internal/protocol"
 	"github.com/sahaj-b/airdeck/internal/rtc"
 	"github.com/sahaj-b/airdeck/internal/session"
-	"github.com/sahaj-b/airdeck/internal/turn"
 )
 
 const (
@@ -78,11 +77,10 @@ type PeerManager struct {
 	layouts         *layout.Library
 	targetInputRate int
 
-	mu         sync.Mutex
-	peers      map[string]*peer // playerID -> peer
-	iceServers []rtc.ICEServer
-	turnOnly   bool
-	iceDebug   bool
+	mu       sync.Mutex
+	peers    map[string]*peer // playerID -> peer
+	turnOnly bool
+	iceDebug bool
 }
 
 type peer struct {
@@ -103,9 +101,9 @@ type peer struct {
 	manager   *PeerManager
 }
 
-// New builds a PeerManager over the shared session/input/layouts. ICE
-// servers default to STUN-only until the online agent delivers the relay
-// bundle; turn-only policy defaults from AIRDECK_TURN_ONLY.
+// New builds a PeerManager over the shared session/input/layouts. Each
+// relay offer carries that player's ICE bundle; turn-only policy defaults
+// from AIRDECK_TURN_ONLY.
 func New(sess *session.Session, handler *input.Handler, layouts *layout.Library, targetInputRate int) *PeerManager {
 	return &PeerManager{
 		session:         sess,
@@ -113,7 +111,6 @@ func New(sess *session.Session, handler *input.Handler, layouts *layout.Library,
 		layouts:         layouts,
 		targetInputRate: targetInputRate,
 		peers:           make(map[string]*peer),
-		iceServers:      turn.STUNOnly(),
 		turnOnly:        os.Getenv(TurnOnlyEnv) == "1",
 		iceDebug:        os.Getenv(IceDebugEnv) == "1",
 	}
@@ -123,22 +120,6 @@ func New(sess *session.Session, handler *input.Handler, layouts *layout.Library,
 func (m *PeerManager) SetTurnOnly(value bool) {
 	m.mu.Lock()
 	m.turnOnly = value
-	m.mu.Unlock()
-}
-
-// SetICEServers installs the STUN+TURN bundle from the relay `registered`
-// message. It affects subsequently created PeerConnections only; live
-// sessions never renegotiate because their TURN allocations live on
-// Cloudflare, not on the relay socket.
-func (m *PeerManager) SetICEServers(servers []rtc.ICEServer) {
-	clone := make([]rtc.ICEServer, len(servers))
-	for i, server := range servers {
-		urls := make([]string, len(server.URLs))
-		copy(urls, server.URLs)
-		clone[i] = rtc.ICEServer{URLs: urls, Username: server.Username, Credential: server.Credential}
-	}
-	m.mu.Lock()
-	m.iceServers = clone
 	m.mu.Unlock()
 }
 
@@ -174,7 +155,7 @@ func (m *PeerManager) HandleJoin(join rtc.Join) (string, session.Admission, erro
 		}
 		return "", session.Admission{}, err
 	}
-	answer, err := m.answerAndAttach(join.Offer, admission)
+	answer, err := m.answerAndAttach(join.Offer, admission, join.ICEServers)
 	if err != nil {
 		return "", session.Admission{}, err
 	}
@@ -189,7 +170,7 @@ func (m *PeerManager) HandleOffer(offer rtc.Offer, admission session.Admission) 
 	if admission.Player.ID == "" {
 		return "", errors.New("approval offer has no admitted player")
 	}
-	answer, err := m.answerAndAttach(offer.SDP, admission)
+	answer, err := m.answerAndAttach(offer.SDP, admission, offer.ICEServers)
 	if err != nil {
 		return "", err
 	}
@@ -198,9 +179,9 @@ func (m *PeerManager) HandleOffer(offer rtc.Offer, admission session.Admission) 
 
 // answerAndAttach answers one offer and wires the PC to its admission,
 // freeing the slot when the answer never goes out.
-func (m *PeerManager) answerAndAttach(offerSDP string, admission session.Admission) (string, error) {
+func (m *PeerManager) answerAndAttach(offerSDP string, admission session.Admission, requestedICEServers []rtc.ICEServer) (string, error) {
+	iceServers := requestedICEServers
 	m.mu.Lock()
-	iceServers := append([]rtc.ICEServer(nil), m.iceServers...)
 	turnOnly := m.turnOnly
 	iceDebug := m.iceDebug
 	m.mu.Unlock()
@@ -285,16 +266,16 @@ func (m *PeerManager) answerOffer(offerSDP string, iceServers []rtc.ICEServer, t
 	return description.SDP, pc, nil
 }
 
-// localCandidateLines extracts the a=candidate lines from gathered SDP
-// for debug logging. IPs are host-private in practice; the flag exists
-// precisely to surface them when the relayed path misbehaves.
+// localCandidateLines reports candidate type and protocol without writing
+// local or public IP addresses into host logs.
 func localCandidateLines(sdp string) []string {
 	var out []string
 	for _, line := range strings.Split(sdp, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "a=candidate:") {
-			out = append(out, strings.TrimPrefix(line, "a="))
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 8 || !strings.HasPrefix(fields[0], "a=candidate:") {
+			continue
 		}
+		out = append(out, fmt.Sprintf("candidate type=%s protocol=%s", fields[7], strings.ToLower(fields[2])))
 	}
 	return out
 }

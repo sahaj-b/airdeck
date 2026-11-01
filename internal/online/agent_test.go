@@ -75,9 +75,6 @@ func newFakeRelay(t *testing.T, conflict bool) (*fakeRelay, *httptest.Server) {
 		}
 		if err := conn.WriteJSON(rtc.Registered{
 			Type: rtc.MessageRegistered, RoomCode: "TEST22",
-			// Empty bundle in tests: host-candidate-only gathering
-			// completes in milliseconds with no STUN round-trip.
-			ICEServers: []rtc.ICEServer{},
 		}); err != nil {
 			return
 		}

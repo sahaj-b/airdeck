@@ -57,7 +57,6 @@ export const MessageError = "error";
 export const MessageClose = "close";
 export const MessageReset = "session.reset";
 export const MessageSlotUpdate = "slot.update";
-export const MessageDebugTrace = "debug.inputTrace";
 export const MessagePublishPending = "layout.publish.pending";
 export const MessagePublishResult = "publish.result";
 export interface Envelope {
@@ -154,11 +153,6 @@ export interface SlotUpdate {
   type: 'slot.update';
   slot: number /* int */;
   accent: string;
-}
-export interface DebugInputTrace {
-  type: 'debug.inputTrace';
-  sequence: number /* uint32 */;
-  clientTime: number /* uint64 */;
 }
 export interface PublishPending {
   type: 'layout.publish.pending';

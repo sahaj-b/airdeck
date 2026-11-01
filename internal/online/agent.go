@@ -651,7 +651,6 @@ func (a *Agent) handleRegistered(data []byte) {
 	if err := json.Unmarshal(data, &registered); err != nil {
 		return
 	}
-	a.peers.SetICEServers(registered.ICEServers)
 	a.setConflict("")
 	a.setReachable(true)
 	log.Printf("online: registered room %s on central", registered.RoomCode)

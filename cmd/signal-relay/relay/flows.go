@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sahaj-b/airdeck/internal/roomcode"
 	"github.com/sahaj-b/airdeck/internal/rtc"
+	"github.com/sahaj-b/airdeck/internal/turn"
 )
 
 // serveHost runs one /register socket.
@@ -79,14 +81,24 @@ func (h *Hub) serveGuest(conn *websocket.Conn, clientIP string) {
 	}
 }
 
-// turnServers mints the ICE bundle with a bounded timeout so a slow
-// Cloudflare API cannot stall the socket read loop head-of-line for 10s.
-// The provider already caches for 20h, so this is rare; the short ctx
-// just bounds the worst case (fallback is stale cache or STUN-only).
+// turnServers mints one player's ICE bundle with a bounded timeout so a
+// slow Cloudflare API cannot stall the signaling socket indefinitely.
 func (h *Hub) turnServers() []rtc.ICEServer {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return h.turn.Servers(ctx)
+}
+
+func iceCredentialExpiry(servers []rtc.ICEServer, now time.Time) int64 {
+	for _, server := range servers {
+		for _, url := range server.URLs {
+			url = strings.ToLower(url)
+			if strings.HasPrefix(url, "turn:") || strings.HasPrefix(url, "turns:") {
+				return now.Add(time.Duration(turn.CredentialTTL) * time.Second).UnixMilli()
+			}
+		}
+	}
+	return 0
 }
 
 // handleRegister claims, reclaims, or changes one room code for the host.
@@ -158,9 +170,8 @@ func (h *Hub) handleRegister(host *hostConn, clientIP string, data []byte) {
 	h.hosts[code] = host
 	h.mu.Unlock()
 	host.enqueue(rtc.Registered{
-		Type:       rtc.MessageRegistered,
-		RoomCode:   code,
-		ICEServers: h.turnServers(),
+		Type:     rtc.MessageRegistered,
+		RoomCode: code,
 	})
 }
 
@@ -224,11 +235,10 @@ func (h *Hub) liveHost(code string, host *hostConn) bool {
 	return ok && current == host
 }
 
-// joinOpen forwards an open-mode join plus its offer. A missing offer
-// still gets the generic error so the check cannot become a live-code oracle.
+// joinOpen sends credentials before the phone creates its PeerConnection.
+// Older clients that already sent an offer still use the host's TURN path.
 func (h *Hub) joinOpen(code string, host *hostConn, guest *guestConn, join rtc.Join) {
-	if join.Offer == "" {
-		log.Printf("relay: join room %s -> error (missing offer)", roomcode.Normalize(join.RoomCode))
+	if join.CorrelationID != "" {
 		guest.deadCode()
 		return
 	}
@@ -237,18 +247,63 @@ func (h *Hub) joinOpen(code string, host *hostConn, guest *guestConn, join rtc.J
 		guest.deadCode()
 		return
 	}
+	if join.Offer == "" {
+		// Do not hold the route lock across a Cloudflare API call.
+		h.mu.Lock()
+		available := len(h.routes) < maxRoutesTotal && h.liveHost(code, host)
+		h.mu.Unlock()
+		if !available {
+			guest.deadCode()
+			return
+		}
+		servers := h.turnServers()
+		r := &route{
+			guest:        guest,
+			host:         host,
+			open:         true,
+			waitingOffer: true,
+			join:         rtc.Join{RoomCode: roomcode.Normalize(join.RoomCode), DisplayName: join.DisplayName, ReconnectID: join.ReconnectID},
+			iceServers:   servers,
+		}
+		h.mu.Lock()
+		if len(h.routes) >= maxRoutesTotal || !h.liveHost(code, host) {
+			h.mu.Unlock()
+			guest.deadCode()
+			return
+		}
+		h.routes[id] = r
+		h.mu.Unlock()
+		guest.enqueue(rtc.Ready{
+			Type:          rtc.MessageReady,
+			CorrelationID: id,
+			ICEServers:    servers,
+			ExpiresAt:     iceCredentialExpiry(servers, time.Now()),
+		})
+		time.AfterFunc(maxOpenOfferAge, func() {
+			h.mu.Lock()
+			if current := h.routes[id]; current == r && current.waitingOffer {
+				delete(h.routes, id)
+			}
+			h.mu.Unlock()
+		})
+		return
+	}
+
+	servers := h.turnServers()
+	r := &route{
+		guest:      guest,
+		host:       host,
+		open:       true,
+		join:       join,
+		iceServers: servers,
+	}
 	h.mu.Lock()
-	if len(h.routes) >= maxRoutesTotal {
+	if len(h.routes) >= maxRoutesTotal || !h.liveHost(code, host) {
 		h.mu.Unlock()
 		guest.deadCode()
 		return
 	}
-	if !h.liveHost(code, host) {
-		h.mu.Unlock()
-		guest.deadCode()
-		return
-	}
-	h.routes[id] = &route{guest: guest, host: host, open: true}
+	h.routes[id] = r
 	h.mu.Unlock()
 	host.enqueue(rtc.Join{
 		Type:          rtc.MessageJoin,
@@ -257,8 +312,32 @@ func (h *Hub) joinOpen(code string, host *hostConn, guest *guestConn, join rtc.J
 		DisplayName:   join.DisplayName,
 		ReconnectID:   join.ReconnectID,
 		Offer:         join.Offer,
+		ICEServers:    servers,
 	})
 	log.Printf("relay: join room %s -> open forwarded", roomcode.Normalize(join.RoomCode))
+}
+
+func (h *Hub) handleOpenOffer(guest *guestConn, offer rtc.Offer) {
+	h.mu.Lock()
+	r := h.routes[offer.CorrelationID]
+	if r == nil || r.guest != guest || !r.open || !r.waitingOffer || offer.SDP == "" {
+		h.mu.Unlock()
+		return
+	}
+	r.waitingOffer = false
+	join := rtc.Join{
+		Type:          rtc.MessageJoin,
+		RoomCode:      r.join.RoomCode,
+		CorrelationID: offer.CorrelationID,
+		DisplayName:   r.join.DisplayName,
+		ReconnectID:   r.join.ReconnectID,
+		Offer:         offer.SDP,
+		ICEServers:    r.iceServers,
+	}
+	host := r.host
+	h.mu.Unlock()
+	host.enqueue(join)
+	log.Printf("relay: offer room %s -> forwarded (open)", join.RoomCode)
 }
 
 // joinApproval queues an offer-less join as a pending.
@@ -324,10 +403,14 @@ func (h *Hub) joinApproval(code string, host *hostConn, guest *guestConn, join r
 	log.Printf("relay: join room %s -> pending %s", roomcode.Normalize(join.RoomCode), id)
 }
 
-// handleGuestOffer forwards a post-accept offer.
+// handleGuestOffer forwards an open or post-accept offer.
 func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 	var offer rtc.Offer
 	if err := json.Unmarshal(data, &offer); err != nil || offer.SDP == "" {
+		return
+	}
+	if offer.CorrelationID != "" {
+		h.handleOpenOffer(guest, offer)
 		return
 	}
 	guest.mu.Lock()
@@ -361,6 +444,11 @@ func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 		entry.guest.enqueue(rtc.PendingGoneError())
 		return
 	}
+	if len(entry.iceServers) == 0 {
+		h.mu.Unlock()
+		return
+	}
+	iceServers := entry.iceServers
 	// Dedup: a retransmitted offer while one route is in flight must not
 	// create a second route (host would answer twice, second PC orphaned).
 	for _, existing := range h.routes {
@@ -396,6 +484,7 @@ func (h *Hub) handleGuestOffer(guest *guestConn, data []byte) {
 		PendingID:     entry.id,
 		CorrelationID: id,
 		SDP:           offer.SDP,
+		ICEServers:    iceServers,
 	})
 	log.Printf("relay: offer room %s -> forwarded (pending %s)", entry.host.getCode(), entry.id)
 }
@@ -422,14 +511,26 @@ func (h *Hub) handleAccept(host *hostConn, data []byte) {
 		host.enqueue(rtc.PendingGoneError())
 		return
 	}
-	h.mu.Unlock()
-	if !ok || entry.host != host {
+	if !ok || entry.host != host || entry.accepting {
+		h.mu.Unlock()
 		host.enqueue(rtc.PendingGoneError())
 		return
 	}
+	entry.accepting = true
+	h.mu.Unlock()
+
+	servers := h.turnServers()
+	h.mu.Lock()
+	if h.pendings[accept.PendingID] != entry {
+		h.mu.Unlock()
+		return
+	}
+	entry.iceServers = servers
+	h.mu.Unlock()
 	entry.guest.enqueue(rtc.Accepted{
 		Type:       rtc.MessageAccepted,
-		ICEServers: h.turnServers(),
+		ICEServers: servers,
+		ExpiresAt:  iceCredentialExpiry(servers, time.Now()),
 	})
 }
 
@@ -486,9 +587,8 @@ func (h *Hub) handleAnswer(host *hostConn, data []byte) {
 	h.mu.Unlock()
 	if found.open {
 		found.guest.enqueue(rtc.Joined{
-			Type:       rtc.MessageJoined,
-			Answer:     answer.SDP,
-			ICEServers: h.turnServers(),
+			Type:   rtc.MessageJoined,
+			Answer: answer.SDP,
 		})
 		log.Printf("relay: answer room %s -> forwarded (open)", code)
 		return

@@ -1206,8 +1206,7 @@ function showController(options: {
   // the raw WebSocket, Central pages ride the WebRTC DataChannels.
   debugLog('transport pick', {
     rtc: shouldUseRtcTransport(),
-    host: window.location.hostname,
-    query: window.location.search,
+    relayOverride: new URLSearchParams(window.location.search).has('relay'),
   });
   // Wrap debug logging before construction: transports retain the options
   // object by reference today, but a defensive copy or bind-at-construct
@@ -1221,7 +1220,7 @@ function showController(options: {
     finalOptions = {
       ...transportOptions,
       onStateChange: (nextState) => {
-        debugLog('state -> ' + nextState);
+        debugLog(`state -> ${nextState}`);
         innerState?.(nextState);
       },
       onError: (message) => {

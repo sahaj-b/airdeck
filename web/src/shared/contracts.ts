@@ -51,7 +51,6 @@ export type { Config } from './generated/config';
 export type {
   Capabilities,
   CloseMessage,
-  DebugInputTrace,
   Envelope,
   ErrorMessage,
   Hello,
@@ -81,6 +80,7 @@ export type {
   Offer,
   PeerLeft,
   Pending,
+  Ready,
   Register,
   Registered,
   Reject,

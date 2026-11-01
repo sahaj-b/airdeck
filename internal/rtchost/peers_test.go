@@ -3,6 +3,7 @@ package rtchost
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,17 @@ import (
 	"github.com/sahaj-b/airdeck/internal/session"
 	"github.com/sahaj-b/airdeck/internal/uinput"
 )
+
+func TestLocalCandidateLinesRedactsAddresses(t *testing.T) {
+	sdp := "a=candidate:1 1 UDP 2122260223 192.168.1.42 54779 typ host raddr 10.0.0.4 rport 54778\r\n"
+	lines := localCandidateLines(sdp)
+	if len(lines) != 1 || lines[0] != "candidate type=host protocol=udp" {
+		t.Fatalf("candidate summaries = %v", lines)
+	}
+	if strings.Contains(lines[0], "192.168.1.42") || strings.Contains(lines[0], "10.0.0.4") {
+		t.Fatalf("candidate summary leaked an address: %q", lines[0])
+	}
+}
 
 type fakeDevice struct {
 	mu     sync.Mutex
@@ -77,7 +89,6 @@ func newTestManager(t *testing.T, approval bool) (*PeerManager, *session.Session
 	manager := New(sess, handler, library, 60)
 	// Tests stay on host candidates: no STUN round-trip, gather completes
 	// from local interfaces in milliseconds.
-	manager.SetICEServers(nil)
 	return manager, sess, factory
 }
 

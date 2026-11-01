@@ -69,6 +69,7 @@ function ffOverlayLine(text: string): void {
 }
 
 export function ffTrace(text: string): void {
+  if (!ffOverlayEnabled) return;
   console.log(text);
   ffOverlayLine(text);
 }

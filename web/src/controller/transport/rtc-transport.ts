@@ -49,6 +49,7 @@ const GATHER_TIMEOUT_MS = 5000;
 // or an error while the timer is parked. 25s covers up to 5s ICE gather
 // plus TURN allocation plus a slow relay round-trip.
 const JOIN_TIMEOUT_MS = 25000;
+const TURN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 // relayJoinURL resolves the signaling socket URL: explicit ?relay= wins
 // (LAN drills through Caddy), loopback pages map to the local relay
@@ -122,17 +123,19 @@ export interface RtcTransportOptions extends ControllerTransportOptions {
 
 // RtcTransport implements ControllerTransport over WebRTC: one signaling
 // socket for SDP, a reliable ordered control channel for JSON, and an
-// unreliable unordered inputs channel for 20-byte frames. Joins offer at
-// once; approval-mode pendings tear that PC down and re-offer after accept.
+// unreliable unordered inputs channel for 20-byte frames. Open joins fetch
+// ICE credentials before offering; approval joins offer after acceptance.
 export class RtcTransport implements ControllerTransport {
   private signaling: SocketConnection | undefined;
   private pc: RtcPeerConnectionLike | undefined;
   private control: RtcDataChannelLike | undefined;
   private inputs: RtcDataChannelLike | undefined;
   private pendingId: string | undefined;
+  private openCorrelationId: string | undefined;
   private iceServers: ICEServer[] = [...FALLBACK_ICE_SERVERS];
   private joinSeq = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private turnRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   private stateValue: ConnectionState = 'closed';
   private reconnectAttempts = 0;
   private intentionalClose = false;
@@ -234,6 +237,7 @@ export class RtcTransport implements ControllerTransport {
       this.sendJSON({ type: 'close', reason });
     this.teardownPeer();
     this.pendingId = undefined;
+    this.openCorrelationId = undefined;
     this.closeSignaling();
     if (this.stateValue !== 'closed') this.setState('closed');
     // WsTransport parity: a repeat close fires nothing.
@@ -292,10 +296,10 @@ export class RtcTransport implements ControllerTransport {
         return;
       }
       this.reconnectAttempts = 0;
-      // Open mode offers at once. Approval mode is offer-less until
-      // accept: the join carries no offer, the PC is built post-accept.
+      // Open joins get ICE credentials before building the offer. Approval
+      // joins wait for acceptance before allocating a PeerConnection.
       this.armJoinTimer(seq);
-      void this.sendJoinRequest(seq);
+      this.sendJoinRequest(seq);
     };
     socket.onmessage = (event) => {
       if (socket !== this.signaling) return;
@@ -333,22 +337,20 @@ export class RtcTransport implements ControllerTransport {
     return new RTCPeerConnection(config) as unknown as RtcPeerConnectionLike;
   }
 
-  // sendJoinRequest starts one open-mode join flow: build the PC, gather,
-  // send the join with offer. Approval-mode pendings tear the PC down
-  // and the post-accept offer (startPostAcceptOffer) reuses buildPeerAndOffer.
-  private sendJoinRequest(seq: number): Promise<void> {
-    return this.buildPeerAndOffer(seq, (offerSdp) => ({
+  // Starts an offer-less join. Open mode gets Ready; approval waits on Pending.
+  private sendJoinRequest(seq: number): void {
+    const sent = this.sendSignaling({
       type: 'join',
       roomCode: normalizeRoomCode(this.options.sessionCode),
       displayName: this.options.displayName?.trim().slice(0, 40) || undefined,
       reconnectId: this.reconnectId,
-      offer: offerSdp,
-    }));
+    });
+    if (!sent && seq === this.joinSeq) this.handleAttemptFailed(seq);
   }
 
   // buildPeerAndOffer builds one phone-side PeerConnection with both
   // DataChannels first (host only handles ondatachannel), gathers to
-  // completion (non-trickle v1, one relay round-trip), then delivers the
+  // completion (non-trickle v1), then delivers the
   // SDP through send. A stale seq or a closed transport tears the PC down.
   private async buildPeerAndOffer(
     seq: number,
@@ -504,7 +506,7 @@ export class RtcTransport implements ControllerTransport {
     for (const line of sdp.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('a=candidate:'))
-        debugLog('offer candidate', trimmed.slice(2));
+        debugLog('offer candidate', candidateSummary(trimmed));
     }
   }
 
@@ -521,11 +523,25 @@ export class RtcTransport implements ControllerTransport {
     }
     if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
     switch (parsed.type) {
+      case 'ready': {
+        const correlationId =
+          typeof parsed.correlationId === 'string' ? parsed.correlationId : '';
+        if (!correlationId || this.openCorrelationId) return;
+        this.openCorrelationId = correlationId;
+        this.iceServers = readIceServers(parsed.iceServers);
+        await this.buildPeerAndOffer(seq, (sdp) => ({
+          type: 'offer',
+          correlationId,
+          sdp,
+        }));
+        if (this.pc && seq === this.joinSeq)
+          this.scheduleTurnRefresh(parsed.expiresAt, seq);
+        return;
+      }
       case 'joined': {
         const answer = typeof parsed.answer === 'string' ? parsed.answer : '';
         if (!answer) return;
         this.clearJoinTimer();
-        this.iceServers = readIceServers(parsed.iceServers);
         await this.applyRemoteAnswer(answer, seq);
         return;
       }
@@ -540,10 +556,9 @@ export class RtcTransport implements ControllerTransport {
       }
       case 'pending': {
         if (typeof parsed.pendingId !== 'string' || !parsed.pendingId) return;
-        // Approval mode: the pre-accept offer is discarded with its local
-        // PC. The host burned nothing (no PC before accept); the fresh
-        // offer goes out only after accepted. Park the join timer: the
-        // guest now waits on the host, not on the network.
+        // Approval mode creates no PeerConnection before accept, so it
+        // burns no TURN allocation. The guest now waits for host approval,
+        // so pause the join timer until acceptance.
         this.clearJoinTimer();
         this.pendingId = parsed.pendingId;
         this.teardownPeer();
@@ -555,6 +570,8 @@ export class RtcTransport implements ControllerTransport {
         this.iceServers = readIceServers(parsed.iceServers);
         this.armJoinTimer(seq);
         await this.startPostAcceptOffer(seq);
+        if (this.pc && seq === this.joinSeq)
+          this.scheduleTurnRefresh(parsed.expiresAt, seq);
         return;
       }
       case 'rejected': {
@@ -648,6 +665,26 @@ export class RtcTransport implements ControllerTransport {
     this.handleSignalingClose(this.signaling, seq, true);
   }
 
+  private scheduleTurnRefresh(expiresAt: unknown, seq: number): void {
+    if (this.turnRefreshTimer !== undefined) {
+      clearTimeout(this.turnRefreshTimer);
+      this.turnRefreshTimer = undefined;
+    }
+    if (
+      typeof expiresAt !== 'number' ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= 0
+    )
+      return;
+    const delay = Math.max(0, expiresAt - Date.now() - TURN_REFRESH_MARGIN_MS);
+    this.turnRefreshTimer = setTimeout(() => {
+      this.turnRefreshTimer = undefined;
+      if (seq !== this.joinSeq || !this.allowReconnect || this.intentionalClose)
+        return;
+      this.handlePeerDrop();
+    }, delay);
+  }
+
   private handlePeerDrop(): void {
     this.teardownPeer();
     this.options.onReconnect?.();
@@ -710,6 +747,7 @@ export class RtcTransport implements ControllerTransport {
   private closeSignaling(): void {
     const socket = this.signaling;
     this.signaling = undefined;
+    this.openCorrelationId = undefined;
     try {
       socket?.close();
     } catch {
@@ -718,6 +756,10 @@ export class RtcTransport implements ControllerTransport {
   }
 
   private teardownPeer(): void {
+    if (this.turnRefreshTimer !== undefined) {
+      clearTimeout(this.turnRefreshTimer);
+      this.turnRefreshTimer = undefined;
+    }
     const pc = this.pc;
     this.pc = undefined;
     this.control = undefined;
@@ -850,6 +892,12 @@ export class RtcTransport implements ControllerTransport {
   private reportError(code: string, message: string): void {
     this.options.onError?.({ type: 'error', code, message });
   }
+}
+
+function candidateSummary(candidate: string): string {
+  const fields = candidate.replace(/^a=/, '').split(/\s+/);
+  if (fields.length < 8) return 'candidate details redacted';
+  return `type=${fields[7]} protocol=${fields[2].toLowerCase()}`;
 }
 
 function waitForGatheringComplete(pc: RtcPeerConnectionLike): Promise<void> {

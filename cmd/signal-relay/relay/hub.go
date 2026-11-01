@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/sahaj-b/airdeck/internal/rtc"
 	"github.com/sahaj-b/airdeck/internal/turn"
 )
 
@@ -45,8 +46,11 @@ const (
 	maxPendingsPerGuest = 8
 	maxPendingsPerHost  = 64
 	maxPendingsTotal    = 1024
-	// maxRoutesTotal bounds in-flight open/post-accept answers.
+	// maxRoutesTotal bounds open offers and in-flight answers.
 	maxRoutesTotal = 2048
+	// maxOpenOfferAge bounds the gap between sending ICE credentials and
+	// receiving the open-mode SDP offer.
+	maxOpenOfferAge = 30 * time.Second
 	// maxPendingAge evaporates a queued approval join whose host never
 	// answers; dropHost already notifies the guest, this covers a host
 	// that stays connected but idle.
@@ -62,16 +66,21 @@ type pending struct {
 	waitingSince int64
 	guest        *guestConn
 	host         *hostConn
+	accepting    bool
+	iceServers   []rtc.ICEServer
 }
 
-// route maps one relay-assigned correlation id to the guest waiting for
-// its answer. open marks an open-mode join flow (guest expects joined);
-// otherwise it is a post-accept offer flow (guest expects answer).
+// route maps one relay-assigned correlation id to a guest. Open routes
+// first wait for the offer, then wait for the host's answer. Approval routes
+// wait only for the post-accept answer.
 type route struct {
-	guest     *guestConn
-	host      *hostConn
-	pendingID string
-	open      bool
+	guest        *guestConn
+	host         *hostConn
+	pendingID    string
+	open         bool
+	waitingOffer bool
+	join         rtc.Join
+	iceServers   []rtc.ICEServer
 }
 
 // NewHub wires a store to a TURN provider.

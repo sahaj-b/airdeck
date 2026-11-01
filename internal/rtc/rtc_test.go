@@ -48,19 +48,19 @@ func iceServers() []ICEServer {
 func TestMessageRoundTrip(t *testing.T) {
 	cases := []any{
 		Register{Type: MessageRegister, RoomCode: "ABCD22", InstallationKey: "key", ApprovalRequired: true},
-		Registered{Type: MessageRegistered, RoomCode: "ABCD22", ICEServers: iceServers()},
+		Registered{Type: MessageRegistered, RoomCode: "ABCD22"},
 		Conflict{Type: MessageConflict, Reason: "claimed by another installation"},
-		// Phone-originated open-mode join: offer present, no relay ids.
-		Join{Type: MessageJoin, RoomCode: "abcd-22", DisplayName: "Phone", ReconnectID: "r1", Offer: "v=0\r\n..."},
+		Join{Type: MessageJoin, RoomCode: "abcd-22", DisplayName: "Phone", ReconnectID: "r1"},
+		Ready{Type: MessageReady, CorrelationID: "c1", ICEServers: iceServers(), ExpiresAt: 1750000000000},
 		// Approval-mode join: offer-less.
 		Join{Type: MessageJoin, RoomCode: "ABCD22", DisplayName: "Phone"},
 		// Relay-forwarded join: correlation id assigned, room code echoed or omitted.
-		Join{Type: MessageJoin, PendingID: "p1", CorrelationID: "c1", DisplayName: "Phone", Offer: "v=0\r\n..."},
-		Joined{Type: MessageJoined, Answer: "v=0\r\n...", ICEServers: iceServers()},
+		Join{Type: MessageJoin, PendingID: "p1", CorrelationID: "c1", DisplayName: "Phone", Offer: "v=0\r\n...", ICEServers: iceServers()},
+		Joined{Type: MessageJoined, Answer: "v=0\r\n..."},
 		// Host-bound pending carries the queue entry; guest-bound is bare id.
 		Pending{Type: MessagePending, PendingID: "p1", DisplayName: "Phone", ReconnectID: "r1", WaitingSince: 1750000000000},
 		Pending{Type: MessagePending, PendingID: "p1"},
-		Accepted{Type: MessageAccepted, ICEServers: iceServers()},
+		Accepted{Type: MessageAccepted, ICEServers: iceServers(), ExpiresAt: 1750000000000},
 		Offer{Type: MessageOffer, SDP: "v=0\r\n..."},
 		Offer{Type: MessageOffer, PendingID: "p1", CorrelationID: "c2", SDP: "v=0\r\n..."},
 		Answer{Type: MessageAnswer, CorrelationID: "c1", SDP: "v=0\r\n..."},

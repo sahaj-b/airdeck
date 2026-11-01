@@ -98,12 +98,6 @@ type SlotUpdate struct {
 	Accent string `json:"accent"`
 }
 
-type DebugInputTrace struct {
-	Type       string `json:"type" tstype:"'debug.inputTrace'"`
-	Sequence   uint32 `json:"sequence"`
-	ClientTime uint64 `json:"clientTime"`
-}
-
 type PublishPending struct {
 	Type      string `json:"type" tstype:"'layout.publish.pending'"`
 	ID        string `json:"id"`

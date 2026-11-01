@@ -41,7 +41,7 @@ func flipRelay(t *testing.T, conflict bool) *httptest.Server {
 			_ = conn.WriteJSON(rtc.Conflict{Type: rtc.MessageConflict, Reason: "room code is claimed by another installation"})
 			return
 		}
-		_ = conn.WriteJSON(rtc.Registered{Type: rtc.MessageRegistered, RoomCode: "TEST22", ICEServers: []rtc.ICEServer{}})
+		_ = conn.WriteJSON(rtc.Registered{Type: rtc.MessageRegistered, RoomCode: "TEST22"})
 		// Hold the socket so the agent stays registered for the test.
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {

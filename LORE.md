@@ -11,7 +11,7 @@
 - **Room code:** The persistent human-entered identifier used to find one online host. Generated codes are 6 chars from Crockford-style alphabet (A-Z/2-9 minus ambiguous 0/O, 1/I/L). Custom codes are 4-24 chars from the same alphabet plus dash. Normalization before lookup and claiming: trim, uppercase, strip dashes and spaces. Lives in host configuration, survives restarts until the owner explicitly changes it. Changed or retired codes burn permanently and are never reassigned, so stale links fail instead of reaching a different host. It is a lightweight room guard, not strong authentication.
 - **Installation key:** A random key generated once for one Airdeck installation and stored in host configuration. It proves that a returning host owns its durable room-code claim. It is not derived from hardware and is never shown to players. If the key is lost (reinstall, wiped config), its claimed codes stay tombstoned forever with no recovery; migration means copying the config file.
 - **Room-code claim:** The durable central record binding one normalized room code to one installation key. Changed or retired codes remain reserved to that installation and cannot be claimed by another installation.
-- **Central:** The static join page on `airdeck.sahaj.dev` via Cloudflare Pages plus the signaling relay on `signal.airdeck.sahaj.dev` running on a VPS plus Cloudflare TURN for relay fallback. Central swaps SDP and mints TURN creds at join time only; live input frames never flow through it.
+- **Central:** The static join page on `airdeck.sahaj.dev` via Cloudflare Pages plus the signaling relay on `signal.airdeck.sahaj.dev` running on a VPS plus Cloudflare TURN for relay fallback. The relay mints per-player TURN credentials before ICE gathering; live input frames never flow through it. Credentials last up to 48 hours, and a reconnect gets a fresh bundle.
 - **ControllerTransport:** The phone-side seam abstracting the wire. `WsTransport` wraps the LAN WebSocket, `RtcTransport` wraps the reliable `control` plus unreliable `inputs` DataChannel pair. Session logic above it never knows which wire it rides.
 - **Approval mode:** Optional admission control, off by default. Open mode admits anyone holding the room code; approval mode parks joins in a dashboard queue for accept or reject before slot assignment.
 - **Display name:** An optional player label shown in the host roster. If absent, the host generates a slot-based fallback such as `Player 1`.
@@ -49,9 +49,9 @@ Airdeck uses complete input-state snapshots with monotonic sequence numbers inst
 
 ## Measure latency, do not invent it
 
-Production input frames remain fixed at 20 bytes and carry no diagnostic timestamp. A separate debug trace correlates client monotonic time, host receive time, and uinput-write time; the application heartbeat supplies RTT and clock-offset data for that trace.
+Production input frames remain fixed at 20 bytes and carry no diagnostic timestamp. The current code has opt-in local measurements, but no cross-layer trace correlating client send, host receive, and uinput write. Any future trace stays outside the production frame; heartbeat RTT does not measure end-to-end input latency.
 
-Airdeck must instrument client-send-to-uinput timing, stale frames, watchdog timing, and resource use at 1, 8, and 16 players. V1 deliberately has no fixed numeric latency promise because Wi-Fi, phone scheduling, and game-frame timing vary by setup.
+Airdeck still needs client-send-to-uinput timing, stale-frame and watchdog measurements, and resource tests at 1, 8, and 16 players. V1 deliberately has no fixed numeric latency promise because Wi-Fi, phone scheduling, and game-frame timing vary by setup.
 
 ## Single client handshake
 
@@ -83,7 +83,7 @@ Online joins run over WebRTC: one PeerConnection per phone, a reliable-ordered `
 
 ## Conditional SDP offer timing
 
-The phone always creates both DataChannels and always sends the offer, but when differs by mode: open-mode joins carry the offer and the host answers at once, while approval-mode joins are offer-less until the relay forwards an accept (which also delivers TURN creds). Rejected phones therefore never burn ICE gathering, TURN allocations, or host PeerConnections, and early admission is structurally impossible since no peer exists before accept. Considered always-offer-at-join (uniform client, but every reject needs bilateral teardown and long-pending offers go stale and need re-offer anyway). Reconnect is a fresh rejoin carrying the stored reconnect ID, never an ICE restart.
+Open-mode joins start with an offer-less room lookup. The relay mints a per-player TURN bundle and sends `ready`; only then does the phone create its PeerConnection, gather candidates, and send the offer. The host answers with the same ICE bundle. Approval-mode joins stay offer-less until acceptance, when the relay mints credentials and sends them before the phone creates its PeerConnection. Rejected phones therefore never allocate TURN or host PeerConnections. Credentials last up to 48 hours. The phone starts a fresh join five minutes before expiry and reuses its reconnect ID. It never ICE-restarts; if a backgrounded browser misses the timer, the failed-connection path rejoins after the allocation expires.
 
 ## Go host in one process
 

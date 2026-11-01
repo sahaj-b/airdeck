@@ -26,6 +26,10 @@ export const MessageJoin = "join";
 /**
  * Signaling message types on the host<->relay and phone<->relay sockets.
  */
+export const MessageReady = "ready";
+/**
+ * Signaling message types on the host<->relay and phone<->relay sockets.
+ */
 export const MessageJoined = "joined";
 /**
  * Signaling message types on the host<->relay and phone<->relay sockets.
@@ -98,12 +102,11 @@ export interface Register {
   approvalRequired: boolean;
 }
 /**
- * Registered confirms the durable claim and delivers the ICE bundle.
+ * Registered confirms the durable room-code claim.
  */
 export interface Registered {
   type: 'registered';
   roomCode: string;
-  iceServers: ICEServer[];
 }
 /**
  * Conflict tells a registering host its desired code lost.
@@ -114,10 +117,9 @@ export interface Conflict {
 }
 /**
  * Join covers both directions of the join flow under one type. The phone
- * sends roomCode plus displayName, plus a fresh SDP offer in the offer
- * field in open mode and offer-less in approval mode, plus the stored
- * reconnect id on rejoin. The relay forwards it with a fresh relay-assigned
- * correlationId; the host never correlates by connection identity.
+ * starts an open join with roomCode and displayName, then sends its offer
+ * after Ready. Approval-mode joins stay offer-less until accepted. The relay
+ * forwards the offer with a correlationId and per-player ICE credentials.
  */
 export interface Join {
   type: 'join';
@@ -127,14 +129,25 @@ export interface Join {
   displayName?: string;
   reconnectId?: string;
   offer?: string;
+  iceServers?: ICEServer[];
 }
 /**
- * Joined answers an open-mode phone with the SDP answer plus ICE servers.
+ * Ready gives an open-mode guest its per-join ICE credentials before it
+ * creates a PeerConnection and gathers candidates. ExpiresAt is Unix
+ * milliseconds and is zero when the bundle has no TURN credentials.
+ */
+export interface Ready {
+  type: 'ready';
+  correlationId: string;
+  iceServers: ICEServer[];
+  expiresAt?: number /* int64 */;
+}
+/**
+ * Joined answers an open-mode phone with the SDP answer.
  */
 export interface Joined {
   type: 'joined';
   answer: string;
-  iceServers: ICEServer[];
 }
 /**
  * Pending covers both directions under one type. A pending lives exactly
@@ -151,20 +164,23 @@ export interface Pending {
   waitingSince?: number /* int64 */;
 }
 /**
- * Accepted releases an approval-mode phone to offer.
+ * Accepted releases an approval-mode phone to offer. ExpiresAt is Unix
+ * milliseconds and is zero when the bundle has no TURN credentials.
  */
 export interface Accepted {
   type: 'accepted';
   iceServers: ICEServer[];
+  expiresAt?: number /* int64 */;
 }
 /**
- * Offer carries a post-accept SDP offer in its sdp field.
+ * Offer carries a guest SDP offer for open or accepted approval joins.
  */
 export interface Offer {
   type: 'offer';
   pendingId?: string;
   correlationId?: string;
   sdp: string;
+  iceServers?: ICEServer[];
 }
 /**
  * Answer carries an SDP answer. It correlates by the echoed correlationId.

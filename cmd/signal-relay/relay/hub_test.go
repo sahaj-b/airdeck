@@ -92,9 +92,6 @@ func registerHost(t *testing.T, base, code, key string, approval bool) *websocke
 	if registered.RoomCode != code {
 		t.Fatalf("registered code = %q, want %q", registered.RoomCode, code)
 	}
-	if len(registered.ICEServers) == 0 {
-		t.Fatal("registered carries no iceServers")
-	}
 	return conn
 }
 
@@ -108,6 +105,18 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+func TestICECredentialExpiry(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	if got := iceCredentialExpiry([]rtc.ICEServer{{URLs: []string{"stun:stun.cloudflare.com:3478"}}}, now); got != 0 {
+		t.Fatalf("STUN-only expiry = %d, want 0", got)
+	}
+	got := iceCredentialExpiry([]rtc.ICEServer{{URLs: []string{"turn:turn.example:3478"}}}, now)
+	want := now.Add(48 * time.Hour).UnixMilli()
+	if got != want {
+		t.Fatalf("TURN expiry = %d, want %d", got, want)
+	}
 }
 
 func TestHealth(t *testing.T) {
@@ -128,16 +137,25 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-// Open mode: join carries the offer, the host answer correlates by the
-// relay-assigned id, and the guest gets joined with fresh iceServers.
+// Open mode: the relay sends credentials before the guest gathers its
+// offer, then routes that offer and the same credentials to the host.
 func TestOpenModeJoinAnswer(t *testing.T) {
 	_, base := testRelay(t, false, false)
 	host := registerHost(t, base, "GATE22", "key-a", false)
 	guest := dialRelay(t, base+"/join", "")
 	mustWrite(t, guest, rtc.Join{
-		Type: rtc.MessageJoin, RoomCode: " gate-22 ", DisplayName: "Phone", Offer: "offer-sdp",
+		Type: rtc.MessageJoin, RoomCode: " gate-22 ", DisplayName: "Phone",
 	})
-	msgType, data := readFrame(t, host)
+	msgType, data := readFrame(t, guest)
+	if msgType != rtc.MessageReady {
+		t.Fatalf("guest got %q, want ready", msgType)
+	}
+	var ready rtc.Ready
+	if err := json.Unmarshal(data, &ready); err != nil || ready.CorrelationID == "" || len(ready.ICEServers) == 0 {
+		t.Fatalf("ready = %s, want correlation id and iceServers", data)
+	}
+	mustWrite(t, guest, rtc.Offer{Type: rtc.MessageOffer, CorrelationID: ready.CorrelationID, SDP: "offer-sdp"})
+	msgType, data = readFrame(t, host)
 	if msgType != rtc.MessageJoin {
 		t.Fatalf("host got %q, want join", msgType)
 	}
@@ -145,8 +163,8 @@ func TestOpenModeJoinAnswer(t *testing.T) {
 	if err := json.Unmarshal(data, &forwarded); err != nil {
 		t.Fatalf("decode forwarded join: %v", err)
 	}
-	if forwarded.CorrelationID == "" || forwarded.Offer != "offer-sdp" || forwarded.DisplayName != "Phone" {
-		t.Fatalf("forwarded join = %+v, want correlation id plus offer", forwarded)
+	if forwarded.CorrelationID != ready.CorrelationID || forwarded.Offer != "offer-sdp" || forwarded.DisplayName != "Phone" || len(forwarded.ICEServers) == 0 {
+		t.Fatalf("forwarded join = %+v, want correlation id, offer, and iceServers", forwarded)
 	}
 	mustWrite(t, host, rtc.Answer{
 		Type: rtc.MessageAnswer, CorrelationID: forwarded.CorrelationID, SDP: "answer-sdp",
@@ -159,8 +177,8 @@ func TestOpenModeJoinAnswer(t *testing.T) {
 	if err := json.Unmarshal(data, &joined); err != nil {
 		t.Fatalf("decode joined: %v", err)
 	}
-	if joined.Answer != "answer-sdp" || len(joined.ICEServers) == 0 {
-		t.Fatalf("joined = %+v, want answer plus iceServers", joined)
+	if joined.Answer != "answer-sdp" {
+		t.Fatalf("joined = %+v, want answer", joined)
 	}
 }
 
@@ -208,8 +226,8 @@ func TestApprovalAcceptOfferAnswer(t *testing.T) {
 	if err := json.Unmarshal(data, &forwarded); err != nil {
 		t.Fatalf("decode forwarded offer: %v", err)
 	}
-	if forwarded.PendingID != hostPending.PendingID || forwarded.CorrelationID == "" || forwarded.SDP != "post-accept-offer" {
-		t.Fatalf("forwarded offer = %+v", forwarded)
+	if forwarded.PendingID != hostPending.PendingID || forwarded.CorrelationID == "" || forwarded.SDP != "post-accept-offer" || len(forwarded.ICEServers) != len(accepted.ICEServers) {
+		t.Fatalf("forwarded offer = %+v, want the accepted ICE bundle", forwarded)
 	}
 	mustWrite(t, host, rtc.Answer{
 		Type: rtc.MessageAnswer, CorrelationID: forwarded.CorrelationID, SDP: "final-answer",

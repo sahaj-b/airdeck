@@ -15,6 +15,7 @@ const (
 	MessageRegistered = "registered"
 	MessageConflict   = "conflict"
 	MessageJoin       = "join"
+	MessageReady      = "ready"
 	MessageJoined     = "joined"
 	MessagePending    = "pending"
 	MessageAccepted   = "accepted"
@@ -60,11 +61,10 @@ func (m Register) NormalizedRoomCode() string {
 	return roomcode.Normalize(m.RoomCode)
 }
 
-// Registered confirms the durable claim and delivers the ICE bundle.
+// Registered confirms the durable room-code claim.
 type Registered struct {
-	Type       string      `json:"type" tstype:"'registered'"`
-	RoomCode   string      `json:"roomCode"`
-	ICEServers []ICEServer `json:"iceServers"`
+	Type     string `json:"type" tstype:"'registered'"`
+	RoomCode string `json:"roomCode"`
 }
 
 // Conflict tells a registering host its desired code lost.
@@ -74,18 +74,28 @@ type Conflict struct {
 }
 
 // Join covers both directions of the join flow under one type. The phone
-// sends roomCode plus displayName, plus a fresh SDP offer in the offer
-// field in open mode and offer-less in approval mode, plus the stored
-// reconnect id on rejoin. The relay forwards it with a fresh relay-assigned
-// correlationId; the host never correlates by connection identity.
+// starts an open join with roomCode and displayName, then sends its offer
+// after Ready. Approval-mode joins stay offer-less until accepted. The relay
+// forwards the offer with a correlationId and per-player ICE credentials.
 type Join struct {
-	Type          string `json:"type" tstype:"'join'"`
-	RoomCode      string `json:"roomCode,omitempty"`
-	PendingID     string `json:"pendingId,omitempty"`
-	CorrelationID string `json:"correlationId,omitempty"`
-	DisplayName   string `json:"displayName,omitempty"`
-	ReconnectID   string `json:"reconnectId,omitempty"`
-	Offer         string `json:"offer,omitempty"`
+	Type          string      `json:"type" tstype:"'join'"`
+	RoomCode      string      `json:"roomCode,omitempty"`
+	PendingID     string      `json:"pendingId,omitempty"`
+	CorrelationID string      `json:"correlationId,omitempty"`
+	DisplayName   string      `json:"displayName,omitempty"`
+	ReconnectID   string      `json:"reconnectId,omitempty"`
+	Offer         string      `json:"offer,omitempty"`
+	ICEServers    []ICEServer `json:"iceServers,omitempty"`
+}
+
+// Ready gives an open-mode guest its per-join ICE credentials before it
+// creates a PeerConnection and gathers candidates. ExpiresAt is Unix
+// milliseconds and is zero when the bundle has no TURN credentials.
+type Ready struct {
+	Type          string      `json:"type" tstype:"'ready'"`
+	CorrelationID string      `json:"correlationId"`
+	ICEServers    []ICEServer `json:"iceServers"`
+	ExpiresAt     int64       `json:"expiresAt,omitempty"`
 }
 
 // NormalizedRoomCode folds the join code to its lookup form.
@@ -93,11 +103,10 @@ func (m Join) NormalizedRoomCode() string {
 	return roomcode.Normalize(m.RoomCode)
 }
 
-// Joined answers an open-mode phone with the SDP answer plus ICE servers.
+// Joined answers an open-mode phone with the SDP answer.
 type Joined struct {
-	Type       string      `json:"type" tstype:"'joined'"`
-	Answer     string      `json:"answer"`
-	ICEServers []ICEServer `json:"iceServers"`
+	Type   string `json:"type" tstype:"'joined'"`
+	Answer string `json:"answer"`
 }
 
 // Pending covers both directions under one type. A pending lives exactly
@@ -111,18 +120,21 @@ type Pending struct {
 	WaitingSince int64 `json:"waitingSince,omitempty"`
 }
 
-// Accepted releases an approval-mode phone to offer.
+// Accepted releases an approval-mode phone to offer. ExpiresAt is Unix
+// milliseconds and is zero when the bundle has no TURN credentials.
 type Accepted struct {
 	Type       string      `json:"type" tstype:"'accepted'"`
 	ICEServers []ICEServer `json:"iceServers"`
+	ExpiresAt  int64       `json:"expiresAt,omitempty"`
 }
 
-// Offer carries a post-accept SDP offer in its sdp field.
+// Offer carries a guest SDP offer for open or accepted approval joins.
 type Offer struct {
-	Type          string `json:"type" tstype:"'offer'"`
-	PendingID     string `json:"pendingId,omitempty"`
-	CorrelationID string `json:"correlationId,omitempty"`
-	SDP           string `json:"sdp"`
+	Type          string      `json:"type" tstype:"'offer'"`
+	PendingID     string      `json:"pendingId,omitempty"`
+	CorrelationID string      `json:"correlationId,omitempty"`
+	SDP           string      `json:"sdp"`
+	ICEServers    []ICEServer `json:"iceServers,omitempty"`
 }
 
 // Answer carries an SDP answer. It correlates by the echoed correlationId.

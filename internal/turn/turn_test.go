@@ -3,6 +3,7 @@ package turn
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,14 @@ import (
 
 	"github.com/sahaj-b/airdeck/internal/rtc"
 )
+
+func TestCloudflareEndpointUsesICEBundleAPI(t *testing.T) {
+	provider := New("key-id", "secret")
+	want := "https://rtc.live.cloudflare.com/v1/turn/keys/%s/credentials/generate-ice-servers"
+	if provider.endpointFormat != want {
+		t.Fatalf("Cloudflare endpoint = %q, want %q", provider.endpointFormat, want)
+	}
+}
 
 func TestSTUNOnlyCarriesSTUN(t *testing.T) {
 	servers := STUNOnly()
@@ -26,9 +35,12 @@ func TestSTUNOnlyCarriesSTUN(t *testing.T) {
 func mintServer(t *testing.T, hits *atomic.Int64, status int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
+		hit := hits.Add(1)
 		if r.Method != http.MethodPost {
 			t.Errorf("mint method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/v1/turn/keys/test-id/credentials/generate-ice-servers" {
+			t.Errorf("mint path = %q, want Cloudflare ICE credential path", r.URL.Path)
 		}
 		if auth := r.Header.Get("Authorization"); auth != "Bearer test-secret" {
 			t.Errorf("mint auth = %q, want Bearer test-secret", auth)
@@ -43,20 +55,23 @@ func mintServer(t *testing.T, hits *atomic.Int64, status int) *httptest.Server {
 			t.Errorf("mint ttl = %d, want %d", body.TTL, CredentialTTL)
 		}
 		w.WriteHeader(status)
-		if status != http.StatusOK {
+		if status != http.StatusOK && status != http.StatusCreated {
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"iceServers": map[string]any{
-			"urls":       []string{"stun:stun.cloudflare.com:3478", "turn:turn.cloudflare.com:3478?transport=udp"},
-			"username":   "expiry:key",
-			"credential": "cred==",
+		_ = json.NewEncoder(w).Encode(map[string]any{"iceServers": []any{
+			map[string]any{"urls": []string{"stun:stun.cloudflare.com:3478"}},
+			map[string]any{
+				"urls":       []string{"turn:turn.cloudflare.com:3478?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp"},
+				"username":   fmt.Sprintf("expiry:%d", hit),
+				"credential": "cred==",
+			},
 		}})
 	}))
 }
 
 func testProvider(endpoint string) *Provider {
 	p := New("test-id", "test-secret")
-	p.endpointFormat = endpoint + "%s"
+	p.endpointFormat = endpoint + "%s/credentials/generate-ice-servers"
 	return p
 }
 
@@ -72,49 +87,46 @@ func hasSTUN(t *testing.T, servers []rtc.ICEServer) {
 	t.Fatal("iceServers carry no STUN entry")
 }
 
-func TestServersMintsOnceThenCaches(t *testing.T) {
+func TestServersMintsFreshCredentialsForEachJoin(t *testing.T) {
 	var hits atomic.Int64
-	server := mintServer(t, &hits, http.StatusOK)
+	server := mintServer(t, &hits, http.StatusCreated)
 	defer server.Close()
 	p := testProvider(server.URL + "/v1/turn/keys/")
 	ctx := context.Background()
 	first := p.Servers(ctx)
 	second := p.Servers(ctx)
-	if hits.Load() != 1 {
-		t.Fatalf("mint calls = %d, want 1 (second serve comes from cache)", hits.Load())
+	if hits.Load() != 2 {
+		t.Fatalf("mint calls = %d, want one per join", hits.Load())
 	}
 	if len(first) != 2 || len(second) != 2 {
 		t.Fatalf("bundle = %+v, want STUN + TURN entries", first)
 	}
-	if first[1].Username != "expiry:key" || first[1].Credential != "cred==" {
-		t.Fatalf("TURN entry = %+v, want minted credentials", first[1])
+	if first[1].Username != "expiry:1" || second[1].Username != "expiry:2" || first[1].Credential != "cred==" {
+		t.Fatalf("TURN entries = %+v then %+v, want unique credentials", first[1], second[1])
 	}
 	hasSTUN(t, first)
-	// Mutating the returned bundle must not poison the cache.
-	first[1].Username = "tampered"
-	if third := p.Servers(ctx); third[1].Username != "expiry:key" {
-		t.Fatal("Servers returned a shared slice; cache is mutable from outside")
-	}
 }
 
-func TestServersFallsBackToStaleThenSTUN(t *testing.T) {
+func TestServersFallsBackToStaticThenSTUN(t *testing.T) {
 	var hits atomic.Int64
-	server := mintServer(t, &hits, http.StatusOK)
+	server := mintServer(t, &hits, http.StatusServiceUnavailable)
+	defer server.Close()
 	p := testProvider(server.URL + "/v1/turn/keys/")
-	ctx := context.Background()
-	if got := p.Servers(ctx); len(got) != 2 {
-		t.Fatalf("first serve = %+v, want minted bundle", got)
+	staticURLs := []string{"turn:turn.example:3478?transport=udp"}
+	p.SetStatic("shared-secret", staticURLs)
+	got := p.Servers(context.Background())
+	if len(got) != 2 || got[1].Username == "" {
+		t.Fatalf("static fallback = %+v, want STUN + TURN", got)
 	}
-	server.Close()
-	// Mint endpoint dead: the stale cache still serves.
-	if got := p.Servers(ctx); len(got) != 2 || got[1].Username != "expiry:key" {
-		t.Fatalf("stale serve = %+v, want cached bundle", got)
+	if err := VerifyStatic("shared-secret", got[1].Username, got[1].Credential, time.Now()); err != nil {
+		t.Fatalf("static fallback credential: %v", err)
 	}
+
 	fresh := New("test-id", "test-secret")
 	fresh.endpointFormat = "http://127.0.0.1:1/%s"
 	fresh.client = &http.Client{Timeout: 100 * time.Millisecond}
-	if got := fresh.Servers(ctx); len(got) != 1 || got[0].URLs[0] != STUNURL {
-		t.Fatalf("no-cache dead-mint serve = %+v, want STUN-only", got)
+	if got := fresh.Servers(context.Background()); len(got) != 1 || got[0].URLs[0] != STUNURL {
+		t.Fatalf("dead-mint serve = %+v, want STUN-only", got)
 	}
 }
 

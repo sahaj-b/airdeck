@@ -191,27 +191,48 @@ const flush = async (rounds = 3): Promise<void> => {
 };
 
 describe('RtcTransport open mode', () => {
-  it('sends join with the offer, closes signaling on answer, and activates after hello', async () => {
+  it('gets TURN servers before gathering an offer and activates after hello', async () => {
     const { transport, signals, pcs, states } = setup();
     transport.connect();
     expect(states).toEqual(['connecting']);
 
     signals[0].open();
     await flush();
-    expect(pcs).toHaveLength(1);
-    const pc = pcs[0];
-    expect([...pc.channels.keys()].sort()).toEqual(['control', 'inputs']);
-    // Room code is normalized before it hits the wire.
+    expect(pcs).toHaveLength(0);
+    // Room code is normalized before it hits the wire, and no PeerConnection
+    // exists until the relay returns credentials.
     expect(signals[0].lastSent()).toMatchObject({
       type: 'join',
       roomCode: 'ABCD12',
-      offer: 'fake-offer-sdp',
+    });
+    expect(signals[0].lastSent()).not.toHaveProperty('offer');
+
+    const iceServers = [
+      {
+        urls: ['turn:turn.cloudflare.com:3478?transport=udp'],
+        username: 'turn-user',
+        credential: 'turn-pass',
+      },
+    ];
+    signals[0].receive({
+      type: 'ready',
+      correlationId: 'open-1',
+      iceServers,
+    });
+    await flush();
+    expect(pcs).toHaveLength(1);
+    const pc = pcs[0];
+    expect([...pc.channels.keys()].sort()).toEqual(['control', 'inputs']);
+    expect(pc.config).toMatchObject({ iceServers });
+    expect(signals[0].lastSent()).toMatchObject({
+      type: 'offer',
+      correlationId: 'open-1',
+      sdp: 'fake-offer-sdp',
     });
 
     signals[0].receive({
       type: 'joined',
       answer: 'fake-answer-sdp',
-      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
     });
     await flush();
     expect(pc.remoteDescription).toMatchObject({
@@ -320,7 +341,7 @@ describe('RtcTransport open mode', () => {
 });
 
 describe('RtcTransport approval mode', () => {
-  it('parks on pending, re-offers after accepted, and activates on answer', async () => {
+  it('parks before creating a peer and offers after accepted', async () => {
     const { transport, signals, pcs, states } = setup();
     transport.connect();
     signals[0].open();
@@ -329,8 +350,8 @@ describe('RtcTransport approval mode', () => {
     signals[0].receive({ type: 'pending', pendingId: 'p1' });
     await flush();
     expect(states).toContain('waiting');
-    // The pre-accept PC is discarded; the real offer goes out post-accept.
-    expect(pcs[0].closed).toBe(true);
+    // No PC or TURN allocation exists before approval.
+    expect(pcs).toHaveLength(0);
 
     signals[0].receive({
       type: 'accepted',
@@ -343,10 +364,10 @@ describe('RtcTransport approval mode', () => {
       ],
     });
     await flush();
-    expect(pcs).toHaveLength(2);
+    expect(pcs).toHaveLength(1);
     // Post-accept offer gathers against the accepted bundle.
     expect(
-      (pcs[1].config as { iceServers: Array<{ urls: string[] }> }).iceServers,
+      (pcs[0].config as { iceServers: Array<{ urls: string[] }> }).iceServers,
     ).toEqual([
       {
         urls: ['turn:turn.example:3478'],
@@ -366,10 +387,10 @@ describe('RtcTransport approval mode', () => {
       sdp: 'final-answer',
     });
     await flush();
-    expect(pcs[1].remoteDescription).toMatchObject({ sdp: 'final-answer' });
+    expect(pcs[0].remoteDescription).toMatchObject({ sdp: 'final-answer' });
     expect(signals[0].readyState).toBe(3);
 
-    const control = pcs[1].channel('control');
+    const control = pcs[0].channel('control');
     control.open();
     control.receive(JSON.stringify(welcome()));
     control.receive(JSON.stringify(layoutMessage()));
@@ -413,9 +434,14 @@ describe('RtcTransport reconnect', () => {
     signals[0].open();
     await flush();
     signals[0].receive({
+      type: 'ready',
+      correlationId: 'open-1',
+      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
+    });
+    await flush();
+    signals[0].receive({
       type: 'joined',
       answer: 'a',
-      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
     });
     await flush();
     const control = pcs[0].channel('control');
@@ -431,12 +457,59 @@ describe('RtcTransport reconnect', () => {
     expect(signals.length).toBe(2);
     signals[1].open();
     await flush();
-    expect(pcs.length).toBe(2);
     expect(signals[1].lastSent()).toMatchObject({
       type: 'join',
       reconnectId: 'reconnect-1',
-      offer: 'fake-offer-sdp',
     });
+    signals[1].receive({
+      type: 'ready',
+      correlationId: 'open-2',
+      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
+    });
+    await flush();
+    expect(pcs.length).toBe(2);
+    expect(signals[1].lastSent()).toMatchObject({
+      type: 'offer',
+      correlationId: 'open-2',
+      sdp: 'fake-offer-sdp',
+    });
+  });
+
+  it('rejoins before the TURN credential bundle expires', async () => {
+    const reconnected: string[] = [];
+    const { transport, signals, pcs, states } = setup({
+      reconnectDelay: 1,
+      onReconnect: () => reconnected.push('reconnect'),
+    });
+    transport.connect();
+    signals[0].open();
+    await flush();
+    signals[0].receive({
+      type: 'ready',
+      correlationId: 'open-1',
+      expiresAt: Date.now() + 5 * 60_000 + 50,
+      iceServers: [
+        {
+          urls: ['turn:turn.example:3478'],
+          username: 'user',
+          credential: 'pass',
+        },
+      ],
+    });
+    await flush();
+    signals[0].receive({ type: 'joined', answer: 'answer' });
+    await flush();
+    const control = pcs[0].channel('control');
+    control.open();
+    control.receive(JSON.stringify(welcome()));
+    control.receive(JSON.stringify(layoutMessage()));
+    expect(states.at(-1)).toBe('active');
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await flush(10);
+    expect(reconnected).toEqual(['reconnect']);
+    expect(states).toContain('reconnecting');
+    expect(signals).toHaveLength(2);
   });
 
   it('recovers when the peer dies after the answer but before hello', async () => {
@@ -448,9 +521,14 @@ describe('RtcTransport reconnect', () => {
     signals[0].open();
     await flush();
     signals[0].receive({
+      type: 'ready',
+      correlationId: 'open-1',
+      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
+    });
+    await flush();
+    signals[0].receive({
       type: 'joined',
       answer: 'a',
-      iceServers: [{ urls: ['stun:stun.cloudflare.com:3478'] }],
     });
     await flush();
     expect(states).toContain('hello-sent');
