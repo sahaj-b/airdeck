@@ -1,6 +1,7 @@
 import '@/index.css';
 import '../controller/controller.css';
 import { CapabilityManager } from '../controller/capabilities';
+import { isIOSWithoutFullscreen } from '../controller/device';
 import { FeedbackController, ffTrace } from '../controller/feedback';
 import { FrameSender } from '../controller/frame-sender';
 import { buildFullscreenButton } from '../controller/fullscreen-button';
@@ -208,6 +209,11 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
     'm-0 text-muted-foreground text-[0.78rem] leading-[1.4]';
   capabilityMessage.setAttribute('role', 'status');
   capabilityMessage.setAttribute('aria-live', 'polite');
+  const iosHint = document.createElement('p');
+  iosHint.className = 'm-0 text-muted-foreground text-[0.78rem] leading-[1.4]';
+  iosHint.textContent =
+    'iPhone does not allow fullscreen in Safari. For a bigger view, rotate sideways and use Safari Hide Toolbar.';
+  if (!isIOSWithoutFullscreen()) iosHint.hidden = true;
   const error = document.createElement('p');
   error.className = 'm-0 text-destructive text-[0.78rem] leading-[1.4]';
   error.setAttribute('role', 'alert');
@@ -232,7 +238,7 @@ function renderJoinScreen(errorMessage = '', revealCode = false): void {
   left.append(heading, intro, codeField.wrapper, codeToggle, nameField.wrapper);
   const right = document.createElement('div');
   right.className = 'grid gap-[0.85rem] content-start';
-  right.append(preferences, capabilityMessage, error, submit);
+  right.append(preferences, capabilityMessage, iosHint, error, submit);
   form.append(left, right);
   content.append(form, fullscreen.button);
 
