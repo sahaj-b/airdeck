@@ -36,7 +36,6 @@ export function useEditorActions() {
     : undefined;
   const currentBuiltin = currentLayout?.builtin ?? false;
 
-  const readOnly = currentBuiltin;
   const currentDefault = draft?.id === config?.defaultLayout;
 
   const defaultForkName = (base: string): string => {
@@ -52,15 +51,47 @@ export function useEditorActions() {
     return name;
   };
 
+  const openNewLayoutDialog = (
+    baseId: string | null,
+    opts?: { name?: string; returnToPicker?: boolean },
+  ): void => {
+    const st = useEditorStore.getState();
+    const baseName = baseId
+      ? st.layouts.find((l) => l.id === baseId)?.name
+      : null;
+    st.setNewLayoutName(
+      opts?.name ?? (baseName ? defaultForkName(baseName) : ''),
+    );
+    st.setNewLayoutBase(baseId ?? 'blank');
+    st.setNewLayoutBusy(false);
+    st.setNewLayoutError(null);
+    st.setNewLayoutReturnToPicker(!!opts?.returnToPicker);
+    st.setNewLayoutDialogOpen(true);
+  };
+
   const requestFork = (): void => {
     const st = useEditorStore.getState();
     if (!st.draft) return;
     const builtin = st.layouts.find((l) => l.id === st.draft?.id)?.builtin;
     if (!builtin) return;
-    const baseName = st.draft.name ?? 'Layout';
-    st.setForkName(defaultForkName(baseName));
-    st.setForkError(null);
-    st.setForkOpen(true);
+    openNewLayoutDialog(st.draft.id, {
+      name: defaultForkName(st.draft.name ?? 'Layout'),
+    });
+  };
+
+  const handlePickerDuplicate = (id: string): void => {
+    const st = useEditorStore.getState();
+    const layout = st.layouts.find((l) => l.id === id);
+    st.setPickerOpen(false);
+    openNewLayoutDialog(id, {
+      name: defaultForkName(layout?.name ?? 'Layout'),
+      returnToPicker: true,
+    });
+  };
+
+  const handlePickerCreateNew = (): void => {
+    useEditorStore.getState().setPickerOpen(false);
+    openNewLayoutDialog(null, { returnToPicker: true });
   };
 
   const applyCommit = (
@@ -131,7 +162,7 @@ export function useEditorActions() {
   };
 
   const handleNewLayout = (): void => {
-    useEditorStore.getState().setNewLayoutDialogOpen(true);
+    openNewLayoutDialog(null);
   };
 
   const handleRename = async (name: string): Promise<void> => {
@@ -347,42 +378,27 @@ export function useEditorActions() {
     await handleSelectLayout(id);
   };
 
-  const handleForkConfirm = async (): Promise<void> => {
-    const cur = useEditorStore.getState().draft;
-    const name = useEditorStore.getState().forkName;
-    if (!cur || !name.trim()) return;
-    useEditorStore.getState().setForkBusy(true);
-    useEditorStore.getState().setForkError(null);
-    try {
-      await createAndSelectLayout(name, cur.id);
-      useEditorStore.getState().setForkOpen(false);
-    } catch (err) {
-      useEditorStore
-        .getState()
-        .setForkError(
-          err instanceof Error ? err.message : 'Failed to duplicate layout.',
-        );
-    } finally {
-      useEditorStore.getState().setForkBusy(false);
-    }
-  };
-
   const handleCreateNew = async (
     name: string,
     baseId: string | null,
   ): Promise<void> => {
-    if (!name.trim()) return;
+    if (!name.trim() || useEditorStore.getState().newLayoutBusy) return;
     useEditorStore.getState().setNewLayoutError(null);
+    useEditorStore.getState().setNewLayoutBusy(true);
     try {
       await createAndSelectLayout(name, baseId);
+      useEditorStore.getState().setNewLayoutReturnToPicker(false);
       useEditorStore.getState().setNewLayoutDialogOpen(false);
       useEditorStore.getState().setNewLayoutName('');
+      useEditorStore.getState().setNewLayoutBase('blank');
     } catch (err) {
       useEditorStore
         .getState()
         .setNewLayoutError(
           err instanceof Error ? err.message : 'Creation failed.',
         );
+    } finally {
+      useEditorStore.getState().setNewLayoutBusy(false);
     }
   };
 
@@ -445,7 +461,6 @@ export function useEditorActions() {
   return {
     errors,
     currentBuiltin,
-    readOnly,
     currentDefault,
     dirty,
     handleDraftChange,
@@ -454,6 +469,8 @@ export function useEditorActions() {
     cancelLayoutSwitch,
     handleOpenPicked,
     handlePickerCancel,
+    handlePickerDuplicate,
+    handlePickerCreateNew,
     handleNewLayout,
     handleRename,
     handleDelete,
@@ -472,7 +489,6 @@ export function useEditorActions() {
     handleAddControl,
     handleToggleLock,
     requestFork,
-    handleForkConfirm,
     handleCreateNew,
     handleApplyToAll,
     createAndSelectLayout,

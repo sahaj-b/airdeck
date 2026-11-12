@@ -1,3 +1,4 @@
+import { Copy, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
   LayoutMiniPreview,
@@ -19,6 +20,8 @@ export interface LayoutPickerProps {
   layouts: AdminLayoutSummary[];
   defaultId: string;
   onOpen: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onCreateNew: () => void;
   onCancel: () => void;
 }
 
@@ -26,6 +29,8 @@ export function LayoutPicker({
   layouts,
   defaultId,
   onOpen,
+  onDuplicate,
+  onCreateNew,
   onCancel,
 }: LayoutPickerProps) {
   const [selectedId, setSelectedId] = useState(defaultId);
@@ -35,12 +40,28 @@ export function LayoutPicker({
 
   return (
     <Dialog open onOpenChange={() => onCancel()}>
-      <DialogContent className="sm:max-w-[560px]">
-        <DialogTitle>Edit layout</DialogTitle>
+      <DialogContent className="sm:max-w-[640px]">
+        <DialogTitle>Layouts</DialogTitle>
         <DialogDescription>
-          Pick a layout to edit. Built-in layouts are read-only.
+          Pick a layout to edit, or start a new one.
         </DialogDescription>
-        <div className="grid max-h-[50vh] grid-cols-1 gap-2 overflow-y-auto py-2 sm:grid-cols-2">
+        <div className="grid max-h-[50vh] grid-cols-1 gap-2 overflow-y-auto py-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onCreateNew}
+            className="group min-w-0 cursor-pointer overflow-hidden rounded-lg border border-dashed border-border bg-transparent p-2 text-left transition-colors hover:border-primary/50 hover:bg-accent/40 focus-visible:outline-none"
+          >
+            <span className="flex aspect-[320/140] w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border/80 bg-muted/30 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-foreground">
+              <Plus className="size-5" />
+              <span className="text-xs font-medium">Blank or duplicate</span>
+            </span>
+            <span className="flex items-center gap-1.5 px-0.5 pt-2">
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                New layout
+              </span>
+            </span>
+          </button>
+
           {layouts.map((layout) => {
             const doc = layoutDocs.get(layout.id);
             const isSelected = layout.id === selectedId;
@@ -78,9 +99,10 @@ export function LayoutPicker({
           })}
         </div>
         {selected?.builtin && (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
-            Built-in layout · Read-only. Duplicate to edit.
-          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Built-in layouts are read-only. Duplicate this one to make an
+            editable copy.
+          </p>
         )}
         <div className="flex justify-end gap-2 pt-2">
           <DialogClose
@@ -90,13 +112,26 @@ export function LayoutPicker({
               </Button>
             }
           />
-          <Button
-            type="button"
-            disabled={!selectedId}
-            onClick={() => onOpen(selectedId)}
-          >
-            Open layout
-          </Button>
+          {selected?.builtin ? (
+            <Button
+              type="button"
+              className="gap-1.5"
+              onClick={() => onDuplicate(selected.id)}
+            >
+              <Copy className="size-3.5" />
+              Duplicate &amp; edit
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!selected}
+              onClick={() => {
+                if (selected) onOpen(selected.id);
+              }}
+            >
+              Open layout
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

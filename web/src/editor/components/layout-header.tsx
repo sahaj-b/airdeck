@@ -72,7 +72,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
 
   const persistenceDisabled = props.isBuiltin;
   const persistenceNote = props.isBuiltin
-    ? 'Built-in layouts are read-only. Use New layout to clone one.'
+    ? 'Built-in layouts are read-only. Use Duplicate to edit to make a copy.'
     : props.isDefault
       ? 'This is the default layout. You can edit it, but not delete it.'
       : null;
@@ -150,7 +150,7 @@ export function LayoutHeader(props: LayoutHeaderProps) {
         </Select>
         {props.isBuiltin && (
           <span className="rounded-md border border-border bg-muted px-2 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-            Built-in
+            Built-in · Read-only
           </span>
         )}
       </div>
@@ -298,12 +298,14 @@ export function LayoutHeader(props: LayoutHeaderProps) {
       <div className="ml-auto flex items-center gap-2">
         {props.dirty && (
           <Tooltip>
-            <TooltipTrigger>
-              <span className="editor-header__unsaved">
-                <span className="editor-header__unsaved-dot" aria-hidden />
-                <span>Unsaved</span>
-              </span>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <span className="editor-header__unsaved">
+                  <span className="editor-header__unsaved-dot" aria-hidden />
+                  <span>Unsaved</span>
+                </span>
+              }
+            />
             <TooltipContent side="bottom">Unsaved changes</TooltipContent>
           </Tooltip>
         )}
@@ -327,19 +329,17 @@ export function LayoutHeader(props: LayoutHeaderProps) {
         </Tooltip>
         {props.isBuiltin ? (
           <Tooltip>
-            <TooltipTrigger>
-              <span className="inline-flex">
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  className="header-btn-compact gap-1.5 shadow-sm"
-                  onClick={props.onDuplicate}
-                >
-                  <Copy className="size-3.5" />
-                  <span className="header-btn-text">Duplicate to edit</span>
-                </Button>
-              </span>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="header-btn-compact gap-1.5 shadow-sm"
+                onClick={props.onDuplicate}
+              >
+                <Copy className="size-3.5" />
+                <span className="header-btn-text">Duplicate to edit</span>
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
               Make an editable copy of this built-in layout
@@ -347,28 +347,26 @@ export function LayoutHeader(props: LayoutHeaderProps) {
           </Tooltip>
         ) : (
           <Tooltip>
-            <TooltipTrigger>
-              <span className="inline-flex">
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  className="header-btn-compact gap-1.5 shadow-sm"
-                  disabled={
-                    !props.dirty || props.hasErrors || persistenceDisabled
-                  }
-                  onClick={() => void props.onSave()}
-                >
-                  <Save className="size-3.5" />
-                  <span className="header-btn-text">Save</span>
-                </Button>
-              </span>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="header-btn-compact gap-1.5 shadow-sm"
+                disabled={
+                  !props.dirty || props.hasErrors || persistenceDisabled
+                }
+                onClick={() => void props.onSave()}
+              >
+                <Save className="size-3.5" />
+                <span className="header-btn-text">Save</span>
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
               {props.hasErrors
                 ? 'Fix validation errors before saving'
                 : persistenceDisabled
-                  ? 'Built-in layouts are read-only — use New layout to clone'
+                  ? 'Built-in layouts are read-only — use Duplicate to edit'
                   : !props.dirty
                     ? 'No changes to save'
                     : 'Save this layout'}

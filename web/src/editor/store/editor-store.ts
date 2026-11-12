@@ -33,14 +33,12 @@ export interface EditorStoreState {
 
   addDialogSection: SectionId | null;
   pickerOpen: boolean;
-  forkOpen: boolean;
-  forkName: string;
-  forkBusy: boolean;
-  forkError: string | null;
   newLayoutDialogOpen: boolean;
   newLayoutName: string;
   newLayoutBase: string;
+  newLayoutBusy: boolean;
   newLayoutError: string | null;
+  newLayoutReturnToPicker: boolean;
   discardOpen: boolean;
   backOpen: boolean;
   layoutSwitchOpen: boolean;
@@ -79,14 +77,12 @@ export interface EditorStoreState {
   // ui dialogs / panels
   setAddDialogSection: (section: SectionId | null) => void;
   setPickerOpen: (open: boolean) => void;
-  setForkOpen: (open: boolean) => void;
-  setForkName: (name: string) => void;
-  setForkBusy: (busy: boolean) => void;
-  setForkError: (error: string | null) => void;
   setNewLayoutDialogOpen: (open: boolean) => void;
   setNewLayoutName: (name: string) => void;
   setNewLayoutBase: (base: string) => void;
+  setNewLayoutBusy: (busy: boolean) => void;
   setNewLayoutError: (error: string | null) => void;
+  setNewLayoutReturnToPicker: (value: boolean) => void;
   setDiscardOpen: (open: boolean) => void;
   setBackOpen: (open: boolean) => void;
   setLayoutSwitchOpen: (open: boolean) => void;
@@ -144,14 +140,12 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
   sizeClipboard: null,
   addDialogSection: null,
   pickerOpen: false,
-  forkOpen: false,
-  forkName: '',
-  forkBusy: false,
-  forkError: null,
   newLayoutDialogOpen: false,
   newLayoutName: '',
   newLayoutBase: 'blank',
+  newLayoutBusy: false,
   newLayoutError: null,
+  newLayoutReturnToPicker: false,
   discardOpen: false,
   backOpen: false,
   layoutSwitchOpen: false,
@@ -188,14 +182,13 @@ export const useEditorStore = create<EditorStoreState>()((set, get) => ({
 
   setAddDialogSection: (addDialogSection) => set({ addDialogSection }),
   setPickerOpen: (pickerOpen) => set({ pickerOpen }),
-  setForkOpen: (forkOpen) => set({ forkOpen }),
-  setForkName: (forkName) => set({ forkName }),
-  setForkBusy: (forkBusy) => set({ forkBusy }),
-  setForkError: (forkError) => set({ forkError }),
   setNewLayoutDialogOpen: (newLayoutDialogOpen) => set({ newLayoutDialogOpen }),
   setNewLayoutName: (newLayoutName) => set({ newLayoutName }),
   setNewLayoutBase: (newLayoutBase) => set({ newLayoutBase }),
+  setNewLayoutBusy: (newLayoutBusy) => set({ newLayoutBusy }),
   setNewLayoutError: (newLayoutError) => set({ newLayoutError }),
+  setNewLayoutReturnToPicker: (newLayoutReturnToPicker) =>
+    set({ newLayoutReturnToPicker }),
   setDiscardOpen: (discardOpen) => set({ discardOpen }),
   setBackOpen: (backOpen) => set({ backOpen }),
   setLayoutSwitchOpen: (layoutSwitchOpen) => set({ layoutSwitchOpen }),

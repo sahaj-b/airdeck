@@ -1,3 +1,6 @@
+import { Copy, Plus } from 'lucide-react';
+import { useMemo } from 'react';
+import { LayoutMiniPreview } from '@/components/layout-mini-preview';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,7 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useLayoutDocs } from '@/components/use-layout-docs';
 import { useEditorStore } from '@/editor/store/editor-store';
+import { cn } from '@/lib/utils';
+import { slugifyId } from '@/shared/layout-editor';
 
 export function NewLayoutDialog({
   onCreate,
@@ -25,26 +31,55 @@ export function NewLayoutDialog({
   const open = useEditorStore((s) => s.newLayoutDialogOpen);
   const name = useEditorStore((s) => s.newLayoutName);
   const base = useEditorStore((s) => s.newLayoutBase);
+  const busy = useEditorStore((s) => s.newLayoutBusy);
   const error = useEditorStore((s) => s.newLayoutError);
   const layouts = useEditorStore((s) => s.layouts);
 
+  const baseLayout = layouts.find((layout) => layout.id === base);
+  const duplicate = base !== 'blank';
+  const baseIds = useMemo(() => (duplicate ? [base] : []), [base, duplicate]);
+  const baseDocs = useLayoutDocs(baseIds);
+  const baseDoc = baseDocs.get(base);
+
+  const newId = slugifyId(name);
+  const idTaken =
+    !!name.trim() && layouts.some((layout) => layout.id === newId);
+  const canCreate = !!name.trim() && !busy && !idTaken;
+
+  const submit = (): void => {
+    if (!canCreate) return;
+    onCreate(name, duplicate ? base : null);
+  };
+
+  const handleOpenChange = (next: boolean): void => {
+    const store = useEditorStore.getState();
+    store.setNewLayoutDialogOpen(next);
+    if (next) return;
+    store.setNewLayoutError(null);
+    if (store.newLayoutReturnToPicker) {
+      store.setNewLayoutReturnToPicker(false);
+      store.setPickerOpen(true);
+    }
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => useEditorStore.getState().setNewLayoutDialogOpen(o)}
-    >
-      <DialogContent>
-        <DialogTitle>New layout</DialogTitle>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogTitle>
+          {duplicate ? 'Duplicate layout' : 'New layout'}
+        </DialogTitle>
         <DialogDescription>
-          Create a blank layout or clone an existing one.
+          {duplicate
+            ? `Make an editable copy of "${baseLayout?.name ?? base}".`
+            : 'Start with a blank canvas, or duplicate an existing layout.'}
         </DialogDescription>
         {error && (
-          <p className="rounded border border-destructive/20 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+          <p className="mt-2 rounded border border-destructive/20 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
             {error}
           </p>
         )}
-        <div className="space-y-3 py-2">
-          <div>
+        <div className="space-y-3 py-3">
+          <div className="space-y-1.5">
             <Label htmlFor="new-layout-name">Name</Label>
             <Input
               id="new-layout-name"
@@ -53,13 +88,24 @@ export function NewLayoutDialog({
                 useEditorStore.getState().setNewLayoutName(event.target.value)
               }
               onKeyDown={(event) => {
-                if (event.key === 'Enter')
-                  void onCreate(name, base === 'blank' ? null : base);
+                if (event.key === 'Enter') submit();
               }}
+              placeholder="My layout"
             />
+            {name.trim() && (
+              <p
+                className={cn(
+                  'text-[11px]',
+                  idTaken ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                ID: <span className="font-mono">{newId || '—'}</span>
+                {idTaken && ' · already in use'}
+              </p>
+            )}
           </div>
-          <div>
-            <Label htmlFor="new-layout-base">Base</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="new-layout-base">Start from</Label>
             <Select
               value={base}
               onValueChange={(value) => {
@@ -70,7 +116,7 @@ export function NewLayoutDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="blank">Blank</SelectItem>
+                <SelectItem value="blank">Blank layout</SelectItem>
                 {layouts.map((layout) => (
                   <SelectItem key={layout.id} value={layout.id}>
                     {layout.name}
@@ -79,6 +125,12 @@ export function NewLayoutDialog({
               </SelectContent>
             </Select>
           </div>
+          {duplicate && baseDoc && (
+            <div className="space-y-1.5">
+              <span className="text-[11px] text-muted-foreground">Preview</span>
+              <LayoutMiniPreview doc={baseDoc} />
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2">
           <DialogClose
@@ -90,10 +142,22 @@ export function NewLayoutDialog({
           />
           <Button
             type="button"
-            disabled={!name.trim()}
-            onClick={() => void onCreate(name, base === 'blank' ? null : base)}
+            disabled={!canCreate}
+            className="gap-1.5"
+            onClick={submit}
           >
-            Create
+            {duplicate ? (
+              <Copy className="size-3.5" />
+            ) : (
+              <Plus className="size-3.5" />
+            )}
+            {busy
+              ? duplicate
+                ? 'Duplicating…'
+                : 'Creating…'
+              : duplicate
+                ? 'Duplicate & edit'
+                : 'Create layout'}
           </Button>
         </div>
       </DialogContent>

@@ -14,7 +14,6 @@ import {
   BackConfirmDialog,
   DiscardConfirmDialog,
 } from './dialogs/confirm-dialogs';
-import { ForkDialog } from './dialogs/fork-dialog';
 import { LayoutSwitchConfirmDialog } from './dialogs/layout-switch-dialog';
 import { NewLayoutDialog } from './dialogs/new-layout-dialog';
 import { Inspector } from './inspector';
@@ -55,6 +54,8 @@ export function EditorShell() {
     cancelLayoutSwitch,
     handleOpenPicked,
     handlePickerCancel,
+    handlePickerDuplicate,
+    handlePickerCreateNew,
     handleNewLayout,
     handleRename,
     handleDelete,
@@ -73,7 +74,6 @@ export function EditorShell() {
     handleAddControl,
     handleToggleLock,
     requestFork,
-    handleForkConfirm,
     handleCreateNew,
     handleApplyToAll,
   } = useEditorActions();
@@ -148,7 +148,6 @@ export function EditorShell() {
     );
   }
 
-  const readOnly = currentBuiltin;
   const shellClass = [
     'grid h-dvh min-w-0 overflow-hidden bg-background text-foreground transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
     'grid-rows-[auto_minmax(0,1fr)]',
@@ -204,21 +203,6 @@ export function EditorShell() {
                 aria-label="Dismiss error"
               >
                 ✕
-              </button>
-            </div>
-          )}
-
-          {readOnly && (
-            <div className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              <span>
-                Built-in layout · Read-only. Duplicate to make changes.
-              </span>
-              <button
-                type="button"
-                onClick={requestFork}
-                className="shrink-0 rounded bg-amber-500/20 px-2.5 py-1 text-xs font-medium hover:bg-amber-500/30 hover:cursor-pointer"
-              >
-                Duplicate to edit
               </button>
             </div>
           )}
@@ -380,11 +364,12 @@ export function EditorShell() {
             layouts={layouts}
             defaultId={config?.defaultLayout ?? draft.id}
             onOpen={(id) => void handleOpenPicked(id)}
+            onDuplicate={handlePickerDuplicate}
+            onCreateNew={handlePickerCreateNew}
             onCancel={handlePickerCancel}
           />
         )}
 
-        <ForkDialog draftName={draft.name} onConfirm={handleForkConfirm} />
         <NewLayoutDialog onCreate={handleCreateNew} />
         <DiscardConfirmDialog onConfirm={confirmDiscard} />
         <BackConfirmDialog onConfirm={confirmBack} />
